@@ -101,14 +101,14 @@ object ScreenTimeSource {
      */
     internal fun foregroundMillis(moments: List<Moment>, from: Long, to: Long): Long {
         var total = 0L
-        var openedAt = 0L
+        // null, et non zero : zero est un instant comme un autre, et le prendre
+        // pour "aucune periode en cours" perdait tout ce qui commencait la.
+        var openedAt: Long? = null
         var foreground: String? = null
 
         fun close(at: Long) {
-            if (openedAt != 0L) {
-                total += (at - openedAt).coerceAtLeast(0L)
-                openedAt = 0L
-            }
+            openedAt?.let { total += (at - it).coerceAtLeast(0L) }
+            openedAt = null
             foreground = null
         }
 
@@ -117,7 +117,7 @@ object ScreenTimeSource {
                 // Une application passe au premier plan : le telephone est utilise.
                 UsageEvents.Event.ACTIVITY_RESUMED -> {
                     foreground = moment.activity
-                    if (openedAt == 0L) openedAt = moment.timestamp
+                    if (openedAt == null) openedAt = moment.timestamp
                 }
 
                 // Retour en arriere-plan : seule l'activite visible ferme la periode.
@@ -133,7 +133,7 @@ object ScreenTimeSource {
         }
 
         // Session encore ouverte a la fin de la periode observee.
-        if (openedAt != 0L) total += (to - openedAt).coerceAtLeast(0L)
+        openedAt?.let { total += (to - it).coerceAtLeast(0L) }
 
         // Filet de securite : jamais plus que le temps ecoule dans la journee.
         return minOf(total, (to - from).coerceAtLeast(0L))

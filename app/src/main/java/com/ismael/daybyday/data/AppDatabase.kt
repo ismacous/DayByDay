@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Version du schema. Affichee dans les reglages, a propos, pour savoir ce que
  * fait tourner le telephone en cas de probleme.
  */
-const val DATABASE_VERSION = 8
+const val DATABASE_VERSION = 9
 
 @Database(
     entities = [
@@ -216,6 +216,19 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Le journal accepte la mise en forme. Elle est rangee a part du texte,
+         * donc les journees deja ecrites restent lisibles telles quelles : sans
+         * intervalle, elles s'affichent simplement sans decoration.
+         */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE day_entries ADD COLUMN noteSpans TEXT NOT NULL DEFAULT ''"
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -233,6 +246,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_5_6,
                     MIGRATION_6_7,
                     MIGRATION_7_8,
+                    MIGRATION_8_9,
                 )
                 .build()
                 .also { instance = it }

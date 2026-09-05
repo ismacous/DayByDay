@@ -68,6 +68,13 @@ téléphone (Samsung S25, Android 15).
 - **Argent** : une correction de solde porte la catégorie `ADJUSTMENT` et n'est
   comptée ni dans les rentrées ni dans les dépenses. Sans ça, remettre le total
   juste après une dépense la comptait une seconde fois, à l'envers.
+- **Journal** : le texte reste brut dans `note` ; la mise en forme vit à part
+  dans `noteSpans`, en intervalles de caractères (`data/RichText.kt`). La
+  recherche, l'export annuel et les aperçus lisent donc le texte sans rien
+  savoir de la décoration. Comme aucun caractère n'est ajouté, la
+  `VisualTransformation` de l'éditeur garde `OffsetMapping.Identity` : jamais
+  de curseur décalé. Toute la logique d'intervalles est testée dans
+  `RichTextTest`.
 - **Tests instrumentés** : chaque test `runBlocking` doit déclarer `: Unit`,
   sinon JUnit refuse la classe entière. `CalendarUiTest` désactive l'écran de
   reprise de sauvegarde dans un `@BeforeClass`, avant que la règle ne lance

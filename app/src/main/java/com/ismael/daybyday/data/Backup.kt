@@ -36,7 +36,7 @@ object Backup {
 
     private const val JSON_NAME = "daybyday.json"
     private const val MEDIA_PREFIX = "media/"
-    private const val FORMAT_VERSION = 6
+    private const val FORMAT_VERSION = 7
 
     const val AUTO_BACKUP_NAME = "DayByDay-sauvegarde-auto.zip"
 
@@ -108,6 +108,7 @@ object Backup {
                     .put("sleepFromDevice", day.sleepFromDevice ?: JSONObject.NULL)
                     .put("waterGlasses", day.waterGlasses ?: JSONObject.NULL)
                     .put("mealsNote", day.mealsNote)
+                    .put("noteSpans", day.noteSpans)
             )
         }
         root.put("days", daysJson)
@@ -326,6 +327,7 @@ object Backup {
                         },
                         waterGlasses = item.optIntOrNull("waterGlasses"),
                         mealsNote = item.optString("mealsNote", ""),
+                        noteSpans = item.optString("noteSpans", ""),
                     )
                 }
 

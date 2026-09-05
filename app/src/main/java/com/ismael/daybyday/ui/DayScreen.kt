@@ -66,6 +66,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -81,7 +82,9 @@ import com.ismael.daybyday.data.FoodLevel
 import com.ismael.daybyday.data.MediaItem
 import com.ismael.daybyday.data.MediaKind
 import com.ismael.daybyday.data.MoneyEntry
+import com.ismael.daybyday.data.RichText
 import com.ismael.daybyday.data.SportLevel
+import com.ismael.daybyday.data.TextSpan
 import com.ismael.daybyday.data.Treatment
 import com.ismael.daybyday.data.TagCategory
 import com.ismael.daybyday.dayByDayApp
@@ -121,7 +124,8 @@ fun DayScreen(
     var colorManual by remember { mutableStateOf(false) }
     var parts by remember { mutableStateOf<Map<DayPart, Int>>(emptyMap()) }
     var title by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
+    var noteValue by remember { mutableStateOf(TextFieldValue("")) }
+    var noteSpans by remember { mutableStateOf<List<TextSpan>>(emptyList()) }
     var sportLevel by remember { mutableStateOf<Int?>(null) }
     var foodLevel by remember { mutableStateOf<Int?>(null) }
     var wentOut by remember { mutableStateOf<Boolean?>(null) }
@@ -169,7 +173,8 @@ fun DayScreen(
         epochDay = day,
         colorKey = colorKey,
         title = title.trim(),
-        note = note,
+        note = noteValue.text,
+        noteSpans = RichText.encode(noteSpans),
         sportLevel = sportLevel,
         foodLevel = foodLevel,
         wentOut = wentOut,
@@ -203,7 +208,9 @@ fun DayScreen(
             entry?.partColorKey(part)?.let { part to it }
         }.toMap()
         title = entry?.title.orEmpty()
-        note = entry?.note.orEmpty()
+        val loadedNote = entry?.note.orEmpty()
+        noteValue = TextFieldValue(loadedNote)
+        noteSpans = RichText.decode(entry?.noteSpans, loadedNote.length)
         sportLevel = entry?.sportLevel
         foodLevel = entry?.foodLevel
         wentOut = entry?.wentOut
@@ -266,7 +273,8 @@ fun DayScreen(
         colorManual,
         parts,
         title,
-        note,
+        noteValue.text,
+        noteSpans,
         sportLevel,
         foodLevel,
         wentOut,
@@ -470,16 +478,14 @@ fun DayScreen(
                                     .testTag("day-title-field"),
                             )
                             Spacer(Modifier.height(12.dp))
-                            OutlinedTextField(
-                                value = note,
-                                onValueChange = { note = it },
-                                label = { Text("Ce que tu as vécu") },
-                                placeholder = { Text("Ce que tu as ressenti, ce qui a aidé, ce qui a pesé…") },
-                                shape = RoundedCornerShape(16.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 220.dp)
-                                    .testTag("day-note-field"),
+                            JournalEditor(
+                                value = noteValue,
+                                spans = noteSpans,
+                                onValueChange = { updated, updatedSpans ->
+                                    noteValue = updated
+                                    noteSpans = updatedSpans
+                                },
+                                modifier = Modifier.testTag("day-note-field"),
                             )
                         }
                         DayCard.SLEEP -> {

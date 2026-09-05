@@ -136,6 +136,12 @@ data class DayEntry(
     val waterGlasses: Int? = null,
     /** Ce qui a ete mange, en texte libre. */
     val mealsNote: String = "",
+    /**
+     * Mise en forme du journal, au format compact de [RichText]. Le texte lui
+     * meme reste brut dans [note] : la recherche et l'export continuent de le
+     * lire sans rien savoir de la decoration.
+     */
+    val noteSpans: String = "",
 ) {
     val color: DayColor? get() = DayColor.fromKey(colorKey)
 

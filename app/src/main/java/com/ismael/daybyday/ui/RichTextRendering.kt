@@ -2,6 +2,7 @@ package com.ismael.daybyday.ui
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.Font
@@ -12,8 +13,11 @@ import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import com.ismael.daybyday.R
+import com.ismael.daybyday.data.RichText
+import com.ismael.daybyday.data.StyleFamily
 import com.ismael.daybyday.data.TextSpan
 import com.ismael.daybyday.data.TextStyleKind
 
@@ -50,6 +54,19 @@ fun TextStyleKind.fontFamily(): FontFamily? = when (this) {
  * travaillent sur le texte brut, sans decalage possible. C'est ce qui evite
  * le defaut classique des editeurs riches.
  */
+/**
+ * Combien de lignes du lignage un titre occupe.
+ *
+ * C'est ce qui garde la page reguliere : un titre est plus haut qu'une ligne
+ * ordinaire, alors plutot que de laisser le texte suivant glisser hors du
+ * lignage, on lui donne un nombre **entier** de lignes. Le rythme reprend
+ * exactement au paragraphe d'apres.
+ */
+fun TextStyleKind.lineSpan(): Int = when (this) {
+    TextStyleKind.TITLE_1, TextStyleKind.TITLE_2 -> 2
+    else -> 1
+}
+
 class SpanTransformation(
     private val spans: List<TextSpan>,
     /**
@@ -60,6 +77,12 @@ class SpanTransformation(
      */
     private val selection: TextRange? = null,
     private val selectionTint: Color = Color.Unspecified,
+    /**
+     * La hauteur d'une ligne du lignage. Fournie, les titres se calent sur un
+     * nombre entier de lignes ; absente, le texte se met en forme sans se
+     * soucier d'un quelconque rythme (l'apercu du calendrier, par exemple).
+     */
+    private val rhythm: TextUnit? = null,
 ) : VisualTransformation {
 
     override fun filter(text: AnnotatedString): TransformedText {
@@ -77,26 +100,78 @@ class SpanTransformation(
 
         if (spans.isEmpty() && held == null) return TransformedText(text, OffsetMapping.Identity)
 
-        val decorated = buildAnnotatedStringWithSpans(text.text, spans)
+
+        val decorated = buildAnnotatedStringWithSpans(text.text, spans, rhythm)
         val result = if (held == null) {
             decorated
         } else {
             // La selection passe en dernier : elle doit se voir par-dessus un
             // surlignage deja pose.
-            AnnotatedString(text = decorated.text, spanStyles = decorated.spanStyles + held)
+            AnnotatedString(
+                text = decorated.text,
+                spanStyles = decorated.spanStyles + held,
+                paragraphStyles = decorated.paragraphStyles,
+            )
         }
         return TransformedText(result, OffsetMapping.Identity)
     }
 }
 
 /** Le texte habille de ses intervalles, pour l'ecriture comme pour la relecture. */
-fun buildAnnotatedStringWithSpans(text: String, spans: List<TextSpan>): AnnotatedString =
-    AnnotatedString(
-        text = text,
-        spanStyles = spans
-            .filter { it.start < text.length && it.end <= text.length && !it.isEmpty }
-            .map { AnnotatedString.Range(it.style.toSpanStyle(), it.start, it.end) },
-    )
+fun buildAnnotatedStringWithSpans(
+    text: String,
+    spans: List<TextSpan>,
+    rhythm: TextUnit? = null,
+): AnnotatedString = AnnotatedString(
+    text = text,
+    spanStyles = spans
+        .filter { it.start < text.length && it.end <= text.length && !it.isEmpty }
+        .map { AnnotatedString.Range(it.style.toSpanStyle(), it.start, it.end) },
+    paragraphStyles = if (rhythm == null) emptyList() else headingParagraphs(text, spans, rhythm),
+)
+
+/**
+ * Les titres, ramenes a des lignes entieres et a une hauteur multiple du
+ * lignage.
+ *
+ * Deux precautions : un titre pose sur trois mots au milieu d'une ligne est
+ * etendu a la ligne entiere, et deux titres qui se chevaucheraient ne donnent
+ * qu'un seul paragraphe. Compose refuse categoriquement des paragraphes qui se
+ * recouvrent, et rien n'empeche l'utilisateur d'en poser deux au meme endroit.
+ */
+private fun headingParagraphs(
+    text: String,
+    spans: List<TextSpan>,
+    rhythm: TextUnit,
+): List<AnnotatedString.Range<ParagraphStyle>> {
+    if (text.isEmpty()) return emptyList()
+
+    val wanted = spans
+        .filter { it.style.family == StyleFamily.HEADING && !it.isEmpty }
+        .mapNotNull { span ->
+            val from = span.start.coerceIn(0, text.length - 1)
+            val line = RichText.lineRange(text, from, (span.end - 1).coerceIn(from, text.length - 1))
+            var end = (line.last + 1).coerceAtMost(text.length)
+            // Le retour a la ligne appartient au paragraphe du titre, sinon
+            // Compose ouvre un paragraphe vide juste apres.
+            if (text.getOrNull(end) == '\n') end += 1
+            if (end > line.first) Triple(line.first, end, span.style) else null
+        }
+        .sortedBy { it.first }
+
+    val result = mutableListOf<AnnotatedString.Range<ParagraphStyle>>()
+    var covered = 0
+    wanted.forEach { (from, to, style) ->
+        if (from < covered) return@forEach
+        result += AnnotatedString.Range(
+            ParagraphStyle(lineHeight = rhythm * style.lineSpan()),
+            from,
+            to,
+        )
+        covered = to
+    }
+    return result
+}
 
 /**
  * Un titre se rend par une taille et une graisse, pas par un style de
@@ -114,9 +189,9 @@ fun TextStyleKind.toSpanStyle(): SpanStyle = when (this) {
     TextStyleKind.TITLE_3 -> SpanStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
 
     else -> when (this.family) {
-        com.ismael.daybyday.data.StyleFamily.FONT -> SpanStyle(fontFamily = fontFamily())
-        com.ismael.daybyday.data.StyleFamily.COLOR -> SpanStyle(color = Color(argb))
-        com.ismael.daybyday.data.StyleFamily.HIGHLIGHT -> SpanStyle(
+        StyleFamily.FONT -> SpanStyle(fontFamily = fontFamily())
+        StyleFamily.COLOR -> SpanStyle(color = Color(argb))
+        StyleFamily.HIGHLIGHT -> SpanStyle(
             // Le surlignage laisse voir le texte : la teinte est adoucie, et
             // le texte force en sombre pour rester lisible dessus.
             background = Color(argb).copy(alpha = 0.55f),

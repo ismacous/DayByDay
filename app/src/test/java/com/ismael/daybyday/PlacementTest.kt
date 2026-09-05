@@ -257,6 +257,16 @@ class PlacementTest {
     }
 
     @Test
+    fun `les lignes d ecriture tombent sur la grille des photos`() {
+        // Les deux quadrillages doivent se superposer, sinon la page a l'air
+        // de trembler des qu'on ouvre la grille. L'ecart entre deux lignes
+        // vaut un nombre entier de pas de grille, et la marge du haut aussi.
+        assertEquals(0f, Placement.lineSpacing % Placement.GRID, 0.01f)
+        assertEquals(0f, Placement.topMargin % Placement.GRID, 0.01f)
+        assertTrue(Placement.lineSpacing > Placement.GRID)
+    }
+
+    @Test
     fun `une page sans photo posee n a pas de bas impose`() {
         val nowhere = photo().copy(placedX = null, placedY = null)
 

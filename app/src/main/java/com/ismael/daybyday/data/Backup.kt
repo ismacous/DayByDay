@@ -131,6 +131,7 @@ object Backup {
                     .put("placedRotation", item.placedRotation)
                     .put("layerKey", item.layerKey)
                     .put("shapeKey", item.shapeKey)
+                    .put("stickerOutline", item.stickerOutline)
             )
         }
         root.put("media", mediaJson)
@@ -357,6 +358,7 @@ object Backup {
                         placedRotation = item.optDouble("placedRotation", 0.0).toFloat(),
                         layerKey = item.optInt("layerKey", MediaLayer.FRONT.key),
                         shapeKey = item.optInt("shapeKey", MediaShape.RECTANGLE.key),
+                        stickerOutline = item.optBoolean("stickerOutline"),
                     )
                 }
 

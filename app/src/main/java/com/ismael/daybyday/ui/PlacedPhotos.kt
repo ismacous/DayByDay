@@ -35,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -62,6 +63,8 @@ fun MediaShape.toComposeShape(): Shape = when (this) {
     MediaShape.CIRCLE -> CircleShape
     MediaShape.SQUARE -> RoundedCornerShape(6.dp)
     MediaShape.RECTANGLE -> RoundedCornerShape(10.dp)
+    // L'autocollant n'a pas de cadre : c'est tout l'interet.
+    MediaShape.FREE -> RectangleShape
 }
 
 /**
@@ -102,15 +105,30 @@ fun PlacedPhoto(
                 }
             ),
     ) {
-        MediaImage(
-            file = file,
-            kind = item.kind,
-            modifier = Modifier.fillMaxSize(),
-            maxSize = 1280,
-            contentScale = ContentScale.Crop,
-        )
+        if (item.shape == MediaShape.FREE) {
+            // Un PNG detoure garde sa silhouette : on ne recadre pas, on ne
+            // rogne pas, et la transparence reste. C'est ce qui en fait un
+            // autocollant plutot qu'une photo dans un cadre.
+            StickerImage(
+                file = file,
+                kind = item.kind,
+                outline = if (item.stickerOutline) STICKER_OUTLINE else 0.dp,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            MediaImage(
+                file = file,
+                kind = item.kind,
+                modifier = Modifier.fillMaxSize(),
+                maxSize = 1280,
+                contentScale = ContentScale.Crop,
+            )
+        }
     }
 }
+
+/** L'epaisseur du contour blanc d'un autocollant. */
+private val STICKER_OUTLINE = 5.dp
 
 /**
  * Le cadre de manipulation de la photo choisie.
@@ -207,9 +225,9 @@ fun PhotoHandle(
  * millimetre.
  */
 @Composable
-fun PhotoGrid(height: Dp, modifier: Modifier = Modifier) {
+fun PhotoGrid(modifier: Modifier = Modifier) {
     val tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
-    Canvas(modifier = modifier.fillMaxWidth().height(height)) {
+    Canvas(modifier = modifier) {
         val step = Placement.GRID.dp.toPx()
         if (step <= 0f) return@Canvas
         var x = step
@@ -235,6 +253,7 @@ fun PhotoToolsBar(
     item: MediaItem,
     snapToGrid: Boolean,
     onShape: (MediaShape) -> Unit,
+    onOutline: (Boolean) -> Unit,
     onLayer: (MediaLayer) -> Unit,
     onSnap: (Boolean) -> Unit,
     onDelete: () -> Unit,
@@ -259,6 +278,13 @@ fun PhotoToolsBar(
                         label = shape.label,
                         selected = item.shape == shape,
                         onClick = { onShape(shape) },
+                    )
+                }
+                if (item.shape == MediaShape.FREE) {
+                    PhotoChip(
+                        label = if (item.stickerOutline) "Contour blanc" else "Sans contour",
+                        selected = item.stickerOutline,
+                        onClick = { onOutline(!item.stickerOutline) },
                     )
                 }
                 PhotoChip(

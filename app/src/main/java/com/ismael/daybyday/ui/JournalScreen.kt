@@ -38,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -58,6 +59,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -84,7 +87,7 @@ import java.time.LocalDate
  * qu'une lucarne pour ecrire. Ici la page entiere est a l'ecriture, et la
  * barre reste collee au clavier.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalTextApi::class)
 @Composable
 fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
     val app = LocalContext.current.dayByDayApp
@@ -215,6 +218,7 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
     var showPaperSettings by remember { mutableStateOf(false) }
     val paper = JournalPaper.paper(paperIndex)
     val ink = JournalPaper.ink(paper)
+    val rhythm = with(density) { JournalPaper.LINE_SPACING.toSp() }
 
     // Pendant qu'un doigt deplace une photo, sa nouvelle place vit ici : on
     // n'ecrit pas dans la base a chaque image de l'animation.
@@ -360,8 +364,18 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
     }
 
     Scaffold(
+        // Le papier prend tout l'ecran. Une page teintee dans un cadre blanc
+        // ne ressemblait a rien : c'est le carnet entier qui a une couleur,
+        // pas une feuille posee dessus.
+        containerColor = paper,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    titleContentColor = ink,
+                    navigationIconContentColor = ink,
+                    actionIconContentColor = ink,
+                ),
                 title = { Text(Dates.dayMedium(date)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -389,7 +403,7 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                 value = title,
                 onValueChange = { title = it },
                 textStyle = MaterialTheme.typography.headlineSmall.copy(
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = ink,
                     fontWeight = FontWeight.Bold,
                 ),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -400,7 +414,7 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                                 "Titre de la journée",
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                color = ink.copy(alpha = 0.45f),
                             )
                         }
                         field()
@@ -438,16 +452,27 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(paper)
                         .verticalScroll(pageScroll),
                 ) {
                     // Les lignes d'ecriture restent tout le temps ; la grille
                     // des photos, elle, n'apparait que pendant qu'on en
                     // deplace une. Deux choses differentes, deux durees de vie.
+                    //
+                    // matchParentSize, et non une hauteur calculee : c'est le
+                    // texte qui decide de la hauteur de la page, et une hauteur
+                    // fixee d'avance laissait le bas de la page sans lignes des
+                    // que le texte depassait — d'ou les lignes qui semblaient
+                    // s'arreter apres un titre, ou disparaitre a l'ouverture du
+                    // clavier, qui reduit la page visible.
                     if (ruled) {
-                        PaperLines(height = pageHeight, color = JournalPaper.line(lineIndex))
+                        PaperLines(
+                            color = JournalPaper.line(lineIndex),
+                            modifier = Modifier.matchParentSize(),
+                        )
                     }
-                    if (selectedPhoto != null && snapToGrid) PhotoGrid(height = pageHeight)
+                    if (selectedPhoto != null && snapToGrid) {
+                        PhotoGrid(modifier = Modifier.matchParentSize())
+                    }
 
                     // Sous le texte : le fond, puis le milieu.
                     journalMedia
@@ -497,15 +522,25 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                             // pas d'une taille de police : agrandir les
                             // caracteres dans les reglages d'Android decalerait
                             // sinon le texte de ses lignes.
-                            lineHeight = with(density) { JournalPaper.LINE_SPACING.toSp() },
+                            lineHeight = rhythm,
+                            // Sans ca, Compose repartit l'espace d'une ligne
+                            // autour du texte, et rogne meme celui de la
+                            // premiere : le texte flottait au-dessus de ses
+                            // lignes, d'un ecart different a chaque ligne. Cale
+                            // en bas et sans rognage, chaque ligne fait
+                            // exactement le pas du lignage, texte pose dessus.
+                            lineHeightStyle = LineHeightStyle(
+                                alignment = LineHeightStyle.Alignment.Bottom,
+                                trim = LineHeightStyle.Trim.None,
+                            ),
                         ),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         visualTransformation = run {
                             // Sans focus, le champ ne peint plus la selection : on la
                             // dessine nous-memes, sinon on colore a l'aveugle.
                             val tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
-                            remember(spans, heldSelection, tint) {
-                                SpanTransformation(spans, heldSelection, tint)
+                            remember(spans, heldSelection, tint, rhythm) {
+                                SpanTransformation(spans, heldSelection, tint, rhythm)
                             }
                         },
                         decorationBox = { field ->
@@ -586,6 +621,7 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                     item = photo,
                     snapToGrid = snapToGrid,
                     onShape = { changePhoto(photo.copy(shapeKey = it.key)) },
+                    onOutline = { changePhoto(photo.copy(stickerOutline = it)) },
                     onLayer = { changePhoto(photo.copy(layerKey = it.key)) },
                     onSnap = {
                         snapToGrid = it

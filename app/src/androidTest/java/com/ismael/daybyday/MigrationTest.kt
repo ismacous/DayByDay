@@ -67,6 +67,7 @@ class MigrationTest {
                 AppDatabase.MIGRATION_7_8,
                 AppDatabase.MIGRATION_8_9,
                 AppDatabase.MIGRATION_9_10,
+                AppDatabase.MIGRATION_10_11,
             )
             .build()
 
@@ -87,6 +88,7 @@ class MigrationTest {
                 assertEquals(false, media.isPlaced)
                 assertEquals(com.ismael.daybyday.data.MediaLayer.FRONT, media.layer)
                 assertEquals(com.ismael.daybyday.data.MediaShape.RECTANGLE, media.shape)
+                assertEquals(false, media.stickerOutline)
                 // Les etiquettes par defaut sont ajoutees par la migration,
                 // et rangees dans leur famille par la suivante.
                 val tags = dao.allTags()

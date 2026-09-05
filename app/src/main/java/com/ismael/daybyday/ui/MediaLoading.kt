@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.media.MediaMetadataRetriever
 import android.util.LruCache
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,9 +14,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.exifinterface.media.ExifInterface
 import com.ismael.daybyday.data.MediaKind
 import kotlinx.coroutines.Dispatchers
@@ -178,6 +185,62 @@ object MediaLoader {
     }
 
     fun clear() = cache.evictAll()
+}
+
+/**
+ * Une image posee comme un autocollant : pas de recadrage, pas de cadre, la
+ * transparence gardee telle quelle.
+ *
+ * Le contour blanc suit la **silhouette** de l'image, pas son rectangle. Il est
+ * obtenu en redessinant la meme image huit fois autour, toute blanche : ce que
+ * la transparence laisse voir dessine le tour. Un seul decodage sert aux neuf
+ * passes, donc ca ne coute rien de plus a charger.
+ */
+@Composable
+fun StickerImage(
+    file: File,
+    kind: MediaKind,
+    outline: Dp,
+    modifier: Modifier = Modifier,
+) {
+    val image by produceState<ImageBitmap?>(initialValue = null, file.path) {
+        value = MediaLoader.load(file, kind, 1280, useCache = false)
+    }
+    val bitmap = image ?: return
+
+    Canvas(modifier = modifier) {
+        // L'image entiere tient dans la place disponible, sans deformation.
+        val scale = minOf(size.width / bitmap.width, size.height / bitmap.height)
+        val width = (bitmap.width * scale).toInt().coerceAtLeast(1)
+        val height = (bitmap.height * scale).toInt().coerceAtLeast(1)
+        val left = ((size.width - width) / 2f).toInt()
+        val top = ((size.height - height) / 2f).toInt()
+        val target = IntSize(width, height)
+
+        val ring = outline.toPx()
+        if (ring > 0f) {
+            val white = ColorFilter.tint(Color.White, BlendMode.SrcIn)
+            val diagonal = (ring * 0.7071f)
+            listOf(
+                ring to 0f, -ring to 0f, 0f to ring, 0f to -ring,
+                diagonal to diagonal, -diagonal to diagonal,
+                diagonal to -diagonal, -diagonal to -diagonal,
+            ).forEach { (dx, dy) ->
+                drawImage(
+                    image = bitmap,
+                    dstOffset = IntOffset(left + dx.toInt(), top + dy.toInt()),
+                    dstSize = target,
+                    colorFilter = white,
+                )
+            }
+        }
+
+        drawImage(
+            image = bitmap,
+            dstOffset = IntOffset(left, top),
+            dstSize = target,
+        )
+    }
 }
 
 @Composable

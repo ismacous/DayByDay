@@ -126,11 +126,31 @@ téléphone (Samsung S25, Android 15).
 - **Lignes de la page ≠ grille des photos** : le lignage (`JournalPaper`) est
   toujours visible et sert à écrire ; la grille (`PhotoGrid`) n'apparaît que
   pendant qu'on déplace une image. Couper le lignage ne coupe pas
-  l'aimantation. Pour que le texte se pose sur les lignes, sa `lineHeight` est
-  convertie depuis une mesure en **points** (`LINE_SPACING.toSp()`) et non
-  écrite en `sp` : sinon agrandir les caractères dans Android décale le texte
-  de ses lignes. Un titre, plus haut qu'une ligne, désaligne la suite — c'est
-  le prix d'un vrai lignage sur un texte à tailles variables.
+  l'aimantation. Quatre choses à ne pas défaire :
+  1. Les deux quadrillages sont **accordés** : l'écart entre deux lignes vaut
+     `Placement.LINE_STEPS` pas de grille et la marge du haut `TOP_STEPS`, donc
+     chaque ligne d'écriture tombe pile sur une ligne de grille (testé).
+  2. La `lineHeight` du texte vient d'une mesure en **points**
+     (`LINE_SPACING.toSp()`), pas d'une valeur en `sp` : sinon agrandir les
+     caractères dans Android décale le texte de ses lignes.
+  3. `lineHeightStyle = Bottom + Trim.None` est obligatoire. Par défaut Compose
+     répartit l'espace autour du texte et rogne celui de la première ligne :
+     le texte flotte alors au-dessus des lignes, d'un écart différent partout.
+  4. Le lignage et la grille se dessinent en `Modifier.matchParentSize()`, pas
+     à une hauteur calculée. C'est le champ de texte qui décide de la hauteur
+     de la page ; une hauteur fixée d'avance laissait le bas sans lignes dès
+     que le texte dépassait — d'où les lignes qui semblaient s'arrêter après un
+     titre ou disparaître à l'ouverture du clavier.
+  Les titres occupent un nombre **entier** de lignes (`TextStyleKind.lineSpan`,
+  posé en `ParagraphStyle` par `buildAnnotatedStringWithSpans`), donc le rythme
+  reprend exactement après. Attention : Compose refuse des `ParagraphStyle` qui
+  se recouvrent, et rien n'empêche deux titres au même endroit — d'où le tri et
+  le filtrage dans `headingParagraphs`.
+- **Autocollants** : `MediaShape.FREE` ne recadre ni ne rogne, donc un PNG
+  détouré garde sa silhouette. Le contour blanc suit cette silhouette, pas le
+  cadre : `StickerImage` redessine la même image huit fois autour, teintée en
+  blanc (`BlendMode.SrcIn`), avant l'originale. Un seul décodage sert aux neuf
+  passes.
 - **Polices** : trois fichiers dans `res/font/` (Caveat, Lora, Poppins, sous
   licence OFL, voir `POLICES.md`), plus deux familles d'Android. Ils sont dans
   l'APK : rien n'est téléchargé, la règle « aucune permission INTERNET » tient.

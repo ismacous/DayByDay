@@ -7,6 +7,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,6 +28,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.ismael.daybyday.data.Placement
 
 /**
  * L'apparence de la page du journal : le papier, et les lignes d'ecriture.
@@ -45,10 +48,20 @@ object JournalPaper {
      * caracteres dans les reglages d'Android decalerait le texte de ses
      * lignes.
      */
-    val LINE_SPACING: Dp = 30.dp
+    val LINE_SPACING: Dp = Placement.lineSpacing.dp
 
-    /** La marge en haut du texte, a laquelle commence le lignage. */
-    val TOP_PADDING: Dp = 12.dp
+    /**
+     * La marge en haut du texte, a laquelle commence le lignage.
+     *
+     * C'est un pas de grille exactement, et l'ecart entre deux lignes en vaut
+     * deux : chaque ligne d'ecriture tombe donc pile sur une ligne de la
+     * grille des photos. Sans ca, les deux quadrillages se croisent de travers
+     * des qu'on ouvre la grille.
+     */
+    val TOP_PADDING: Dp = Placement.topMargin.dp
+
+    /** La marge de gauche, et le trait vertical qui la marque. */
+    val SIDE_MARGIN: Dp = 20.dp
 
     /** Les papiers proposes, du plus neutre au plus marque. */
     val papers: List<Pair<String, Color>> = listOf(
@@ -93,11 +106,12 @@ object JournalPaper {
  * variables, et ca reste juste tant qu'on ecrit au fil de la plume.
  */
 @Composable
-fun PaperLines(height: Dp, color: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.fillMaxWidth().height(height)) {
+fun PaperLines(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
         val spacing = JournalPaper.LINE_SPACING.toPx()
         if (spacing <= 0f) return@Canvas
-        val margin = 20.dp.toPx()
+        val margin = JournalPaper.SIDE_MARGIN.toPx()
+
         var y = JournalPaper.TOP_PADDING.toPx() + spacing
         while (y < size.height) {
             drawLine(
@@ -108,6 +122,17 @@ fun PaperLines(height: Dp, color: Color, modifier: Modifier = Modifier) {
             )
             y += spacing
         }
+
+        // Le trait de marge. C'est lui qui fait vraiment la feuille de
+        // classeur : sans lui, des lignes horizontales seules ressemblent a du
+        // papier a musique.
+        val marginX = margin * 0.65f
+        drawLine(
+            color = color.copy(alpha = color.alpha * 0.9f),
+            start = Offset(marginX, 0f),
+            end = Offset(marginX, size.height),
+            strokeWidth = 2f,
+        )
     }
 }
 
@@ -188,13 +213,19 @@ private fun SettingLine(label: String, value: String, onClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SwatchRow(
     colors: List<Pair<String, Color>>,
     selected: Int,
     onPick: (Int) -> Unit,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    // En ligne simple, la derniere pastille etait rognee par le bord de la
+    // boite de dialogue : on la voyait comme un trait.
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         colors.forEachIndexed { index, (name, color) ->
             Box(
                 modifier = Modifier

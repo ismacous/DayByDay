@@ -32,6 +32,21 @@ object Placement {
     /** Largeur d'une photo qu'on vient de poser, en part de la largeur de page. */
     const val DEFAULT_WIDTH_RATIO = 0.55f
 
+    /**
+     * Le lignage de la page se mesure en pas de grille : deux pas entre deux
+     * lignes d'ecriture, un pas de marge en haut. C'est ce qui fait tomber
+     * chaque ligne d'ecriture pile sur une ligne de la grille — sinon les deux
+     * quadrillages se croisent de travers des qu'on ouvre la grille.
+     */
+    const val LINE_STEPS = 2
+    const val TOP_STEPS = 1
+
+    /** L'ecart entre deux lignes d'ecriture, en points. */
+    val lineSpacing: Float get() = GRID * LINE_STEPS
+
+    /** La marge en haut du texte, en points. */
+    val topMargin: Float get() = GRID * TOP_STEPS
+
     fun snap(value: Float, step: Float = GRID): Float =
         if (step <= 0f) value else (value / step).roundToInt() * step
 

@@ -310,6 +310,11 @@ data class MediaItem(
     val layerKey: Int = MediaLayer.FRONT.key,
     /** Voir [MediaShape] : la forme dans laquelle l'image vient se ranger. */
     val shapeKey: Int = MediaShape.RECTANGLE.key,
+    /**
+     * Le contour blanc des autocollants. Il suit la silhouette de l'image, pas
+     * son cadre : sur un PNG detoure, c'est ce qui fait le sticker.
+     */
+    val stickerOutline: Boolean = false,
 ) {
     val kind: MediaKind get() = if (kindKey == 1) MediaKind.VIDEO else MediaKind.PHOTO
 
@@ -323,7 +328,7 @@ data class MediaItem(
 
     /** Le cercle et le carre sont aussi hauts que larges, quoi qu'on enregistre. */
     val displayHeight: Float
-        get() = if (shape == MediaShape.RECTANGLE) placedHeight else placedWidth
+        get() = if (shape.square) placedWidth else placedHeight
 }
 
 /**
@@ -348,11 +353,18 @@ enum class MediaLayer(val key: Int, val label: String) {
     }
 }
 
-/** La forme dans laquelle l'image vient se ranger, en la recadrant au centre. */
-enum class MediaShape(val key: Int, val label: String) {
+/**
+ * La forme dans laquelle l'image vient se ranger, en la recadrant au centre.
+ *
+ * [FREE] est a part : elle ne recadre rien et ne coupe rien. C'est la forme des
+ * autocollants — un PNG detoure garde sa transparence et sa silhouette, au lieu
+ * d'etre force dans un cadre.
+ */
+enum class MediaShape(val key: Int, val label: String, val square: Boolean = false) {
     RECTANGLE(0, "Rectangle"),
-    SQUARE(1, "Carré"),
-    CIRCLE(2, "Cercle");
+    SQUARE(1, "Carré", square = true),
+    CIRCLE(2, "Cercle", square = true),
+    FREE(3, "Autocollant");
 
     companion object {
         fun fromKey(key: Int): MediaShape = entries.firstOrNull { it.key == key } ?: RECTANGLE

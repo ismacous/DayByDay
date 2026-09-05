@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Version du schema. Affichee dans les reglages, a propos, pour savoir ce que
  * fait tourner le telephone en cas de probleme.
  */
-const val DATABASE_VERSION = 10
+const val DATABASE_VERSION = 11
 
 @Database(
     entities = [
@@ -257,6 +257,18 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Les autocollants : un PNG detoure garde sa silhouette, et peut porter
+         * un contour blanc. Les photos deja posees n'en ont pas.
+         */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE media_items ADD COLUMN stickerOutline INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -276,6 +288,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_7_8,
                     MIGRATION_8_9,
                     MIGRATION_9_10,
+                    MIGRATION_10_11,
                 )
                 .build()
                 .also { instance = it }

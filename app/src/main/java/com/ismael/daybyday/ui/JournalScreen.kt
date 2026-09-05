@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -154,12 +155,26 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
     val bodyFocus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
 
+    // Retirer le focus ferme le clavier, mais efface aussi la selection : on ne
+    // pouvait donc pas colorer un texte deja ecrit, il se deselectionnait a
+    // l'ouverture du panneau. La selection est mise de cote ici avant de lacher
+    // le focus, et c'est elle qui sert de cible tant qu'un panneau est ouvert.
+    var heldSelection by remember { mutableStateOf<TextRange?>(null) }
+
     fun showPanel(panel: ToolPanel?) {
-        openPanel = panel
         if (panel == null) {
+            openPanel = null
+            // On rend la selection au champ avant de lui rendre le focus :
+            // le mot colore reste visiblement selectionne.
+            heldSelection?.let { body = body.copy(selection = it) }
+            heldSelection = null
             awaitingKeyboard = true
             runCatching { bodyFocus.requestFocus() }
         } else {
+            // Passer d'un panneau a l'autre ne doit pas relire une selection
+            // deja perdue : on garde celle mise de cote au premier passage.
+            heldSelection = (heldSelection ?: body.selection).takeIf { it.start != it.end }
+            openPanel = panel
             awaitingKeyboard = false
             focusManager.clearFocus()
         }
@@ -189,7 +204,7 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
         }
     }
 
-    val selection = body.selection
+    val selection = heldSelection ?: body.selection
     val start = minOf(selection.start, selection.end)
     val end = maxOf(selection.start, selection.end)
     val hasSelection = end > start
@@ -262,9 +277,7 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
         spans = RichText.adjust(spans, body.text, updated)
         body = body.copy(
             text = updated,
-            selection = TextRange(
-                (body.selection.start + marker.length).coerceAtMost(updated.length)
-            ),
+            selection = TextRange((start + marker.length).coerceAtMost(updated.length)),
         )
     }
 
@@ -322,6 +335,12 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
             BasicTextField(
                 value = body,
                 onValueChange = { updated ->
+                    // L'utilisateur reprend la main sur le texte : la selection
+                    // mise de cote pour le panneau n'a plus lieu d'etre. Mais
+                    // seulement panneau ferme : en perdant le focus, le champ
+                    // annonce lui-meme une selection vide, et il ne faut pas la
+                    // prendre pour un geste de l'utilisateur.
+                    if (openPanel == null) heldSelection = null
                     if (updated.text == body.text) {
                         // Deplacement du curseur : on adopte le style de
                         // l'endroit ou il arrive, comme un traitement de texte.
@@ -345,7 +364,14 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                     lineHeight = 26.sp,
                 ),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                visualTransformation = remember(spans) { SpanTransformation(spans) },
+                visualTransformation = run {
+                    // Sans focus, le champ ne peint plus la selection : on la
+                    // dessine nous-memes, sinon on colore a l'aveugle.
+                    val tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+                    remember(spans, heldSelection, tint) {
+                        SpanTransformation(spans, heldSelection, tint)
+                    }
+                },
                 decorationBox = { field ->
                     Box {
                         if (body.text.isEmpty()) {
@@ -363,6 +389,17 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                     .weight(1f)
                     .padding(horizontal = 20.dp, vertical = 12.dp)
                     .focusRequester(bodyFocus)
+                    .onFocusChanged { state ->
+                        // Retourner ecrire referme le panneau : sinon il reste
+                        // sous le clavier qui remonte, et les deux s'empilent.
+                        // C'est l'appui de l'utilisateur qui decide du curseur,
+                        // donc on ne rend pas la selection mise de cote.
+                        if (state.isFocused && openPanel != null) {
+                            openPanel = null
+                            heldSelection = null
+                            awaitingKeyboard = false
+                        }
+                    }
                     .selectWordOnDoubleTap({ body }) { body = body.copy(selection = it) }
                     .testTag("day-note-field"),
             )

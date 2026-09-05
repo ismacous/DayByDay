@@ -3,6 +3,7 @@ package com.ismael.daybyday.ui
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -49,14 +50,42 @@ fun TextStyleKind.fontFamily(): FontFamily? = when (this) {
  * travaillent sur le texte brut, sans decalage possible. C'est ce qui evite
  * le defaut classique des editeurs riches.
  */
-class SpanTransformation(private val spans: List<TextSpan>) : VisualTransformation {
+class SpanTransformation(
+    private val spans: List<TextSpan>,
+    /**
+     * La selection a peindre nous-memes. Ouvrir un panneau retire le focus du
+     * champ — c'est ce qui ferme le clavier — et un champ sans focus ne peint
+     * plus sa selection. Sans ce rappel, on choisirait une couleur sans voir
+     * sur quoi elle va s'appliquer.
+     */
+    private val selection: TextRange? = null,
+    private val selectionTint: Color = Color.Unspecified,
+) : VisualTransformation {
 
     override fun filter(text: AnnotatedString): TransformedText {
-        if (spans.isEmpty()) return TransformedText(text, OffsetMapping.Identity)
-        return TransformedText(
-            buildAnnotatedStringWithSpans(text.text, spans),
-            OffsetMapping.Identity,
-        )
+        val held = selection
+            ?.takeIf { selectionTint != Color.Unspecified }
+            ?.let { range ->
+                val from = minOf(range.start, range.end).coerceIn(0, text.length)
+                val to = maxOf(range.start, range.end).coerceIn(0, text.length)
+                if (to > from) {
+                    AnnotatedString.Range(SpanStyle(background = selectionTint), from, to)
+                } else {
+                    null
+                }
+            }
+
+        if (spans.isEmpty() && held == null) return TransformedText(text, OffsetMapping.Identity)
+
+        val decorated = buildAnnotatedStringWithSpans(text.text, spans)
+        val result = if (held == null) {
+            decorated
+        } else {
+            // La selection passe en dernier : elle doit se voir par-dessus un
+            // surlignage deja pose.
+            AnnotatedString(text = decorated.text, spanStyles = decorated.spanStyles + held)
+        }
+        return TransformedText(result, OffsetMapping.Identity)
     }
 }
 

@@ -93,6 +93,15 @@ téléphone (Samsung S25, Android 15).
   intermédiaires ; retenir « la dernière au-dessus d'un seuil » gardait la
   valeur du seuil, et le panneau rétrécissait à chaque aller-retour jusqu'à
   n'être qu'un bandeau écrasé en bas de l'écran.
+- **Sélection et panneaux** : ouvrir un panneau retire le focus du champ (c'est
+  ce qui ferme le clavier), et perdre le focus **efface la sélection** — le
+  champ appelle lui-même `onValueChange` avec une sélection vide. On ne pouvait
+  donc plus colorer un texte déjà écrit. La sélection est mise de côté dans
+  `heldSelection` avant de lâcher le focus, et c'est elle qui sert de cible
+  tant qu'un panneau est ouvert ; le `onValueChange` ne l'efface que panneau
+  fermé, sinon la désélection automatique la balaierait aussitôt. Un champ sans
+  focus ne peint pas non plus sa sélection : `SpanTransformation` la redessine,
+  sinon on choisit une couleur à l'aveugle.
 - **Polices** : trois fichiers dans `res/font/` (Caveat, Lora, Poppins, sous
   licence OFL, voir `POLICES.md`), plus deux familles d'Android. Ils sont dans
   l'APK : rien n'est téléchargé, la règle « aucune permission INTERNET » tient.

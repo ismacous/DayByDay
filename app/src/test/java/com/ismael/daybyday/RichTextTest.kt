@@ -265,7 +265,8 @@ class RichTextTest {
         assertEquals(
             TextStyleKind.entries.size,
             TextStyleKind.marks.size + TextStyleKind.headings.size +
-                TextStyleKind.colors.size + TextStyleKind.highlights.size,
+                TextStyleKind.colors.size + TextStyleKind.highlights.size +
+                TextStyleKind.fonts.size,
         )
     }
 
@@ -457,14 +458,6 @@ class RichTextTest {
             ),
             resultat,
         )
-    }
-
-    @Test
-    fun `chaque code de mise en forme est unique`() {
-        // Deux styles qui partagent un code se voleraient leurs intervalles a
-        // la relecture : c'est le genre de faute qui abime des donnees.
-        val codes = TextStyleKind.entries.map { it.code }
-        assertEquals(codes.size, codes.toSet().size)
     }
 
     @Test

@@ -29,6 +29,9 @@ enum class StyleFamily {
 
     /** Titre : un seul niveau a la fois, et il prend la ligne entiere. */
     HEADING,
+
+    /** Police de caracteres : une seule a la fois. */
+    FONT,
 }
 
 /**
@@ -72,7 +75,16 @@ enum class TextStyleKind(
     HIGHLIGHT_PINK("hp", "Surligné rose", StyleFamily.HIGHLIGHT, 0xFFF7A8CE),
     HIGHLIGHT_ORANGE("ho", "Surligné orange", StyleFamily.HIGHLIGHT, 0xFFFFC08A),
     HIGHLIGHT_VIOLET("hv", "Surligné violet", StyleFamily.HIGHLIGHT, 0xFFCDB4F0),
-    HIGHLIGHT_GREY("hy", "Surligné gris", StyleFamily.HIGHLIGHT, 0xFFD2D7DC);
+    HIGHLIGHT_GREY("hy", "Surligné gris", StyleFamily.HIGHLIGHT, 0xFFD2D7DC),
+
+    // Trois polices sont livrees dans l'application (Caveat, Lora, Poppins,
+    // libres de droits), les deux autres viennent d'Android. Les fichiers sont
+    // dans l'APK : rien n'est telecharge, ni a l'installation ni a l'usage.
+    FONT_HAND("fh", "Manuscrite", StyleFamily.FONT),
+    FONT_SERIF("fs", "Serif", StyleFamily.FONT),
+    FONT_MODERN("fo", "Moderne", StyleFamily.FONT),
+    FONT_SANS("fn", "Sans serif", StyleFamily.FONT),
+    FONT_MONO("fm", "Machine à écrire", StyleFamily.FONT);
 
     /** Un titre habille la ligne entiere : il ne se pose pas sur trois mots. */
     val takesWholeLine: Boolean get() = family == StyleFamily.HEADING
@@ -89,6 +101,8 @@ enum class TextStyleKind(
         val colors: List<TextStyleKind> get() = of(StyleFamily.COLOR)
 
         val highlights: List<TextStyleKind> get() = of(StyleFamily.HIGHLIGHT)
+
+        val fonts: List<TextStyleKind> get() = of(StyleFamily.FONT)
     }
 }
 
@@ -259,6 +273,27 @@ object RichText {
         )
     }
 
+    /**
+     * Retire toute la famille [family] sur [start] jusqu'a [end].
+     *
+     * Different d'un [toggle] : celui-ci ne retire que ce qui couvre la
+     * selection entiere. Pour revenir au texte normal, il faut nettoyer aussi
+     * ce qui n'en habille qu'un bout.
+     */
+    fun clearFamily(
+        spans: List<TextSpan>,
+        start: Int,
+        end: Int,
+        family: StyleFamily,
+    ): List<TextSpan> {
+        if (end <= start) return spans
+        return merge(
+            spans.flatMap { span ->
+                if (span.style.family == family) cut(span, start, end) else listOf(span)
+            }
+        )
+    }
+
     /** Pose [styles] sur [start] jusqu'a [end], sans rien retirer d'existant. */
     fun applyAll(
         spans: List<TextSpan>,
@@ -281,6 +316,33 @@ object RichText {
         val next = text.indexOf('\n', end.coerceAtMost(text.length))
         val to = if (next == -1) text.length else next
         return from until maxOf(to, from)
+    }
+
+    /**
+     * Les bornes du mot qui touche [caret], ou null si le curseur est sur un
+     * espace ou une ponctuation.
+     *
+     * C'est ce que fait le double appui. Compose ne le declenche pas ici, on
+     * le refait donc a la main — mais a partir du curseur, pas du point
+     * touche : le premier appui a deja pose le curseur au bon endroit, et
+     * partir de lui evite d'avoir a convertir des coordonnees d'ecran en
+     * position dans un texte qui defile.
+     *
+     * Un mot est une suite de lettres ou de chiffres. L'apostrophe n'en fait
+     * pas partie : dans "l'ami", on veut selectionner "ami".
+     */
+    fun wordAt(text: String, caret: Int): IntRange? {
+        fun isWord(c: Char) = c.isLetterOrDigit() || c == '_'
+        val at = caret.coerceIn(0, text.length)
+        val after = at < text.length && isWord(text[at])
+        val before = at > 0 && isWord(text[at - 1])
+        if (!after && !before) return null
+
+        var from = at
+        while (from > 0 && isWord(text[from - 1])) from--
+        var to = at
+        while (to < text.length && isWord(text[to])) to++
+        return if (to > from) from until to else null
     }
 
     /** Format compact : "debut,fin,code;debut,fin,code". */

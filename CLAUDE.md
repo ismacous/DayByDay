@@ -75,6 +75,24 @@ téléphone (Samsung S25, Android 15).
   `VisualTransformation` de l'éditeur garde `OffsetMapping.Identity` : jamais
   de curseur décalé. Toute la logique d'intervalles est testée dans
   `RichTextTest`.
+- **Double appui sur un mot** : Compose ne le déclenche pas dans ces champs,
+  ni sur le titre (sans mise en forme) ni sur le texte, et monter la version de
+  Compose n'y change rien. Il est réécrit dans `ui/DoubleTapWord.kt` : les
+  appuis sont observés dans la passe `Initial` sans être consommés, sauf le
+  deuxième d'un double appui, sinon le champ replace le curseur et efface la
+  sélection. Le mot est cherché **à partir du curseur**, jamais du point
+  touché : le premier appui l'a déjà posé au bon endroit, et convertir des
+  coordonnées d'écran en position dans un texte qui défile est faux dès que le
+  champ a défilé. Les bornes du mot sont dans `RichText.wordAt`, testées.
+- **Hauteur du panneau d'outils** : l'encart du clavier (`WindowInsets.ime`)
+  contient déjà la barre de navigation, pas le panneau. Le panneau doit donc
+  mesurer `hauteur du clavier − max(ime, barre de navigation)`, sinon il
+  dépasse le clavier de la hauteur de cette barre et l'écran se décale à chaque
+  bascule. Comme la formule suit l'animation image par image, le panneau
+  grandit exactement au rythme où le clavier s'en va.
+- **Polices** : trois fichiers dans `res/font/` (Caveat, Lora, Poppins, sous
+  licence OFL, voir `POLICES.md`), plus deux familles d'Android. Ils sont dans
+  l'APK : rien n'est téléchargé, la règle « aucune permission INTERNET » tient.
 - **Tests instrumentés** : chaque test `runBlocking` doit déclarer `: Unit`,
   sinon JUnit refuse la classe entière. `CalendarUiTest` désactive l'écran de
   reprise de sauvegarde dans un `@BeforeClass`, avant que la règle ne lance

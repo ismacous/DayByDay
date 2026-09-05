@@ -1,9 +1,11 @@
 package com.ismael.daybyday
 
 import com.ismael.daybyday.data.RichText
+import com.ismael.daybyday.data.StyleFamily
 import com.ismael.daybyday.data.TextSpan
 import com.ismael.daybyday.data.TextStyleKind
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -340,5 +342,134 @@ class RichTextTest {
     @Test
     fun `un texte vide donne une ligne vide`() {
         assertTrue(RichText.lineRange("", 0).isEmpty())
+    }
+
+    // --- Le mot sous le curseur (double appui) ----------------------------
+
+    @Test
+    fun `le double appui prend le mot autour du curseur`() {
+        val texte = "Journee tranquille et douce"
+        assertEquals(8 until 18, RichText.wordAt(texte, 12))
+    }
+
+    @Test
+    fun `le curseur colle a la fin d un mot prend ce mot`() {
+        // C'est le cas courant : le premier appui pose le curseur juste apres
+        // la derniere lettre touchee.
+        val texte = "Journee tranquille"
+        assertEquals(0 until 7, RichText.wordAt(texte, 7))
+    }
+
+    @Test
+    fun `le curseur au debut d un mot prend ce mot`() {
+        assertEquals(8 until 18, RichText.wordAt("Journee tranquille", 8))
+    }
+
+    @Test
+    fun `un espace ne selectionne rien`() {
+        // Curseur entre deux espaces : rien a selectionner, et surtout pas la
+        // phrase entiere.
+        assertNull(RichText.wordAt("bien  dormi", 5))
+    }
+
+    @Test
+    fun `la ponctuation n est jamais prise dans le mot`() {
+        val texte = "Fatigue, mais content."
+        assertEquals(0 until 7, RichText.wordAt(texte, 4))
+        assertEquals(14 until 21, RichText.wordAt(texte, 16))
+    }
+
+    @Test
+    fun `l apostrophe coupe le mot`() {
+        // "l'ami" : on veut "ami", comme le fait le telephone.
+        assertEquals(2 until 5, RichText.wordAt("l'ami", 3))
+    }
+
+    @Test
+    fun `les accents font partie du mot`() {
+        val texte = "une journee eprouvante"
+        assertEquals(4 until 11, RichText.wordAt(texte.replace("journee", "journée"), 6))
+    }
+
+    @Test
+    fun `les chiffres font partie du mot`() {
+        assertEquals(0 until 5, RichText.wordAt("12h30 debout", 2))
+    }
+
+    @Test
+    fun `un texte vide ne selectionne rien`() {
+        assertNull(RichText.wordAt("", 0))
+    }
+
+    @Test
+    fun `un curseur hors du texte ne fait pas tomber l application`() {
+        assertEquals(0 until 4, RichText.wordAt("bien", 900))
+        assertEquals(0 until 4, RichText.wordAt("bien", -5))
+    }
+
+    // --- Revenir au normal ------------------------------------------------
+
+    @Test
+    fun `effacer une famille enleve aussi ce qui ne couvre qu un bout`() {
+        // Un titre pose sur la moitie de la selection n'est pas "actif" au
+        // sens du bouton : il faut quand meme le retirer pour revenir au
+        // texte normal, sinon "Texte normal" ne fait rien de visible.
+        val depart = spans(
+            Triple(0, 5, TextStyleKind.TITLE_1),
+            Triple(0, 20, bold),
+        )
+
+        val resultat = RichText.clearFamily(depart, 0, 20, StyleFamily.HEADING)
+
+        assertEquals(spans(Triple(0, 20, bold)), resultat)
+    }
+
+    @Test
+    fun `effacer une famille laisse ce qui est en dehors`() {
+        val depart = spans(Triple(0, 30, TextStyleKind.FONT_HAND))
+
+        val resultat = RichText.clearFamily(depart, 10, 20, StyleFamily.FONT)
+
+        assertEquals(
+            spans(
+                Triple(0, 10, TextStyleKind.FONT_HAND),
+                Triple(20, 30, TextStyleKind.FONT_HAND),
+            ),
+            resultat,
+        )
+    }
+
+    // --- Les polices ------------------------------------------------------
+
+    @Test
+    fun `une police remplace la precedente et ne touche pas au gras`() {
+        val depart = spans(
+            Triple(0, 10, bold),
+            Triple(0, 10, TextStyleKind.FONT_SERIF),
+        )
+
+        val resultat = RichText.toggle(depart, 0, 10, TextStyleKind.FONT_HAND)
+
+        assertEquals(
+            spans(
+                Triple(0, 10, bold),
+                Triple(0, 10, TextStyleKind.FONT_HAND),
+            ),
+            resultat,
+        )
+    }
+
+    @Test
+    fun `chaque code de mise en forme est unique`() {
+        // Deux styles qui partagent un code se voleraient leurs intervalles a
+        // la relecture : c'est le genre de faute qui abime des donnees.
+        val codes = TextStyleKind.entries.map { it.code }
+        assertEquals(codes.size, codes.toSet().size)
+    }
+
+    @Test
+    fun `une police se relit apres enregistrement`() {
+        val depart = spans(Triple(3, 9, TextStyleKind.FONT_MODERN))
+        assertEquals(depart, RichText.decode(RichText.encode(depart), 20))
     }
 }

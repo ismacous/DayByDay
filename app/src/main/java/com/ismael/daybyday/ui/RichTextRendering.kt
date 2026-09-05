@@ -3,6 +3,8 @@ package com.ismael.daybyday.ui
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.OffsetMapping
@@ -10,8 +12,34 @@ import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.sp
+import com.ismael.daybyday.R
 import com.ismael.daybyday.data.TextSpan
 import com.ismael.daybyday.data.TextStyleKind
+
+/**
+ * Les polices proposees dans le journal.
+ *
+ * Les trois premieres sont des fichiers livres dans l'application ; les deux
+ * dernieres sont celles d'Android. Dans tous les cas rien n'est telecharge :
+ * l'application n'a pas la permission Internet, et n'en aura jamais besoin
+ * pour ecrire.
+ *
+ * Une seule graisse est embarquee par police : Android fabrique le gras et
+ * l'italique a partir d'elle, ce qui evite de tripler le poids de l'APK.
+ */
+val HandFontFamily = FontFamily(Font(R.font.caveat_regular))
+val SerifFontFamily = FontFamily(Font(R.font.lora_regular))
+val ModernFontFamily = FontFamily(Font(R.font.poppins_regular))
+
+/** La police d'un style, ou null pour les styles qui n'en changent pas. */
+fun TextStyleKind.fontFamily(): FontFamily? = when (this) {
+    TextStyleKind.FONT_HAND -> HandFontFamily
+    TextStyleKind.FONT_SERIF -> SerifFontFamily
+    TextStyleKind.FONT_MODERN -> ModernFontFamily
+    TextStyleKind.FONT_SANS -> FontFamily.SansSerif
+    TextStyleKind.FONT_MONO -> FontFamily.Monospace
+    else -> null
+}
 
 /**
  * Pose la mise en forme sur le texte affiche.
@@ -57,6 +85,7 @@ fun TextStyleKind.toSpanStyle(): SpanStyle = when (this) {
     TextStyleKind.TITLE_3 -> SpanStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
 
     else -> when (this.family) {
+        com.ismael.daybyday.data.StyleFamily.FONT -> SpanStyle(fontFamily = fontFamily())
         com.ismael.daybyday.data.StyleFamily.COLOR -> SpanStyle(color = Color(argb))
         com.ismael.daybyday.data.StyleFamily.HIGHLIGHT -> SpanStyle(
             // Le surlignage laisse voir le texte : la teinte est adoucie, et

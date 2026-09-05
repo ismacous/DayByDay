@@ -121,8 +121,23 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
     var openPanel by remember { mutableStateOf<ToolPanel?>(null) }
     val density = LocalDensity.current
     val imeHeight = with(density) { WindowInsets.ime.getBottom(density).toDp() }
-    var lastKeyboardHeight by remember { mutableStateOf(280.dp) }
+    val navHeight = with(density) { WindowInsets.navigationBars.getBottom(density).toDp() }
+    var lastKeyboardHeight by remember { mutableStateOf(300.dp) }
     if (imeHeight > 120.dp) lastKeyboardHeight = imeHeight
+
+    // Le panneau et le clavier n'avaient pas la meme taille, et l'ecran se
+    // decalait a chaque bascule : le clavier recouvre la barre de navigation,
+    // le panneau se posait au-dessus. La colonne retire deja le plus grand des
+    // deux encarts du bas ; le panneau ne prend donc que ce qui manque pour
+    // atteindre la hauteur du clavier. Comme le calcul suit l'animation du
+    // clavier image par image, le panneau grandit exactement au rythme ou le
+    // clavier s'en va : le total ne bouge jamais.
+    val panelHeight = (lastKeyboardHeight - maxOf(imeHeight, navHeight)).coerceAtLeast(0.dp)
+
+    // Meme chose dans l'autre sens : en refermant le panneau on garde sa place
+    // au chaud, le temps que le clavier remonte la prendre.
+    var awaitingKeyboard by remember { mutableStateOf(false) }
+    if (imeHeight > 120.dp) awaitingKeyboard = false
 
     // Demander poliment au clavier de se cacher ne suffit pas : tant que le
     // champ garde le focus, Android le fait revenir. Le panneau et le clavier
@@ -134,9 +149,20 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
     fun showPanel(panel: ToolPanel?) {
         openPanel = panel
         if (panel == null) {
+            awaitingKeyboard = true
             runCatching { bodyFocus.requestFocus() }
         } else {
+            awaitingKeyboard = false
             focusManager.clearFocus()
+        }
+    }
+
+    // Si le clavier ne vient pas — focus refuse, clavier physique — la place
+    // reservee ne doit pas rester vide indefiniment.
+    LaunchedEffect(awaitingKeyboard) {
+        if (awaitingKeyboard) {
+            kotlinx.coroutines.delay(800)
+            awaitingKeyboard = false
         }
     }
 
@@ -205,14 +231,18 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
 
     /** Repasse en texte normal la selection, ou la ligne du curseur. */
     fun clearHeading() {
-        val from = if (hasSelection) start else RichText.lineRange(body.text, start).first
-        val to = if (hasSelection) end else RichText.lineRange(body.text, start).last + 1
-        spans = TextStyleKind.headings.fold(spans) { current, heading ->
-            if (heading in RichText.stylesOn(current, from, to)) {
-                RichText.toggle(current, from, to, heading)
-            } else {
-                current
-            }
+        val line = RichText.lineRange(body.text, start, end)
+        val from = if (hasSelection) start else line.first
+        val to = if (hasSelection) end else line.last + 1
+        spans = RichText.clearFamily(spans, from, to, StyleFamily.HEADING)
+    }
+
+    /** Revient a la police d'origine sur la selection, ou pour la suite tapee. */
+    fun clearFont() {
+        if (hasSelection) {
+            spans = RichText.clearFamily(spans, start, end, StyleFamily.FONT)
+        } else {
+            typing = typing.filterNot { it.family == StyleFamily.FONT }.toSet()
         }
     }
 
@@ -275,6 +305,7 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp, vertical = 12.dp)
+                    .selectWordOnDoubleTap({ title }) { title = title.copy(selection = it) }
                     .testTag("day-title-field"),
             )
 
@@ -324,6 +355,7 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                     .weight(1f)
                     .padding(horizontal = 20.dp, vertical = 12.dp)
                     .focusRequester(bodyFocus)
+                    .selectWordOnDoubleTap({ body }) { body = body.copy(selection = it) }
                     .testTag("day-note-field"),
             )
 
@@ -361,17 +393,30 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                     clearHeading()
                     showPanel(null)
                 },
+                onClearFont = {
+                    clearFont()
+                    showPanel(null)
+                },
                 onList = { marker ->
                     prefixLine(marker.marker)
                     showPanel(null)
                 },
                 onAddPhoto = {
+                    // On referme le panneau sans rendre le focus : le
+                    // selecteur de photos passe devant, inutile de rappeler le
+                    // clavier juste avant.
+                    openPanel = null
                     pickMedia.launch(
                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
                     )
                 },
-                panelHeight = lastKeyboardHeight,
+                panelHeight = panelHeight,
             )
+
+            // Le clavier remonte : on tient sa place jusqu'a ce qu'il y soit.
+            if (openPanel == null && awaitingKeyboard && panelHeight > 0.dp) {
+                Spacer(Modifier.height(panelHeight))
+            }
         }
     }
 

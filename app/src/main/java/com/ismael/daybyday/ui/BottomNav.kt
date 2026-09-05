@@ -13,6 +13,7 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -180,24 +181,38 @@ private fun TodayButton(onClick: () -> Unit) {
         label = "pression",
     )
 
-    // Une respiration lente, a peine perceptible : le bouton du jour est
-    // vivant, il appelle sans clignoter.
+    // La respiration : un anneau qui s'ecarte du bouton et s'efface, en boucle.
+    // La version precedente ne faisait varier que l'ombre — invisible. Un halo
+    // qui grandit, lui, se voit du coin de l'oeil sans jamais clignoter.
     val breath = rememberInfiniteTransition(label = "souffle")
-    val glow by breath.animateFloat(
-        initialValue = 0.75f,
+    val pulse by breath.animateFloat(
+        initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2600, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
+            animation = tween(2400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
         ),
-        label = "halo",
+        label = "onde",
     )
+
+    Box(
+        modifier = Modifier.size(78.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(modifier = Modifier.matchParentSize()) {
+            val radius = size.minDimension / 2f
+            val ring = radius * (0.68f + 0.32f * pulse)
+            drawCircle(
+                color = Brand.Primary.copy(alpha = 0.30f * (1f - pulse)),
+                radius = ring,
+            )
+        }
 
     Box(
         modifier = Modifier
             .size(56.dp)
             .scale(scale)
-            .brandShadow(elevation = (16f * glow).dp, shape = CircleShape)
+            .brandShadow(elevation = 16.dp, shape = CircleShape)
             .clip(CircleShape)
             .background(Brush.linearGradient(Brand.gradient))
             .clickable(
@@ -214,6 +229,7 @@ private fun TodayButton(onClick: () -> Unit) {
             tint = Color.White,
             modifier = Modifier.size(28.dp),
         )
+    }
     }
 }
 

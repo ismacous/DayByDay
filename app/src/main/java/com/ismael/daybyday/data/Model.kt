@@ -9,11 +9,29 @@ import androidx.room.PrimaryKey
  * Les quatre couleurs disponibles pour qualifier une journee.
  * [score] sert a calculer les moyennes par semaine / mois / annee.
  */
-enum class DayColor(val key: Int, val score: Int, val label: String, val color: Color) {
-    GREEN(3, 3, "Bonne journée", Color(0xFF3FBF6A)),
-    ORANGE(2, 2, "Journée mitigée", Color(0xFFF2A93B)),
-    RED(1, 1, "Journée difficile", Color(0xFFE1483F)),
-    BLACK(0, 0, "Journée très noire", Color(0xFF15171D));
+enum class DayColor(
+    val key: Int,
+    val score: Int,
+    val label: String,
+    val color: Color,
+    /** La teinte claire du degrade : la couleur va vers elle, jamais vers le blanc. */
+    val light: Color,
+) {
+    // Les quatre teintes ont ete accordees a l'application : meme saturation,
+    // meme fraicheur, et chacune un degrade plutot qu'un aplat. Le "tres noire"
+    // n'est plus un noir pur mais un indigo tres sombre — un noir franc fait un
+    // trou dans une interface coloree, alors qu'un indigo profond dit la meme
+    // chose en restant de la famille.
+    //
+    // La cle et le score ne bougent pas : ce sont eux qui sont enregistres, et
+    // toutes les journees deja notees les utilisent.
+    GREEN(3, 3, "Bonne journée", Color(0xFF15C48E), Color(0xFF5BE3B4)),
+    ORANGE(2, 2, "Journée mitigée", Color(0xFFFFA92E), Color(0xFFFFCB6B)),
+    RED(1, 1, "Journée difficile", Color(0xFFFF5D6E), Color(0xFFFF95A3)),
+    BLACK(0, 0, "Journée très noire", Color(0xFF322C5C), Color(0xFF4E4682));
+
+    /** Le degrade de la journee, du plus profond au plus clair. */
+    val gradient: List<Color> get() = listOf(color, light)
 
     companion object {
         val MAX_SCORE = GREEN.score

@@ -17,6 +17,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -37,7 +42,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -421,17 +428,39 @@ private fun DayCell(
     modifier: Modifier = Modifier,
 ) {
     val dayColor = entry?.color
-    val background = dayColor?.color ?: MaterialTheme.colorScheme.surfaceVariant
     val alpha = when {
-        !inMonth -> 0.25f
-        isFuture -> 0.55f
+        !inMonth -> 0.30f
+        isFuture -> 0.6f
         else -> 1f
     }
     val textColor = if (dayColor != null) {
-        readableOn(background)
+        readableOn(dayColor.color)
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
+    val shape = RoundedCornerShape(14.dp)
+
+    // Une journee notee est une pastille pleine, en degrade et avec sa propre
+    // ombre : elle avance vers le doigt. Une journee vide reste en retrait.
+    // C'est ce contraste qui fait qu'on lit un mois d'un coup d'oeil.
+    val fill: Brush = if (dayColor != null) {
+        Brush.linearGradient(dayColor.gradient.map { it.copy(alpha = alpha) })
+    } else {
+        SolidColor(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = alpha))
+    }
+
+    // Aujourd'hui porte un anneau qui bat lentement : c'est le seul repere
+    // qu'on cherche vraiment dans une grille de trente-cinq cases.
+    val beat = rememberInfiniteTransition(label = "aujourdhui")
+    val ring by beat.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "anneau",
+    )
 
     Box(
         modifier = modifier
@@ -443,13 +472,27 @@ private fun DayCell(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(12.dp))
-                .background(background.copy(alpha = alpha))
+                .then(
+                    if (dayColor != null && inMonth) {
+                        Modifier.brandShadow(
+                            elevation = 6.dp,
+                            shape = shape,
+                            color = dayColor.color,
+                        )
+                    } else {
+                        Modifier
+                    }
+                )
+                .clip(shape)
+                .background(fill)
                 .then(
                     if (isToday) {
                         Modifier.border(
-                            BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
-                            RoundedCornerShape(12.dp),
+                            BorderStroke(
+                                (1.5f + 1.5f * ring).dp,
+                                MaterialTheme.colorScheme.primary,
+                            ),
+                            shape,
                         )
                     } else {
                         Modifier

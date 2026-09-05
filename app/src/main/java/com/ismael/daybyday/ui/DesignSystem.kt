@@ -45,6 +45,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -272,10 +275,16 @@ fun ScreenBackground(
     content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit,
 ) {
     val base = MaterialTheme.colorScheme.background
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    // Sur fond clair, il faut de la matiere pour que ca se voie : a 20 % de
+    // transparence les halos etaient invisibles. Ils sont maintenant francs en
+    // haut de l'ecran, la ou il n'y a pas encore de carte, et s'eteignent vers
+    // le bas pour ne jamais gener la lecture.
+    val strength = if (dark) 0.55f else 0.75f
     val halos = listOf(
-        Brand.Primary.copy(alpha = 0.22f),
-        Brand.Accent.copy(alpha = 0.20f),
-        Brand.Playful.copy(alpha = 0.18f),
+        Brand.Primary.copy(alpha = strength),
+        Brand.Accent.copy(alpha = strength * 0.75f),
+        Brand.Playful.copy(alpha = strength * 0.7f),
     )
 
     val drift = rememberInfiniteTransition(label = "halos")
@@ -283,7 +292,7 @@ fun ScreenBackground(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(22_000, easing = LinearEasing),
+            animation = tween(16_000, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse,
         ),
         label = "derive",
@@ -307,9 +316,19 @@ fun ScreenBackground(
 
             val w = size.width
             val h = size.height
-            halo(halos[0], w * (0.18f + 0.10f * phase), h * 0.06f, w * 0.85f)
-            halo(halos[1], w * (0.95f - 0.12f * phase), h * (0.20f + 0.05f * phase), w * 0.70f)
-            halo(halos[2], w * (0.10f + 0.20f * phase), h * 0.42f, w * 0.60f)
+            halo(halos[0], w * (0.05f + 0.18f * phase), -h * 0.02f, w * 0.95f)
+            halo(halos[1], w * (1.05f - 0.18f * phase), h * (0.10f + 0.06f * phase), w * 0.80f)
+            halo(halos[2], w * (0.30f + 0.30f * phase), h * 0.30f, w * 0.65f)
+
+            // Le bas de l'ecran revient au calme : les couleurs restent en haut,
+            // la ou le regard arrive, et laissent les cartes tranquilles.
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(Color.Transparent, base),
+                    startY = h * 0.18f,
+                    endY = h * 0.62f,
+                )
+            )
         }
         content()
     }
@@ -420,6 +439,78 @@ fun Appear(
             },
     ) {
         content()
+    }
+}
+
+/**
+ * Le grand anneau de progression : le point chaud d'un ecran de bilan.
+ *
+ * Un chiffre seul ne dit rien ; le meme chiffre au centre d'un anneau qui se
+ * remplit se lit d'un coup d'oeil, et l'animation de remplissage donne envie de
+ * regarder. C'est la piece qui manque a la plupart des ecrans de statistiques.
+ */
+@Composable
+fun ScoreRing(
+    progress: Float,
+    value: String,
+    caption: String,
+    modifier: Modifier = Modifier,
+    size: Dp = 176.dp,
+    track: Color = Color.White.copy(alpha = 0.22f),
+    colors: List<Color> = listOf(Color.White, Color.White.copy(alpha = 0.75f)),
+    valueColor: Color = Color.White,
+) {
+    // L'anneau se remplit a l'ouverture de l'ecran : c'est ce mouvement, pas le
+    // chiffre, qui accroche le regard.
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(progress) { shown = true }
+    val filled by animateFloatAsState(
+        targetValue = if (shown) progress.coerceIn(0f, 1f) else 0f,
+        animationSpec = tween(durationMillis = 1100, easing = FastOutSlowInEasing),
+        label = "remplissage",
+    )
+
+    Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.matchParentSize()) {
+            val stroke = this.size.minDimension * 0.09f
+            val inset = stroke / 2f
+            val arcSize = androidx.compose.ui.geometry.Size(
+                this.size.width - stroke,
+                this.size.height - stroke,
+            )
+            drawArc(
+                color = track,
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = Offset(inset, inset),
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round),
+            )
+            if (filled > 0f) {
+                drawArc(
+                    brush = Brush.linearGradient(colors),
+                    startAngle = -90f,
+                    sweepAngle = 360f * filled,
+                    useCenter = false,
+                    topLeft = Offset(inset, inset),
+                    size = arcSize,
+                    style = Stroke(width = stroke, cap = StrokeCap.Round),
+                )
+            }
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.displaySmall,
+                color = valueColor,
+            )
+            Text(
+                text = caption,
+                style = MaterialTheme.typography.labelMedium,
+                color = valueColor.copy(alpha = 0.8f),
+            )
+        }
     }
 }
 

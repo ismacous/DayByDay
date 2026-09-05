@@ -2,6 +2,7 @@ package com.ismael.daybyday.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,18 +11,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -52,7 +50,6 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatsScreen() {
     val app = LocalContext.current.dayByDayApp
@@ -85,38 +82,80 @@ fun StatsScreen() {
     val hardestWeek = weekSummaries.filter { it.second.filledDays >= 3 }
         .minByOrNull { it.second.average ?: 99.0 }
 
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("Mon bilan") }) },
-    ) { innerPadding ->
+    ScreenBackground(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .statusBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { year -= 1 }) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                        contentDescription = "Année précédente",
+            Spacer(Modifier.height(14.dp))
+
+            ScreenTitle(text = "Mon", accent = "bilan")
+
+            Spacer(Modifier.height(20.dp))
+
+            // Le point chaud de l'ecran : la moyenne de l'annee dans un grand
+            // anneau qui se remplit a l'ouverture. Un chiffre seul ne dit rien ;
+            // le meme chiffre dans un anneau se lit d'un coup d'oeil.
+            Appear(index = 0) {
+                HeroCard {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RoundIconButton(
+                            icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                            label = "Année précédente",
+                            onClick = { year -= 1 },
+                        )
+                        Text(
+                            text = year.toString(),
+                            style = MaterialTheme.typography.titleLarge,
+                            color = Color.White,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Center,
+                        )
+                        RoundIconButton(
+                            icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            label = "Année suivante",
+                            onClick = { year += 1 },
+                        )
+                    }
+
+                    Spacer(Modifier.height(6.dp))
+
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        ScoreRing(
+                            progress = ((yearSummary.average ?: 0.0) / 3.0).toFloat(),
+                            value = yearSummary.average?.let {
+                                String.format(Locale.FRANCE, "%.1f", it)
+                            } ?: "—",
+                            caption = "sur 3",
+                        )
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+
+                    Text(
+                        text = "${yearSummary.filledDays} journée(s) notée(s) sur ${yearSummary.totalDays}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.85f),
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
                     )
-                }
-                Text(
-                    text = year.toString(),
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center,
-                )
-                IconButton(onClick = { year += 1 }) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "Année suivante",
-                    )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    DistributionBar(yearSummary)
                 }
             }
 
-            SummaryCard(title = "Bilan de l'année", summary = yearSummary)
+            Spacer(Modifier.height(18.dp))
 
             Spacer(Modifier.height(16.dp))
 

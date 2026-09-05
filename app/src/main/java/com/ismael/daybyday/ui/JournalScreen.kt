@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -41,11 +43,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextRange
@@ -119,7 +123,22 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
     val imeHeight = with(density) { WindowInsets.ime.getBottom(density).toDp() }
     var lastKeyboardHeight by remember { mutableStateOf(280.dp) }
     if (imeHeight > 120.dp) lastKeyboardHeight = imeHeight
-    val keyboard = LocalSoftwareKeyboardController.current
+
+    // Demander poliment au clavier de se cacher ne suffit pas : tant que le
+    // champ garde le focus, Android le fait revenir. Le panneau et le clavier
+    // s'empilaient donc, et la page sautait a chaque bascule. Retirer le focus
+    // le ferme pour de bon ; le rendre le rouvre, curseur intact.
+    val bodyFocus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+
+    fun showPanel(panel: ToolPanel?) {
+        openPanel = panel
+        if (panel == null) {
+            runCatching { bodyFocus.requestFocus() }
+        } else {
+            focusManager.clearFocus()
+        }
+    }
 
     val mediaItems by remember(date) { repository.observeMediaForDay(date) }
         .collectAsStateWithLifecycle(emptyList())
@@ -226,8 +245,11 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .imePadding(),
+                .padding(top = innerPadding.calculateTopPadding())
+                // Le clavier contient deja la barre de navigation : prendre le
+                // plus grand des deux, pas leur somme, sinon une bande vide
+                // reste entre la barre d'outils et le clavier.
+                .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars)),
         ) {
             BasicTextField(
                 value = title,
@@ -301,6 +323,7 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                     .fillMaxWidth()
                     .weight(1f)
                     .padding(horizontal = 20.dp, vertical = 12.dp)
+                    .focusRequester(bodyFocus)
                     .testTag("day-note-field"),
             )
 
@@ -326,32 +349,21 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                 active = active,
                 openPanel = openPanel,
                 onTogglePanel = { panel ->
-                    if (openPanel == panel) {
-                        openPanel = null
-                        keyboard?.show()
-                    } else {
-                        // Le panneau prend la place du clavier plutot que de
-                        // pousser le texte : on ferme l'un pour ouvrir l'autre.
-                        openPanel = panel
-                        keyboard?.hide()
-                    }
+                    // Le panneau prend la place du clavier : l'un se ferme pour
+                    // que l'autre s'ouvre, et la hauteur totale ne bouge pas.
+                    showPanel(if (openPanel == panel) null else panel)
                 },
                 onStyle = { style ->
                     applyStyle(style)
-                    if (openPanel != null) {
-                        openPanel = null
-                        keyboard?.show()
-                    }
+                    if (openPanel != null) showPanel(null)
                 },
                 onClearHeading = {
                     clearHeading()
-                    openPanel = null
-                    keyboard?.show()
+                    showPanel(null)
                 },
                 onList = { marker ->
                     prefixLine(marker.marker)
-                    openPanel = null
-                    keyboard?.show()
+                    showPanel(null)
                 },
                 onAddPhoto = {
                     pickMedia.launch(

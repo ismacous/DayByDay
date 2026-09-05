@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -37,6 +38,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ismael.daybyday.data.StyleFamily
 import com.ismael.daybyday.data.TextStyleKind
+
+/**
+ * Taille des boutons de la barre. Neuf tiennent ainsi sur la largeur d'un
+ * telephone courant, sans que le dernier soit rogne.
+ */
+private val BUTTON_SIZE = 38.dp
 
 /** Les panneaux qui peuvent s'ouvrir sous la barre, a la place du clavier. */
 enum class ToolPanel(val label: String) {
@@ -79,10 +86,21 @@ fun JournalToolbar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            ToolButton(selected = false, label = "Ajouter une photo", onClick = onAddPhoto) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(19.dp),
+                )
+            }
+
+            Separator()
+
             TextStyleKind.marks.forEach { style ->
                 ToolButton(
                     selected = style in active,
@@ -145,15 +163,6 @@ fun JournalToolbar(
                 )
             }
 
-            Separator()
-
-            ToolButton(selected = false, label = "Ajouter une photo", onClick = onAddPhoto) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
         }
 
         if (openPanel != null) {
@@ -355,7 +364,7 @@ private fun GroupButton(
 ) {
     Box(
         modifier = Modifier
-            .size(42.dp)
+            .size(BUTTON_SIZE)
             .clip(RoundedCornerShape(12.dp))
             .background(
                 when {
@@ -401,7 +410,7 @@ private fun ToolButton(
 ) {
     Box(
         modifier = Modifier
-            .size(42.dp)
+            .size(BUTTON_SIZE)
             .clip(RoundedCornerShape(12.dp))
             .background(
                 if (selected) {

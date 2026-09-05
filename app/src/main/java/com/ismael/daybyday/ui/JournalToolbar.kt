@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -41,8 +42,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ismael.daybyday.R
+import com.ismael.daybyday.data.MediaItem
 import com.ismael.daybyday.data.StyleFamily
 import com.ismael.daybyday.data.TextStyleKind
+import java.io.File
 
 /**
  * Taille des boutons de la barre. Sept tiennent ainsi sur la largeur d'un
@@ -87,6 +90,9 @@ fun JournalToolbar(
     onClearFont: () -> Unit,
     onList: (ListMarker) -> Unit,
     onAddPhoto: () -> Unit,
+    photos: List<MediaItem>,
+    photoFile: (MediaItem) -> File,
+    onPickPhoto: (MediaItem) -> Unit,
     panelHeight: Dp,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -170,6 +176,9 @@ fun JournalToolbar(
                 onClearFont = onClearFont,
                 onList = onList,
                 onAddPhoto = onAddPhoto,
+                photos = photos,
+                photoFile = photoFile,
+                onPickPhoto = onPickPhoto,
                 height = panelHeight,
             )
         }
@@ -185,6 +194,9 @@ private fun ToolPanelContent(
     onClearFont: () -> Unit,
     onList: (ListMarker) -> Unit,
     onAddPhoto: () -> Unit,
+    photos: List<MediaItem>,
+    photoFile: (MediaItem) -> File,
+    onPickPhoto: (MediaItem) -> Unit,
     height: Dp,
 ) {
     Column(
@@ -206,6 +218,9 @@ private fun ToolPanelContent(
                 onClearFont = onClearFont,
                 onList = onList,
                 onAddPhoto = onAddPhoto,
+                photos = photos,
+                photoFile = photoFile,
+                onPickPhoto = onPickPhoto,
             )
 
             ToolPanel.COLORS -> {
@@ -245,6 +260,9 @@ private fun AllToolsPanel(
     onClearFont: () -> Unit,
     onList: (ListMarker) -> Unit,
     onAddPhoto: () -> Unit,
+    photos: List<MediaItem>,
+    photoFile: (MediaItem) -> File,
+    onPickPhoto: (MediaItem) -> Unit,
 ) {
     SectionLabel("Titres")
     TextStyleKind.headings.forEach { style ->
@@ -305,6 +323,37 @@ private fun AllToolsPanel(
             contentDescription = null,
             modifier = Modifier.size(19.dp),
         )
+    }
+
+    if (photos.isNotEmpty()) {
+        // Une photo passee au fond est sous le texte : y toucher, c'est
+        // toucher le texte, et aucun geste ne distingue les deux de facon
+        // fiable. On la reprend donc par sa vignette.
+        SectionLabel("Photos de la page")
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(bottom = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            photos.forEach { photo ->
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .clickable(onClickLabel = "Reprendre cette photo") { onPickPhoto(photo) },
+                ) {
+                    MediaImage(
+                        file = photoFile(photo),
+                        kind = photo.kind,
+                        modifier = Modifier.fillMaxSize(),
+                        maxSize = 256,
+                    )
+                }
+            }
+        }
     }
 }
 

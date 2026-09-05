@@ -66,6 +66,7 @@ class MigrationTest {
                 AppDatabase.MIGRATION_6_7,
                 AppDatabase.MIGRATION_7_8,
                 AppDatabase.MIGRATION_8_9,
+                AppDatabase.MIGRATION_9_10,
             )
             .build()
 
@@ -79,6 +80,13 @@ class MigrationTest {
                 assertEquals(null, day?.sportLevel)
                 assertEquals(null, day?.weightKg)
                 assertEquals(1, dao.mediaForDay(20000).size)
+                // La photo d'origine survit et n'a pas encore de place sur la
+                // page : elle sera rangee a la premiere ouverture du journal.
+                val media = dao.mediaForDay(20000).first()
+                assertEquals(null, media.placedX)
+                assertEquals(false, media.isPlaced)
+                assertEquals(com.ismael.daybyday.data.MediaLayer.FRONT, media.layer)
+                assertEquals(com.ismael.daybyday.data.MediaShape.RECTANGLE, media.shape)
                 // Les etiquettes par defaut sont ajoutees par la migration,
                 // et rangees dans leur famille par la suivante.
                 val tags = dao.allTags()

@@ -102,6 +102,18 @@ téléphone (Samsung S25, Android 15).
   fermé, sinon la désélection automatique la balaierait aussitôt. Un champ sans
   focus ne peint pas non plus sa sélection : `SpanTransformation` la redessine,
   sinon on choisit une couleur à l'aveugle.
+- **Photos du journal** : elles sont **posées librement** sur la page, pas
+  insérées dans le fil du texte. Écrire un paragraphe de plus ne les déplace
+  pas — c'est voulu, et c'est l'inverse d'un traitement de texte. Trois
+  conséquences dans le code : les positions sont en points **dans la page**,
+  pas dans l'écran, donc le texte et les photos doivent vivre dans le même
+  `verticalScroll` ; `Modifier.offset` ne fait pas grandir le parent, donc la
+  hauteur de page est imposée par le champ de texte (`heightIn`) à partir de
+  `Placement.lowestEdge` ; et une photo passée derrière le texte n'est plus
+  cliquable (le champ est devant), donc elle se reprend par ses vignettes dans
+  le menu « + ». Toutes les règles de position, taille, rotation et
+  aimantation sont dans `data/Placement.kt`, sans rien d'Android, et testées
+  dans `PlacementTest`.
 - **Polices** : trois fichiers dans `res/font/` (Caveat, Lora, Poppins, sous
   licence OFL, voir `POLICES.md`), plus deux familles d'Android. Ils sont dans
   l'APK : rien n'est téléchargé, la règle « aucune permission INTERNET » tient.

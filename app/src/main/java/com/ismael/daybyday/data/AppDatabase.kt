@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Version du schema. Affichee dans les reglages, a propos, pour savoir ce que
  * fait tourner le telephone en cas de probleme.
  */
-const val DATABASE_VERSION = 9
+const val DATABASE_VERSION = 10
 
 @Database(
     entities = [
@@ -229,6 +229,34 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Les photos se posent librement sur la page du journal : position,
+         * taille, inclinaison, calque et forme. Les photos deja la n'ont pas
+         * de position (colonnes nulles) : elles seront rangees automatiquement
+         * a la premiere ouverture, aucune n'est perdue.
+         */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media_items ADD COLUMN placedX REAL")
+                db.execSQL("ALTER TABLE media_items ADD COLUMN placedY REAL")
+                db.execSQL(
+                    "ALTER TABLE media_items ADD COLUMN placedWidth REAL NOT NULL DEFAULT 0"
+                )
+                db.execSQL(
+                    "ALTER TABLE media_items ADD COLUMN placedHeight REAL NOT NULL DEFAULT 0"
+                )
+                db.execSQL(
+                    "ALTER TABLE media_items ADD COLUMN placedRotation REAL NOT NULL DEFAULT 0"
+                )
+                db.execSQL(
+                    "ALTER TABLE media_items ADD COLUMN layerKey INTEGER NOT NULL DEFAULT 2"
+                )
+                db.execSQL(
+                    "ALTER TABLE media_items ADD COLUMN shapeKey INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -247,6 +275,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_6_7,
                     MIGRATION_7_8,
                     MIGRATION_8_9,
+                    MIGRATION_9_10,
                 )
                 .build()
                 .also { instance = it }

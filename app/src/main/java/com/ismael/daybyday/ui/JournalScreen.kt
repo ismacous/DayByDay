@@ -10,8 +10,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
@@ -21,6 +23,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -59,6 +62,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ismael.daybyday.data.DayCard
+import com.ismael.daybyday.data.MediaItem
+import com.ismael.daybyday.data.MediaLayer
+import com.ismael.daybyday.data.Placement
 import com.ismael.daybyday.data.RichText
 import com.ismael.daybyday.data.StyleFamily
 import com.ismael.daybyday.data.TextSpan
@@ -191,8 +197,69 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
 
     val mediaItems by remember(date) { repository.observeMediaForDay(date) }
         .collectAsStateWithLifecycle(emptyList())
-    val journalMedia = mediaItems.filter { it.cardKey == DayCard.JOURNAL.key }
-    var viewerIndex by remember { mutableStateOf<Int?>(null) }
+    val storedMedia = mediaItems.filter { it.cardKey == DayCard.JOURNAL.key }
+
+    // --- Les photos posees sur la page ---------------------------------
+    val pageScroll = rememberScrollState()
+    var pageWidth by remember { mutableStateOf(0f) }
+    var selectedPhotoId by remember { mutableStateOf<Long?>(null) }
+    var snapToGrid by remember { mutableStateOf(true) }
+
+    // Pendant qu'un doigt deplace une photo, sa nouvelle place vit ici : on
+    // n'ecrit pas dans la base a chaque image de l'animation.
+    var draft by remember { mutableStateOf<MediaItem?>(null) }
+    val journalMedia = storedMedia.map { item ->
+        if (item.id == draft?.id) draft ?: item else item
+    }
+    val selectedPhoto = journalMedia.firstOrNull { it.id == selectedPhotoId }
+
+    val pendingDraft = draft
+    LaunchedEffect(pendingDraft) {
+        if (pendingDraft != null) {
+            // Une fois les doigts immobiles, on enregistre.
+            kotlinx.coroutines.delay(350)
+            repository.updateMedia(pendingDraft)
+        }
+    }
+
+    fun selectPhoto(id: Long?) {
+        selectedPhotoId = id
+        draft = null
+        if (id != null) {
+            // On ne tape pas et on manipule une image : le clavier n'a plus
+            // rien a faire la, et un panneau ouvert non plus.
+            openPanel = null
+            heldSelection = null
+            awaitingKeyboard = false
+            focusManager.clearFocus()
+        }
+    }
+
+    fun changePhoto(item: MediaItem) {
+        draft = null
+        app.appScope.launch { repository.updateMedia(item) }
+    }
+
+    // Une photo qu'on vient de choisir dans la galerie n'a pas encore de place,
+    // et celles ajoutees avant le placement libre non plus. Elles se rangent
+    // la ou on regarde, a leurs proportions, et la derniere est deja choisie
+    // pour qu'on puisse la deplacer tout de suite.
+    val unplacedCount = storedMedia.count { !it.isPlaced }
+    LaunchedEffect(unplacedCount, pageWidth) {
+        if (pageWidth <= 0f || unplacedCount == 0) return@LaunchedEffect
+        val placedAlready = storedMedia.count { it.isPlaced }
+        val topY = with(density) { pageScroll.value.toDp().value } + 32f
+        storedMedia.filter { !it.isPlaced }.forEachIndexed { index, item ->
+            val ratio = MediaLoader.aspectRatio(
+                repository.media.file(item.relativePath),
+                item.kind,
+            )
+            repository.updateMedia(
+                Placement.autoPlace(item, placedAlready + index, pageWidth, topY, ratio)
+            )
+        }
+        selectPhoto(storedMedia.last { !it.isPlaced }.id)
+    }
 
     val pickMedia = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(30)
@@ -332,150 +399,206 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
 
-            BasicTextField(
-                value = body,
-                onValueChange = { updated ->
-                    // L'utilisateur reprend la main sur le texte : la selection
-                    // mise de cote pour le panneau n'a plus lieu d'etre. Mais
-                    // seulement panneau ferme : en perdant le focus, le champ
-                    // annonce lui-meme une selection vide, et il ne faut pas la
-                    // prendre pour un geste de l'utilisateur.
-                    if (openPanel == null) heldSelection = null
-                    if (updated.text == body.text) {
-                        // Deplacement du curseur : on adopte le style de
-                        // l'endroit ou il arrive, comme un traitement de texte.
-                        val caret = updated.selection.start
-                        typing = RichText.stylesOn(spans, caret, caret)
-                        body = updated
-                        return@BasicTextField
-                    }
-
-                    val moved = RichText.adjust(spans, body.text, updated.text)
-                    val edit = RichText.diff(body.text, updated.text)
-                    spans = if (edit.newEnd > edit.start && typing.isNotEmpty()) {
-                        RichText.applyAll(moved, edit.start, edit.newEnd, typing)
-                    } else {
-                        moved
-                    }
-                    body = updated
-                },
-                textStyle = MaterialTheme.typography.bodyLarge.copy(
-                    color = MaterialTheme.colorScheme.onSurface,
-                    lineHeight = 26.sp,
-                ),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                visualTransformation = run {
-                    // Sans focus, le champ ne peint plus la selection : on la
-                    // dessine nous-memes, sinon on colore a l'aveugle.
-                    val tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
-                    remember(spans, heldSelection, tint) {
-                        SpanTransformation(spans, heldSelection, tint)
-                    }
-                },
-                decorationBox = { field ->
-                    Box {
-                        if (body.text.isEmpty()) {
-                            Text(
-                                "Écris ce que tu veux, comme tu veux.",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            )
-                        }
-                        field()
-                    }
-                },
+            // La page : le texte et les photos defilent ensemble, dans un seul
+            // conteneur. Les positions des photos sont donc des positions dans
+            // la page, pas dans l'ecran — sinon tout se decalerait au premier
+            // defilement.
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
-                    .padding(horizontal = 20.dp, vertical = 12.dp)
-                    .focusRequester(bodyFocus)
-                    .onFocusChanged { state ->
-                        // Retourner ecrire referme le panneau : sinon il reste
-                        // sous le clavier qui remonte, et les deux s'empilent.
-                        // C'est l'appui de l'utilisateur qui decide du curseur,
-                        // donc on ne rend pas la selection mise de cote.
-                        if (state.isFocused && openPanel != null) {
-                            openPanel = null
-                            heldSelection = null
-                            awaitingKeyboard = false
-                        }
-                    }
-                    .selectWordOnDoubleTap({ body }) { body = body.copy(selection = it) }
-                    .testTag("day-note-field"),
-            )
+                    .weight(1f),
+            ) {
+                val viewportHeight = maxHeight
+                val measuredWidth = maxWidth
+                LaunchedEffect(measuredWidth) { pageWidth = measuredWidth.value }
 
-            if (journalMedia.isNotEmpty()) {
-                Row(
+                // La page descend au moins jusqu'au bas de la photo la plus
+                // basse : sans ca, une image posee en bas serait inatteignable.
+                val pageHeight = maxOf(
+                    viewportHeight,
+                    (Placement.lowestEdge(journalMedia) + 160f).dp,
+                )
+
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        .fillMaxSize()
+                        .verticalScroll(pageScroll),
                 ) {
-                    journalMedia.forEach { item ->
-                        MediaThumb(
-                            item = item,
-                            onClick = { viewerIndex = journalMedia.indexOf(item) },
-                            modifier = Modifier.width(96.dp),
+                    if (selectedPhoto != null && snapToGrid) PhotoGrid(height = pageHeight)
+
+                    // Sous le texte : le fond, puis le milieu.
+                    journalMedia
+                        .filter { it.layer != MediaLayer.FRONT && it.isPlaced }
+                        .sortedBy { it.layerKey }
+                        .forEach { item ->
+                            PlacedPhoto(
+                                item = item,
+                                file = repository.media.file(item.relativePath),
+                                // Sous le texte, un appui va au texte : c'est le
+                                // champ qui est devant. On la reprend par la liste
+                                // "Photos de la page".
+                                onSelect = null,
+                            )
+                        }
+
+                    BasicTextField(
+                        value = body,
+                        onValueChange = { updated ->
+                            // L'utilisateur reprend la main sur le texte : la selection
+                            // mise de cote pour le panneau n'a plus lieu d'etre. Mais
+                            // seulement panneau ferme : en perdant le focus, le champ
+                            // annonce lui-meme une selection vide, et il ne faut pas la
+                            // prendre pour un geste de l'utilisateur.
+                            if (openPanel == null) heldSelection = null
+                            if (updated.text == body.text) {
+                                // Deplacement du curseur : on adopte le style de
+                                // l'endroit ou il arrive, comme un traitement de texte.
+                                val caret = updated.selection.start
+                                typing = RichText.stylesOn(spans, caret, caret)
+                                body = updated
+                                return@BasicTextField
+                            }
+
+                            val moved = RichText.adjust(spans, body.text, updated.text)
+                            val edit = RichText.diff(body.text, updated.text)
+                            spans = if (edit.newEnd > edit.start && typing.isNotEmpty()) {
+                                RichText.applyAll(moved, edit.start, edit.newEnd, typing)
+                            } else {
+                                moved
+                            }
+                            body = updated
+                        },
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                            lineHeight = 26.sp,
+                        ),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        visualTransformation = run {
+                            // Sans focus, le champ ne peint plus la selection : on la
+                            // dessine nous-memes, sinon on colore a l'aveugle.
+                            val tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+                            remember(spans, heldSelection, tint) {
+                                SpanTransformation(spans, heldSelection, tint)
+                            }
+                        },
+                        decorationBox = { field ->
+                            Box {
+                                if (body.text.isEmpty()) {
+                                    Text(
+                                        "Écris ce que tu veux, comme tu veux.",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    )
+                                }
+                                field()
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            // La page entiere est a l'ecriture : appuyer n'importe ou
+                            // dessous pose le curseur, meme loin sous le dernier mot.
+                            .heightIn(min = pageHeight)
+                            .padding(horizontal = 20.dp, vertical = 12.dp)
+                            .focusRequester(bodyFocus)
+                            .onFocusChanged { state ->
+                                // Retourner ecrire referme le panneau : sinon il reste
+                                // sous le clavier qui remonte, et les deux s'empilent.
+                                // C'est l'appui de l'utilisateur qui decide du curseur,
+                                // donc on ne rend pas la selection mise de cote.
+                                if (state.isFocused && openPanel != null) {
+                                    openPanel = null
+                                    heldSelection = null
+                                    awaitingKeyboard = false
+                                }
+                            }
+                            .selectWordOnDoubleTap({ body }) { body = body.copy(selection = it) }
+                            .testTag("day-note-field"),
+                    )
+
+                    // Devant le texte : ces photos-la se prennent directement.
+                    journalMedia
+                        .filter { it.layer == MediaLayer.FRONT && it.isPlaced }
+                        .forEach { item ->
+                            PlacedPhoto(
+                                item = item,
+                                file = repository.media.file(item.relativePath),
+                                onSelect = { selectPhoto(item.id) },
+                            )
+                        }
+
+                    // Le cadre de manipulation passe par-dessus tout, meme sur une
+                    // photo de fond que le texte recouvre.
+                    selectedPhoto?.let { photo ->
+                        PhotoHandle(
+                            item = photo,
+                            pageWidth = pageWidth,
+                            snapToGrid = snapToGrid,
+                            onChange = { draft = it },
                         )
                     }
                 }
             }
 
-            JournalToolbar(
-                active = active,
-                openPanel = openPanel,
-                onTogglePanel = { panel ->
-                    // Le panneau prend la place du clavier : l'un se ferme pour
-                    // que l'autre s'ouvre, et la hauteur totale ne bouge pas.
-                    showPanel(if (openPanel == panel) null else panel)
-                },
-                onStyle = { style ->
-                    applyStyle(style)
-                    if (openPanel != null) showPanel(null)
-                },
-                onClearHeading = {
-                    clearHeading()
-                    showPanel(null)
-                },
-                onClearFont = {
-                    clearFont()
-                    showPanel(null)
-                },
-                onList = { marker ->
-                    prefixLine(marker.marker)
-                    showPanel(null)
-                },
-                onAddPhoto = {
-                    // On referme le panneau sans rendre le focus : le
-                    // selecteur de photos passe devant, inutile de rappeler le
-                    // clavier juste avant.
-                    openPanel = null
-                    pickMedia.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
-                    )
-                },
-                panelHeight = panelHeight,
-            )
+            if (selectedPhoto != null) {
+                val photo = selectedPhoto
+                PhotoToolsBar(
+                    item = photo,
+                    snapToGrid = snapToGrid,
+                    onShape = { changePhoto(photo.copy(shapeKey = it.key)) },
+                    onLayer = { changePhoto(photo.copy(layerKey = it.key)) },
+                    onSnap = { snapToGrid = it },
+                    onDelete = {
+                        selectPhoto(null)
+                        app.appScope.launch { repository.deleteMedia(photo) }
+                    },
+                    onDone = { selectPhoto(null) },
+                )
+            } else {
+                JournalToolbar(
+                    active = active,
+                    openPanel = openPanel,
+                    onTogglePanel = { panel ->
+                        // Le panneau prend la place du clavier : l'un se ferme pour
+                        // que l'autre s'ouvre, et la hauteur totale ne bouge pas.
+                        showPanel(if (openPanel == panel) null else panel)
+                    },
+                    onStyle = { style ->
+                        applyStyle(style)
+                        if (openPanel != null) showPanel(null)
+                    },
+                    onClearHeading = {
+                        clearHeading()
+                        showPanel(null)
+                    },
+                    onClearFont = {
+                        clearFont()
+                        showPanel(null)
+                    },
+                    onList = { marker ->
+                        prefixLine(marker.marker)
+                        showPanel(null)
+                    },
+                    onAddPhoto = {
+                        // On referme le panneau sans rendre le focus : le
+                        // selecteur de photos passe devant, inutile de rappeler le
+                        // clavier juste avant.
+                        openPanel = null
+                        pickMedia.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+                        )
+                    },
+                    photos = journalMedia,
+                    photoFile = { repository.media.file(it.relativePath) },
+                    onPickPhoto = { selectPhoto(it.id) },
+                    panelHeight = panelHeight,
+                )
 
-            // Le clavier remonte : on tient sa place jusqu'a ce qu'il y soit.
-            if (openPanel == null && awaitingKeyboard && panelHeight > 0.dp) {
-                Spacer(Modifier.height(panelHeight))
+                // Le clavier remonte : on tient sa place jusqu'a ce qu'il y soit.
+                if (openPanel == null && awaitingKeyboard && panelHeight > 0.dp) {
+                    Spacer(Modifier.height(panelHeight))
+                }
             }
         }
-    }
-
-    val index = viewerIndex
-    if (index != null && index in journalMedia.indices) {
-        MediaViewerDialog(
-            items = journalMedia,
-            startIndex = index,
-            onDismiss = { viewerIndex = null },
-            onDelete = { item ->
-                viewerIndex = null
-                app.appScope.launch { repository.deleteMedia(item) }
-            },
-        )
     }
 }
 

@@ -146,6 +146,11 @@ class DayRepository(context: Context) {
         return true
     }
 
+    /** Enregistre la nouvelle place d'une photo sur la page du journal. */
+    suspend fun updateMedia(item: MediaItem) {
+        dao.updateMedia(item)
+    }
+
     suspend fun deleteMedia(item: MediaItem) {
         dao.deleteMedia(item.id)
         media.delete(item.relativePath)

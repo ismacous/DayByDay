@@ -115,6 +115,68 @@ object MediaLoader {
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 
+    /**
+     * Le rapport hauteur / largeur d'un media, sans le decoder entierement.
+     * Une photo qu'on vient de poser doit garder ses proportions : la caler
+     * d'office en carre defigurerait tout ce qui n'est pas carre.
+     */
+    suspend fun aspectRatio(file: File, kind: MediaKind): Float = withContext(Dispatchers.IO) {
+        if (!file.exists()) return@withContext 1f
+        val size = when (kind) {
+            MediaKind.PHOTO -> photoSize(file)
+            MediaKind.VIDEO -> videoSize(file)
+        } ?: return@withContext 1f
+        val (width, height) = size
+        if (width <= 0 || height <= 0) 1f else height.toFloat() / width.toFloat()
+    }
+
+    private fun photoSize(file: File): Pair<Int, Int>? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        // Une photo prise a la verticale porte ses dimensions a l'endroit et
+        // son orientation a part : sans ca, un portrait ressort en paysage.
+        val quarterTurn = runCatching {
+            when (ExifInterface(file.path).getAttributeInt(
+                ExifInterface.TAG_ORIENTATION,
+                ExifInterface.ORIENTATION_NORMAL,
+            )) {
+                ExifInterface.ORIENTATION_ROTATE_90, ExifInterface.ORIENTATION_ROTATE_270 -> true
+                else -> false
+            }
+        }.getOrDefault(false)
+        return if (quarterTurn) {
+            bounds.outHeight to bounds.outWidth
+        } else {
+            bounds.outWidth to bounds.outHeight
+        }
+    }
+
+    private fun videoSize(file: File): Pair<Int, Int>? {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.path)
+            val width = retriever
+                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()
+            val height = retriever
+                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()
+            val quarterTurn = retriever
+                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
+                ?.toIntOrNull()?.let { it == 90 || it == 270 } ?: false
+            if (width == null || height == null) {
+                null
+            } else if (quarterTurn) {
+                height to width
+            } else {
+                width to height
+            }
+        } catch (error: Exception) {
+            null
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
+
     fun clear() = cache.evictAll()
 }
 

@@ -291,8 +291,67 @@ data class MediaItem(
      * sous "Alimentation", sans quitter l'album complet de la journee.
      */
     val cardKey: String? = null,
+    /**
+     * Placement libre sur la page du journal : coin haut gauche, en points,
+     * depuis le haut de la page — pas de l'ecran, sinon tout se decalerait au
+     * premier defilement.
+     *
+     * `null` veut dire "jamais posee" : la photo sera rangee automatiquement a
+     * la prochaine ouverture du journal. C'est le cas des photos ajoutees
+     * avant que le placement libre existe.
+     */
+    val placedX: Float? = null,
+    val placedY: Float? = null,
+    val placedWidth: Float = 0f,
+    val placedHeight: Float = 0f,
+    /** Inclinaison en degres. Une photo posee de travers, comme sur un carnet. */
+    val placedRotation: Float = 0f,
+    /** Voir [MediaLayer] : devant ou derriere le texte. */
+    val layerKey: Int = MediaLayer.FRONT.key,
+    /** Voir [MediaShape] : la forme dans laquelle l'image vient se ranger. */
+    val shapeKey: Int = MediaShape.RECTANGLE.key,
 ) {
     val kind: MediaKind get() = if (kindKey == 1) MediaKind.VIDEO else MediaKind.PHOTO
+
+    val layer: MediaLayer get() = MediaLayer.fromKey(layerKey)
+
+    val shape: MediaShape get() = MediaShape.fromKey(shapeKey)
+
+    /** Posee sur la page, avec une position et une taille connues. */
+    val isPlaced: Boolean
+        get() = placedX != null && placedY != null && placedWidth > 0f && placedHeight > 0f
+
+    /** Le cercle et le carre sont aussi hauts que larges, quoi qu'on enregistre. */
+    val displayHeight: Float
+        get() = if (shape == MediaShape.RECTANGLE) placedHeight else placedWidth
+}
+
+/**
+ * A quelle profondeur une photo est posee sur la page.
+ *
+ * Le texte s'ecrit entre [MIDDLE] et [FRONT] : une photo de fond se laisse
+ * ecrire par-dessus, une photo devant recouvre le texte. C'est ce qui permet
+ * une mise en page, au lieu d'une simple suite d'images.
+ */
+enum class MediaLayer(val key: Int, val label: String) {
+    BACK(0, "Au fond"),
+    MIDDLE(1, "Derrière le texte"),
+    FRONT(2, "Devant le texte");
+
+    companion object {
+        fun fromKey(key: Int): MediaLayer = entries.firstOrNull { it.key == key } ?: FRONT
+    }
+}
+
+/** La forme dans laquelle l'image vient se ranger, en la recadrant au centre. */
+enum class MediaShape(val key: Int, val label: String) {
+    RECTANGLE(0, "Rectangle"),
+    SQUARE(1, "Carré"),
+    CIRCLE(2, "Cercle");
+
+    companion object {
+        fun fromKey(key: Int): MediaShape = entries.firstOrNull { it.key == key } ?: RECTANGLE
+    }
 }
 
 /** Nombre de medias par jour, pour afficher une pastille dans le calendrier. */

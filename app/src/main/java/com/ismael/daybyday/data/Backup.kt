@@ -122,6 +122,15 @@ object Backup {
                     .put("kindKey", item.kindKey)
                     .put("addedAt", item.addedAt)
                     .put("cardKey", item.cardKey ?: JSONObject.NULL)
+                    // Le placement sur la page fait partie du journal : sans
+                    // lui, restaurer une sauvegarde rendrait la mise en page.
+                    .put("placedX", item.placedX ?: JSONObject.NULL)
+                    .put("placedY", item.placedY ?: JSONObject.NULL)
+                    .put("placedWidth", item.placedWidth)
+                    .put("placedHeight", item.placedHeight)
+                    .put("placedRotation", item.placedRotation)
+                    .put("layerKey", item.layerKey)
+                    .put("shapeKey", item.shapeKey)
             )
         }
         root.put("media", mediaJson)
@@ -341,6 +350,13 @@ object Backup {
                         kindKey = item.optInt("kindKey", 0),
                         addedAt = item.optLong("addedAt", System.currentTimeMillis()),
                         cardKey = if (item.isNull("cardKey")) null else item.optString("cardKey"),
+                        placedX = item.optFloatOrNull("placedX"),
+                        placedY = item.optFloatOrNull("placedY"),
+                        placedWidth = item.optDouble("placedWidth", 0.0).toFloat(),
+                        placedHeight = item.optDouble("placedHeight", 0.0).toFloat(),
+                        placedRotation = item.optDouble("placedRotation", 0.0).toFloat(),
+                        layerKey = item.optInt("layerKey", MediaLayer.FRONT.key),
+                        shapeKey = item.optInt("shapeKey", MediaShape.RECTANGLE.key),
                     )
                 }
 
@@ -426,6 +442,9 @@ object Backup {
 
     private fun JSONObject.optIntOrNull(key: String): Int? =
         if (isNull(key)) null else optInt(key)
+
+    private fun JSONObject.optFloatOrNull(key: String): Float? =
+        if (isNull(key)) null else optDouble(key).toFloat()
 
     /** Empeche un chemin malveillant du type ../../ de sortir du dossier cible. */
     private fun safeChild(root: File, relative: String): File? {

@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
@@ -126,6 +127,9 @@ interface DayDao {
 
     @Insert
     suspend fun insertMedia(item: MediaItem): Long
+
+    @Update
+    suspend fun updateMedia(item: MediaItem)
 
     @Query("DELETE FROM media_items WHERE id = :id")
     suspend fun deleteMedia(id: Long)

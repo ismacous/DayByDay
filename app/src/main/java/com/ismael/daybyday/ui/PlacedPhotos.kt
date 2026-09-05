@@ -1,0 +1,303 @@
+package com.ismael.daybyday.ui
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.ismael.daybyday.data.MediaItem
+import com.ismael.daybyday.data.MediaLayer
+import com.ismael.daybyday.data.MediaShape
+import com.ismael.daybyday.data.Placement
+import java.io.File
+
+/**
+ * Les photos posees librement sur la page du journal.
+ *
+ * Une photo posee ne bouge plus : ecrire un paragraphe de plus au-dessus ne la
+ * pousse pas vers le bas. C'est l'inverse d'un traitement de texte, et c'est
+ * ce qui permet de composer une page — une image de fond avec le texte
+ * par-dessus, une photo de travers dans un coin — au lieu de subir une
+ * insertion qui reorganise tout.
+ */
+
+/** La forme dans laquelle l'image vient se ranger. */
+fun MediaShape.toComposeShape(): Shape = when (this) {
+    MediaShape.CIRCLE -> CircleShape
+    MediaShape.SQUARE -> RoundedCornerShape(6.dp)
+    MediaShape.RECTANGLE -> RoundedCornerShape(10.dp)
+}
+
+/**
+ * Une photo a sa place sur la page. L'image remplit la forme en se recadrant
+ * au centre : c'est le masque, sans avoir a poser une forme puis une image
+ * dedans en deux temps.
+ */
+@Composable
+fun PlacedPhoto(
+    item: MediaItem,
+    file: File,
+    onSelect: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    if (!item.isPlaced) return
+    val interaction = remember(item.id) { MutableInteractionSource() }
+
+    Box(
+        modifier = modifier
+            .offset(x = (item.placedX ?: 0f).dp, y = (item.placedY ?: 0f).dp)
+            .size(width = item.placedWidth.dp, height = item.displayHeight.dp)
+            // La rotation vient apres la taille : elle tourne autour du centre
+            // sans changer la place que la photo occupe dans la mise en page.
+            .rotate(item.placedRotation)
+            .clip(item.shape.toComposeShape())
+            .then(
+                if (onSelect == null) {
+                    Modifier
+                } else {
+                    // Un simple clic, pas un detecteur de gestes : le clic
+                    // laisse le doigt qui glisse faire defiler la page.
+                    Modifier.clickable(
+                        interactionSource = interaction,
+                        indication = null,
+                        onClickLabel = "Modifier cette photo",
+                        onClick = onSelect,
+                    )
+                }
+            ),
+    ) {
+        MediaImage(
+            file = file,
+            kind = item.kind,
+            modifier = Modifier.fillMaxSize(),
+            maxSize = 1280,
+            contentScale = ContentScale.Crop,
+        )
+    }
+}
+
+/**
+ * Le cadre de manipulation de la photo choisie.
+ *
+ * Il est dessine par-dessus tout le reste, a la place exacte de la photo, meme
+ * quand celle-ci est au fond sous le texte : c'est la seule facon d'attraper
+ * une image que le champ de texte recouvre.
+ *
+ * Un doigt deplace, deux doigts redimensionnent et font tourner. Dans les deux
+ * cas le geste est consomme ici, donc la page ne defile pas sous les doigts.
+ */
+@Composable
+fun PhotoHandle(
+    item: MediaItem,
+    pageWidth: Float,
+    snapToGrid: Boolean,
+    onChange: (MediaItem) -> Unit,
+) {
+    if (!item.isPlaced) return
+    val density = LocalDensity.current
+    val accent = MaterialTheme.colorScheme.primary
+
+    Box(
+        modifier = Modifier
+            .offset(x = (item.placedX ?: 0f).dp, y = (item.placedY ?: 0f).dp)
+            .size(width = item.placedWidth.dp, height = item.displayHeight.dp)
+            .rotate(item.placedRotation)
+            .border(2.dp, accent, item.shape.toComposeShape())
+            .pointerInput(item.id, snapToGrid, pageWidth) {
+                detectTransformGestures { _, pan, zoom, rotation ->
+                    val panX = with(density) { pan.x.toDp().value }
+                    val panY = with(density) { pan.y.toDp().value }
+                    val moved = Placement.move(
+                        item = item,
+                        x = (item.placedX ?: 0f) + panX,
+                        y = (item.placedY ?: 0f) + panY,
+                        snapToGrid = snapToGrid,
+                        pageWidth = pageWidth,
+                    )
+                    val changed = if (zoom == 1f && rotation == 0f) {
+                        moved
+                    } else {
+                        Placement.resize(
+                            item = moved,
+                            width = moved.placedWidth * zoom,
+                            rotation = moved.placedRotation + rotation,
+                            snapToGrid = snapToGrid,
+                            pageWidth = pageWidth,
+                        )
+                    }
+                    onChange(changed)
+                }
+            },
+    ) {
+        // Quatre coins pleins : on voit tout de suite quelle photo repond aux
+        // doigts, y compris quand elle est cachee sous le texte.
+        listOf(
+            Alignment.TopStart,
+            Alignment.TopEnd,
+            Alignment.BottomStart,
+            Alignment.BottomEnd,
+        ).forEach { corner ->
+            Box(
+                modifier = Modifier
+                    .align(corner)
+                    .size(12.dp)
+                    .clip(CircleShape)
+                    .background(accent),
+            )
+        }
+    }
+}
+
+/**
+ * La grille d'aimantation, visible seulement pendant qu'on manipule une photo.
+ * Laissee en permanence, elle transformerait une page d'ecriture en papier
+ * millimetre.
+ */
+@Composable
+fun PhotoGrid(height: Dp, modifier: Modifier = Modifier) {
+    val tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
+    Canvas(modifier = modifier.fillMaxWidth().height(height)) {
+        val step = Placement.GRID.dp.toPx()
+        if (step <= 0f) return@Canvas
+        var x = step
+        while (x < size.width) {
+            drawLine(tint, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1f)
+            x += step
+        }
+        var y = step
+        while (y < size.height) {
+            drawLine(tint, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
+            y += step
+        }
+    }
+}
+
+/**
+ * Les reglages de la photo choisie, a la place de la barre de mise en forme :
+ * on ne fait qu'une chose a la fois, donc une seule barre a la fois.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun PhotoToolsBar(
+    item: MediaItem,
+    snapToGrid: Boolean,
+    onShape: (MediaShape) -> Unit,
+    onLayer: (MediaLayer) -> Unit,
+    onSnap: (Boolean) -> Unit,
+    onDelete: () -> Unit,
+    onDone: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                MediaShape.entries.forEach { shape ->
+                    PhotoChip(
+                        label = shape.label,
+                        selected = item.shape == shape,
+                        onClick = { onShape(shape) },
+                    )
+                }
+                PhotoChip(
+                    label = if (snapToGrid) "Aimant activé" else "Aimant coupé",
+                    selected = snapToGrid,
+                    onClick = { onSnap(!snapToGrid) },
+                )
+            }
+
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                MediaLayer.entries.forEach { layer ->
+                    PhotoChip(
+                        label = layer.label,
+                        selected = item.layer == layer,
+                        onClick = { onLayer(layer) },
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                PhotoChip(
+                    label = "Retirer de la page",
+                    selected = false,
+                    tint = MaterialTheme.colorScheme.error,
+                    onClick = onDelete,
+                )
+                PhotoChip(label = "Terminé", selected = true, onClick = onDone)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PhotoChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    tint: Color = MaterialTheme.colorScheme.onSurface,
+) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelLarge,
+        color = if (selected) MaterialTheme.colorScheme.primary else tint,
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                if (selected) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                } else {
+                    MaterialTheme.colorScheme.surface
+                }
+            )
+            .clickable(onClickLabel = label, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+    )
+}

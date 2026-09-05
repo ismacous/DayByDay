@@ -10,6 +10,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.background
@@ -196,7 +197,7 @@ private fun TodayButton(onClick: () -> Unit) {
         modifier = Modifier
             .size(56.dp)
             .scale(scale)
-            .brandShadow(elevation = (16 * glow).dp, shape = CircleShape)
+            .brandShadow(elevation = (16f * glow).dp, shape = CircleShape)
             .clip(CircleShape)
             .background(Brush.linearGradient(Brand.gradient))
             .clickable(

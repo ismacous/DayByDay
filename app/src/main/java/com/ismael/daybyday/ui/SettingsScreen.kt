@@ -65,6 +65,7 @@ import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.ismael.daybyday.BuildConfig
 import com.ismael.daybyday.data.Backup
 import com.ismael.daybyday.data.DATABASE_VERSION
 import com.ismael.daybyday.data.DatabaseContents
@@ -632,15 +633,8 @@ fun SettingsScreen() {
 
             // --- A propos -------------------------------------------------
             SectionCard(title = "À propos") {
-                Text(
-                    "La fiche technique de l'application : à donner telle quelle " +
-                        "si quelque chose ne marche pas.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(12.dp))
-
                 InfoRow("Version", "${appVersion.name} (build ${appVersion.code})")
+                InfoRow("Terminée le", formatDateTime(BuildConfig.BUILD_TIME))
                 InfoRow("Identifiant", appVersion.packageName)
                 InfoRow("Android", "${Build.VERSION.RELEASE} · API ${Build.VERSION.SDK_INT}")
                 InfoRow("Appareil", "${Build.MANUFACTURER} ${Build.MODEL}")
@@ -660,18 +654,8 @@ fun SettingsScreen() {
                     "Espace des médias",
                     if (stored == null) "Lecture…" else formatBytes(stored.mediaBytes),
                 )
-                InfoRow("Permissions", "notifications · pas · temps d'écran")
+                InfoRow("Permissions", "notifications · pas · sommeil · temps d'écran")
                 InfoRow("Accès réseau", "aucun — permission INTERNET absente")
-
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "Sans la permission INTERNET, l'application est techniquement " +
-                        "incapable d'ouvrir une connexion : rien n'est synchronisé, " +
-                        "rien n'est envoyé. Tout est stocké dans son dossier privé, " +
-                        "que seules tes sauvegardes font sortir du téléphone.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
 
             Spacer(Modifier.height(16.dp))

@@ -24,6 +24,11 @@ enum class DayCard(
      * sous la question qu'il precise.
      */
     val tagCategory: TagCategory? = null,
+    /**
+     * Cette carte propose d'y attacher une photo ou une video. Toutes ne le
+     * font pas : un bouton sur chacune encombrerait l'ecran pour rien.
+     */
+    val canHoldMedia: Boolean = false,
 ) {
     MOOD(
         key = "humeur",
@@ -35,6 +40,7 @@ enum class DayCard(
         key = "journal",
         title = "Ton journal",
         description = "Un titre et le texte libre de la journée.",
+        canHoldMedia = true,
     ),
     SLEEP(
         key = "sommeil",
@@ -47,30 +53,35 @@ enum class DayCard(
         title = "Activité physique",
         description = "Pas, séance de sport, poids du jour.",
         tagCategory = TagCategory.ACTIVITY,
+        canHoldMedia = true,
     ),
     FOOD(
         key = "alimentation",
         title = "Alimentation",
         description = "Comment tu as mangé, ce que tu as mangé, l'eau bue.",
         tagCategory = TagCategory.FOOD,
+        canHoldMedia = true,
     ),
     HEALTH(
         key = "sante",
         title = "Santé & traitements",
         description = "Cocher les médicaments pris, matin, midi, soir, nuit.",
         tagCategory = TagCategory.HEALTH,
+        canHoldMedia = true,
     ),
     SOCIAL(
         key = "social",
         title = "Qui tu as vu",
         description = "Les gens qui ont compté dans la journée.",
         tagCategory = TagCategory.SOCIAL,
+        canHoldMedia = true,
     ),
     WORK(
         key = "travail",
         title = "Travail & démarches",
         description = "Recherche d'emploi, paperasse, entretiens.",
         tagCategory = TagCategory.WORK,
+        canHoldMedia = true,
     ),
     OUTSIDE(
         key = "dehors",
@@ -83,6 +94,7 @@ enum class DayCard(
         title = "Argent du jour",
         description = "Les rentrées et dépenses de cette journée.",
         tagCategory = TagCategory.MONEY,
+        canHoldMedia = true,
     ),
     MEDIA(
         key = "medias",

@@ -36,7 +36,7 @@ object Backup {
 
     private const val JSON_NAME = "daybyday.json"
     private const val MEDIA_PREFIX = "media/"
-    private const val FORMAT_VERSION = 5
+    private const val FORMAT_VERSION = 6
 
     const val AUTO_BACKUP_NAME = "DayByDay-sauvegarde-auto.zip"
 
@@ -120,6 +120,7 @@ object Backup {
                     .put("relativePath", item.relativePath)
                     .put("kindKey", item.kindKey)
                     .put("addedAt", item.addedAt)
+                    .put("cardKey", item.cardKey ?: JSONObject.NULL)
             )
         }
         root.put("media", mediaJson)
@@ -337,6 +338,7 @@ object Backup {
                         relativePath = item.getString("relativePath"),
                         kindKey = item.optInt("kindKey", 0),
                         addedAt = item.optLong("addedAt", System.currentTimeMillis()),
+                        cardKey = if (item.isNull("cardKey")) null else item.optString("cardKey"),
                     )
                 }
 

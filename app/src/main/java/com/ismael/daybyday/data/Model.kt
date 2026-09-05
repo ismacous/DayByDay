@@ -279,6 +279,12 @@ data class MediaItem(
     val relativePath: String,
     val kindKey: Int,
     val addedAt: Long = System.currentTimeMillis(),
+    /**
+     * Cle de la carte a laquelle ce media est rattache, ou null quand il
+     * appartient simplement a la journee. Une photo de repas s'affiche ainsi
+     * sous "Alimentation", sans quitter l'album complet de la journee.
+     */
+    val cardKey: String? = null,
 ) {
     val kind: MediaKind get() = if (kindKey == 1) MediaKind.VIDEO else MediaKind.PHOTO
 }

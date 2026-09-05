@@ -4,6 +4,7 @@ import com.ismael.daybyday.data.DayCard
 import com.ismael.daybyday.data.TagCatalog
 import com.ismael.daybyday.data.DayEntry
 import com.ismael.daybyday.data.DoseTime
+import com.ismael.daybyday.data.MediaItem
 import com.ismael.daybyday.data.Treatment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -88,6 +89,31 @@ class DayCardsTest {
 
         val utilisees = TagCatalog.tags.map { it.category }.toSet()
         assertTrue(utilisees.all { it in familles.toSet() })
+    }
+
+    @Test
+    fun `un media sans carte reste celui de la journee entiere`() {
+        val libre = MediaItem(epochDay = 0, relativePath = "a.jpg", kindKey = 0)
+        val repas = MediaItem(
+            epochDay = 0,
+            relativePath = "b.jpg",
+            kindKey = 0,
+            cardKey = DayCard.FOOD.key,
+        )
+
+        // L'album complet montre les deux, la carte Alimentation seulement le sien.
+        val tous = listOf(libre, repas)
+        assertEquals(listOf(repas), tous.filter { it.cardKey == DayCard.FOOD.key })
+        assertEquals(listOf(libre), tous.filter { it.cardKey == null })
+    }
+
+    @Test
+    fun `la carte des medias ne se rattache pas a elle-meme`() {
+        // "Photos & videos" est l'album de la journee : elle ne propose pas
+        // d'y rattacher un media, elle les montre tous.
+        assertTrue(!DayCard.MEDIA.canHoldMedia)
+        assertTrue(!DayCard.MOOD.canHoldMedia)
+        assertTrue(DayCard.FOOD.canHoldMedia)
     }
 
     @Test

@@ -139,9 +139,9 @@ class DayRepository(context: Context) {
 
     suspend fun allMedia(): List<MediaItem> = dao.allMedia()
 
-    suspend fun addMedia(date: LocalDate, uri: Uri): Boolean {
+    suspend fun addMedia(date: LocalDate, uri: Uri, card: DayCard? = null): Boolean {
         val item = media.importFrom(uri, date.toEpochDay()) ?: return false
-        dao.insertMedia(item)
+        dao.insertMedia(item.copy(cardKey = card?.key))
         ensureDayExists(date.toEpochDay())
         return true
     }

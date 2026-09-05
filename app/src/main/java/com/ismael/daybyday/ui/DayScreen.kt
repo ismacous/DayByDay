@@ -297,15 +297,29 @@ fun DayScreen(
         }
     }
 
+    // La carte depuis laquelle la photo a ete demandee : elle lui reste
+    // attachee. Depuis "Photos & videos", le media appartient a la journee
+    // entiere et ne va sous aucune carte.
+    var mediaTarget by remember { mutableStateOf<DayCard?>(null) }
+
     val pickMedia = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(30)
     ) { uris ->
+        val card = mediaTarget
+        mediaTarget = null
         if (uris.isNotEmpty()) {
             val targetDate = LocalDate.ofEpochDay(epochDay)
             app.appScope.launch {
-                uris.forEach { uri -> repository.addMedia(targetDate, uri) }
+                uris.forEach { uri -> repository.addMedia(targetDate, uri, card) }
             }
         }
+    }
+
+    fun addMediaTo(card: DayCard?) {
+        mediaTarget = card
+        pickMedia.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+        )
     }
 
     Scaffold(
@@ -708,11 +722,7 @@ fun DayScreen(
                             }
                             Spacer(Modifier.height(8.dp))
                             Button(
-                                onClick = {
-                                    pickMedia.launch(
-                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
-                                    )
-                                },
+                                onClick = { addMediaTo(null) },
                                 shape = RoundedCornerShape(14.dp),
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
@@ -721,6 +731,17 @@ fun DayScreen(
                                 Text("Ajouter une photo ou une vidéo")
                             }
                         }
+                    }
+
+                    // Les medias rattaches a cette carte, et de quoi en ajouter.
+                    if (card.canHoldMedia) {
+                        val cardMedia = mediaItems.filter { it.cardKey == card.key }
+                        Spacer(Modifier.height(14.dp))
+                        CardMediaRow(
+                            items = cardMedia,
+                            onOpen = { item -> viewerIndex = mediaItems.indexOf(item) },
+                            onAdd = { addMediaTo(card) },
+                        )
                     }
 
                     // Les reperes rapides de cette carte, sous la question
@@ -835,6 +856,41 @@ fun DayScreen(
                 scope.launch { repository.deleteMoney(current) }
             },
         )
+    }
+}
+
+/**
+ * Les photos rattachees a une carte, et le bouton pour en ajouter. Discret
+ * quand il n'y en a aucune : une ligne de texte, pas un cadre vide.
+ */
+@Composable
+private fun CardMediaRow(
+    items: List<MediaItem>,
+    onOpen: (MediaItem) -> Unit,
+    onAdd: () -> Unit,
+) {
+    if (items.isNotEmpty()) {
+        items.chunked(3).forEach { rowItems ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                rowItems.forEach { item ->
+                    MediaThumb(
+                        item = item,
+                        onClick = { onOpen(item) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                repeat(3 - rowItems.size) { Spacer(Modifier.weight(1f)) }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+    TextButton(onClick = onAdd) {
+        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(if (items.isEmpty()) "Ajouter une photo" else "Ajouter une autre photo")
     }
 }
 

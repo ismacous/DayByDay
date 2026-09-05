@@ -13,10 +13,16 @@ android {
         applicationId = "com.ismael.daybyday"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.6"
+        versionCode = 8
+        versionName = "1.7"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         resourceConfigurations += listOf("fr")
+
+        // Instant ou cette version a ete construite, affiche dans "A propos".
+        // C'est la date de fin de la mise a jour, pas celle de l'installation
+        // sur le telephone : elle dit quelle version tourne, meme apres une
+        // reinstallation.
+        buildConfigField("long", "BUILD_TIME", "${System.currentTimeMillis()}L")
     }
 
     // Cle de signature fixe et volontairement publique : l'application n'est
@@ -54,6 +60,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {

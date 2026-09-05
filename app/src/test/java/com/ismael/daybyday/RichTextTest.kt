@@ -57,7 +57,7 @@ class RichTextTest {
     fun `deux styles differents cohabitent sur le meme texte`() {
         val result = RichText.toggle(spans(Triple(0, 5, bold)), 0, 5, italic)
 
-        assertEquals(setOf(bold, italic), RichText.stylesOn(result, 0..5))
+        assertEquals(setOf(bold, italic), RichText.stylesOn(result, 0, 5))
     }
 
     @Test
@@ -73,7 +73,7 @@ class RichTextTest {
         val gras = RichText.toggle(emptyList(), 0, 5, bold)
         val colore = RichText.toggle(gras, 0, 5, TextStyleKind.COLOR_RED)
 
-        assertEquals(setOf(bold, TextStyleKind.COLOR_RED), RichText.stylesOn(colore, 0..5))
+        assertEquals(setOf(bold, TextStyleKind.COLOR_RED), RichText.stylesOn(colore, 0, 5))
     }
 
     // --- Ecrire dans un texte deja mis en forme ---------------------------
@@ -124,12 +124,12 @@ class RichTextTest {
     }
 
     @Test
-    fun `remplacer une selection en gras par du texte garde le gras dessus`() {
-        // Selection de "monde" puis frappe : le style habille le remplacement.
+    fun `remplacer une selection en gras garde le gras sur le remplacement`() {
+        // Selectionner "monde" et taper "terre" : ce qui remplace herite de la
+        // mise en forme, comme dans n'importe quel traitement de texte.
         val result = RichText.adjust(spans(Triple(0, 5, bold)), "monde", "terre")
 
-        // Le style ne survit pas au texte qu'il habillait : il disparait.
-        assertTrue(result.isEmpty() || result.all { it.end <= "terre".length })
+        assertEquals(spans(Triple(0, 5, bold)), result)
     }
 
     @Test
@@ -139,17 +139,26 @@ class RichTextTest {
         assertTrue(result.all { it.end <= "court".length })
     }
 
+    @Test
+    fun `ecrire juste avant un passage en gras ne le teint pas`() {
+        // Au point exact de l'insertion, le debut de l'intervalle se pousse a
+        // droite et sa fin suit : le texte ajoute reste hors du gras.
+        val result = RichText.adjust(spans(Triple(0, 5, bold)), "monde", "Xmonde")
+
+        assertEquals(spans(Triple(1, 6, bold)), result)
+    }
+
     // --- Continuer a ecrire dans le style courant -------------------------
 
     @Test
     fun `le curseur en fin de gras signale le gras`() {
         // C'est ce qui permet de continuer a taper en gras.
-        assertEquals(setOf(bold), RichText.stylesOn(spans(Triple(0, 5, bold)), 5..5))
+        assertEquals(setOf(bold), RichText.stylesOn(spans(Triple(0, 5, bold)), 5, 5))
     }
 
     @Test
     fun `le curseur juste apres la fin du gras ne signale rien`() {
-        assertTrue(RichText.stylesOn(spans(Triple(0, 5, bold)), 6..6).isEmpty())
+        assertTrue(RichText.stylesOn(spans(Triple(0, 5, bold)), 6, 6).isEmpty())
     }
 
     @Test

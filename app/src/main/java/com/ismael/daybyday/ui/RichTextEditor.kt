@@ -72,9 +72,9 @@ fun JournalEditor(
     val hasSelection = end > start
 
     val active = if (hasSelection) {
-        RichText.stylesOn(spans, start..end)
+        RichText.stylesOn(spans, start, end)
     } else {
-        RichText.stylesOn(spans, start..start) + pending
+        RichText.stylesOn(spans, start, start) + pending
     }
 
     fun toggle(style: TextStyleKind) {
@@ -107,7 +107,7 @@ fun JournalEditor(
 
             val moved = RichText.adjust(spans, value.text, updated.text)
             val edit = RichText.diff(value.text, updated.text)
-            val continued = RichText.stylesOn(spans, value.selection.start..value.selection.start)
+            val continued = RichText.stylesOn(spans, value.selection.start, value.selection.start)
             val toApply = pending + continued
 
             val decorated = if (edit.newEnd > edit.start && toApply.isNotEmpty()) {

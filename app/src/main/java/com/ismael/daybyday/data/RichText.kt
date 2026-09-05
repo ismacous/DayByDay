@@ -54,15 +54,15 @@ object RichText {
      * la selection entiere. Une mise en forme qui n'en couvre qu'une partie
      * n'est pas "active" : reappuyer sur le bouton doit l'etendre, pas l'enlever.
      */
-    fun stylesOn(spans: List<TextSpan>, range: IntRange): Set<TextStyleKind> {
-        if (range.isEmpty()) {
+    fun stylesOn(spans: List<TextSpan>, start: Int, end: Int): Set<TextStyleKind> {
+        if (end <= start) {
             // Curseur seul : on regarde ce qui l'entoure, pour que le bouton
-            // s'allume quand on pose le curseur au milieu d'un mot en gras.
-            val at = range.first
-            return spans.filter { at > it.start && at <= it.end }.map { it.style }.toSet()
+            // s'allume quand on pose le curseur dans un mot en gras, ou juste
+            // a sa fin — c'est ce qui permet de continuer a taper en gras.
+            return spans.filter { start > it.start && start <= it.end }.map { it.style }.toSet()
         }
         return TextStyleKind.entries.filter { style ->
-            (range.first until range.last).all { position ->
+            (start until end).all { position ->
                 spans.any { it.style == style && position >= it.start && position < it.end }
             }
         }.toSet()
@@ -80,7 +80,7 @@ object RichText {
         style: TextStyleKind,
     ): List<TextSpan> {
         if (end <= start) return spans
-        val active = style in stylesOn(spans, start..end)
+        val active = style in stylesOn(spans, start, end)
         return if (active) remove(spans, start, end, style) else add(spans, start, end, style)
     }
 
@@ -182,15 +182,24 @@ object RichText {
         if (spans.isEmpty() || before == after) return spans
         val edit = diff(before, after)
 
-        fun move(offset: Int): Int = when {
-            offset <= edit.start -> offset
+        // Au point exact d'une insertion, un debut et une fin ne se comportent
+        // pas pareil : le texte tape juste avant un passage en gras le pousse
+        // vers la droite, celui tape juste apres ne doit pas devenir gras.
+        fun moveStart(offset: Int): Int = when {
+            offset < edit.start -> offset
             offset >= edit.oldEnd -> offset + edit.delta
             // Le caractere etait dans la zone remplacee : il n'existe plus.
             else -> edit.start
         }
 
+        fun moveEnd(offset: Int): Int = when {
+            offset <= edit.start -> offset
+            offset >= edit.oldEnd -> offset + edit.delta
+            else -> edit.start
+        }
+
         return merge(
-            spans.map { TextSpan(move(it.start), move(it.end), it.style) }
+            spans.map { TextSpan(moveStart(it.start), moveEnd(it.end), it.style) }
                 .map { it.copy(end = minOf(it.end, after.length)) }
                 .filterNot { it.isEmpty }
         )

@@ -84,6 +84,12 @@ téléphone (Samsung S25, Android 15).
 ./gradlew connectedDebugAndroidTest   # tests sur émulateur ou appareil
 ```
 
+Le job émulateur est fragile : l'émulateur des serveurs GitHub refuse souvent
+de démarrer (« Timeout waiting for emulator to boot »), et le job échoue alors
+sans avoir lancé un seul test. Le workflow réessaie une fois. Devant un échec
+de ce job, vérifier d'abord si `adb` a seulement vu l'appareil : sans ça, ce
+n'est pas le code qui est en cause.
+
 Le SDK Android n'est pas toujours accessible depuis l'environnement de Claude
 (`dl.google.com` peut être bloqué). Dans ce cas, la compilation et les tests se
 font par GitHub Actions (`.github/workflows/build.yml`) : pousser, puis lire les

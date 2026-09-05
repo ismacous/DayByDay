@@ -76,11 +76,18 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # L'image ATD, plus legere, refuse parfois de demarrer sur les machines
-      # de GitHub. google_apis boote plus lentement mais de facon fiable, et
-      # les options ci-dessous evitent les blocages connus (GPU, audio,
-      # instantanes, camera).
+      # Le demarrage de l'emulateur echoue souvent sur les machines de GitHub :
+      # adb ne voit jamais l'appareil apparaitre ("Timeout waiting for emulator
+      # to boot") et le job echoue sans avoir lance un seul test. Passer de
+      # l'image ATD a google_apis a aide sans regler le probleme, alors on
+      # reessaie une fois : deux demarrages rates d'affilee sont rares. Une
+      # tentative qui echoue apres le demarrage, elle, echoue aussi la seconde
+      # fois, donc un vrai test casse reste visible.
+      #
+      # Les deux etapes doivent rester identiques : seul le nom change.
       - name: Run tests on an Android emulator
+        id: emulator
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -91,7 +98,25 @@ jobs:
           ram-size: 4096M
           disk-size: 6G
           disable-animations: true
-          emulator-boot-timeout: 900
+          emulator-boot-timeout: 600
+          emulator-options: >-
+            -no-window -no-snapshot -noaudio -no-boot-anim
+            -gpu swiftshader_indirect -camera-back none -camera-front none
+          script: ./gradlew --no-daemon connectedDebugAndroidTest
+
+      - name: Run tests on an Android emulator (seconde tentative)
+        if: steps.emulator.outcome == 'failure'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          cores: 2
+          ram-size: 4096M
+          disk-size: 6G
+          disable-animations: true
+          emulator-boot-timeout: 600
           emulator-options: >-
             -no-window -no-snapshot -noaudio -no-boot-anim
             -gpu swiftshader_indirect -camera-back none -camera-front none

@@ -21,6 +21,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -71,10 +72,16 @@ fun AppNavigation() {
             }
         },
     ) { scaffoldPadding ->
+        // Le rembourrage du bas ne sert que sous la barre d'onglets. Les ecrans
+        // qui s'ouvrent par-dessus gerent leurs propres marges : l'appliquer
+        // ici aussi laissait une bande vide sous eux, et une deuxieme quand le
+        // clavier s'ouvrait.
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = scaffoldPadding.calculateBottomPadding()),
+                .padding(
+                    bottom = if (showTabs) scaffoldPadding.calculateBottomPadding() else 0.dp
+                ),
         ) {
             NavHost(navController = navController, startDestination = "calendar") {
 

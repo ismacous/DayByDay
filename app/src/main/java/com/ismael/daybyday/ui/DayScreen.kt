@@ -1040,7 +1040,7 @@ private fun ColorChoice(
 }
 
 @Composable
-private fun MediaThumb(
+fun MediaThumb(
     item: MediaItem,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,

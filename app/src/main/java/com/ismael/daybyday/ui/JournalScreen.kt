@@ -1,6 +1,8 @@
 package com.ismael.daybyday.ui
 
-import androidx.compose.foundation.background
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -11,10 +13,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,21 +39,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ismael.daybyday.data.DayCard
 import com.ismael.daybyday.data.RichText
 import com.ismael.daybyday.data.StyleFamily
 import com.ismael.daybyday.data.TextSpan
@@ -109,6 +111,31 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
         }
     }
 
+    // Le panneau d'outils prend la place du clavier : on retient la hauteur
+    // que le clavier occupait pour que le texte ne bouge pas quand on echange
+    // l'un pour l'autre.
+    var openPanel by remember { mutableStateOf<ToolPanel?>(null) }
+    val density = LocalDensity.current
+    val imeHeight = with(density) { WindowInsets.ime.getBottom(density).toDp() }
+    var lastKeyboardHeight by remember { mutableStateOf(280.dp) }
+    if (imeHeight > 120.dp) lastKeyboardHeight = imeHeight
+    val keyboard = LocalSoftwareKeyboardController.current
+
+    val mediaItems by remember(date) { repository.observeMediaForDay(date) }
+        .collectAsStateWithLifecycle(emptyList())
+    val journalMedia = mediaItems.filter { it.cardKey == DayCard.JOURNAL.key }
+    var viewerIndex by remember { mutableStateOf<Int?>(null) }
+
+    val pickMedia = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(30)
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            app.appScope.launch {
+                uris.forEach { uri -> repository.addMedia(date, uri, DayCard.JOURNAL) }
+            }
+        }
+    }
+
     val selection = body.selection
     val start = minOf(selection.start, selection.end)
     val end = maxOf(selection.start, selection.end)
@@ -122,15 +149,33 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
     val active = if (hasSelection) RichText.stylesOn(spans, start, end) else typing
 
     fun applyStyle(style: TextStyleKind) {
-        if (style.takesWholeLine) {
-            val line = RichText.lineRange(body.text, start, end)
-            spans = RichText.toggle(spans, line.first, line.last + 1, style)
-            return
-        }
         if (hasSelection) {
             spans = RichText.toggle(spans, start, end, style)
             return
         }
+
+        // Sans selection, un titre ne peut pas deviner ce qu'il doit habiller.
+        // Il pose donc son propre exemple, deja selectionne : ecrire par-dessus
+        // le remplace. Prendre la ligne entiere mettait tout un paragraphe en
+        // titre des qu'il n'y avait pas de retour a la ligne.
+        if (style.takesWholeLine) {
+            val example = style.label
+            val needsBreak = start > 0 && body.text.getOrNull(start - 1) != '\n'
+            val prefix = if (needsBreak) "\n" else ""
+            val inserted = prefix + example + "\n"
+            val updated = body.text.substring(0, start) + inserted + body.text.substring(start)
+            val from = start + prefix.length
+            val to = from + example.length
+            spans = RichText.applyAll(
+                RichText.adjust(spans, body.text, updated),
+                from,
+                to,
+                setOf(style),
+            )
+            body = body.copy(text = updated, selection = TextRange(from, to))
+            return
+        }
+
         typing = when {
             style in typing -> typing - style
             style.family != StyleFamily.MARK ->
@@ -139,7 +184,20 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
         }
     }
 
-    /** Ajoute une puce ou un numero en tete de ligne : du vrai texte, pas un décor. */
+    /** Repasse en texte normal la selection, ou la ligne du curseur. */
+    fun clearHeading() {
+        val from = if (hasSelection) start else RichText.lineRange(body.text, start).first
+        val to = if (hasSelection) end else RichText.lineRange(body.text, start).last + 1
+        spans = TextStyleKind.headings.fold(spans) { current, heading ->
+            if (heading in RichText.stylesOn(current, from, to)) {
+                RichText.toggle(current, from, to, heading)
+            } else {
+                current
+            }
+        }
+    }
+
+    /** Ajoute une puce, un numero ou une lettre en tete de ligne : du vrai texte. */
     fun prefixLine(marker: String) {
         val line = RichText.lineRange(body.text, start, end)
         val at = line.first
@@ -147,7 +205,7 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
         spans = RichText.adjust(spans, body.text, updated)
         body = body.copy(
             text = updated,
-            selection = androidx.compose.ui.text.TextRange(
+            selection = TextRange(
                 (body.selection.start + marker.length).coerceAtMost(updated.length)
             ),
         )
@@ -246,155 +304,77 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                     .testTag("day-note-field"),
             )
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
-
-            FormattingBar(
-                active = active,
-                onStyle = ::applyStyle,
-                onBullet = { prefixLine("• ") },
-                onNumber = { prefixLine("1. ") },
-                modifier = Modifier.navigationBarsPadding(),
-            )
-        }
-    }
-}
-
-/**
- * La barre de mise en forme, collee au clavier. Elle defile horizontalement :
- * il y a plus d'outils que de largeur d'ecran, et les empiler sur deux lignes
- * mangerait la place d'ecriture.
- */
-@Composable
-private fun FormattingBar(
-    active: Set<TextStyleKind>,
-    onStyle: (TextStyleKind) -> Unit,
-    onBullet: () -> Unit,
-    onNumber: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        TextStyleKind.marks.forEach { style ->
-            ToolButton(selected = style in active, label = style.label, onClick = { onStyle(style) }) {
-                MarkGlyph(style)
-            }
-        }
-
-        Separator()
-
-        TextStyleKind.headings.forEach { style ->
-            ToolButton(selected = style in active, label = style.label, onClick = { onStyle(style) }) {
-                Text(
-                    text = "T${style.ordinal - TextStyleKind.TITLE_1.ordinal + 1}",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = (17 - (style.ordinal - TextStyleKind.TITLE_1.ordinal)).sp,
-                )
-            }
-        }
-
-        ToolButton(selected = false, label = "Liste à puces", onClick = onBullet) {
-            Text("•—", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-        }
-        ToolButton(selected = false, label = "Liste numérotée", onClick = onNumber) {
-            Text("1—", fontSize = 14.sp, fontWeight = FontWeight.Bold)
-        }
-
-        Separator()
-
-        TextStyleKind.colors.forEach { style ->
-            ToolButton(selected = style in active, label = style.label, onClick = { onStyle(style) }) {
-                // La lettre elle-meme porte la teinte : on voit ce qu'on obtient.
-                Text(
-                    "A",
-                    color = Color(style.argb),
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-        }
-
-        Separator()
-
-        TextStyleKind.highlights.forEach { style ->
-            ToolButton(selected = style in active, label = style.label, onClick = { onStyle(style) }) {
-                // Un "A" reellement surligne : l'icone montre son effet.
-                Text(
-                    text = "A",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1B1B1B),
+            if (journalMedia.isNotEmpty()) {
+                Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(Color(style.argb))
-                        .padding(horizontal = 5.dp, vertical = 1.dp),
-                )
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    journalMedia.forEach { item ->
+                        MediaThumb(
+                            item = item,
+                            onClick = { viewerIndex = journalMedia.indexOf(item) },
+                            modifier = Modifier.width(96.dp),
+                        )
+                    }
+                }
             }
+
+            JournalToolbar(
+                active = active,
+                openPanel = openPanel,
+                onTogglePanel = { panel ->
+                    if (openPanel == panel) {
+                        openPanel = null
+                        keyboard?.show()
+                    } else {
+                        // Le panneau prend la place du clavier plutot que de
+                        // pousser le texte : on ferme l'un pour ouvrir l'autre.
+                        openPanel = panel
+                        keyboard?.hide()
+                    }
+                },
+                onStyle = { style ->
+                    applyStyle(style)
+                    if (openPanel != null) {
+                        openPanel = null
+                        keyboard?.show()
+                    }
+                },
+                onClearHeading = {
+                    clearHeading()
+                    openPanel = null
+                    keyboard?.show()
+                },
+                onList = { marker ->
+                    prefixLine(marker.marker)
+                    openPanel = null
+                    keyboard?.show()
+                },
+                onAddPhoto = {
+                    pickMedia.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+                    )
+                },
+                panelHeight = lastKeyboardHeight,
+            )
         }
     }
-}
 
-@Composable
-private fun Separator() {
-    Box(
-        modifier = Modifier
-            .width(1.dp)
-            .height(24.dp)
-            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
-    )
-}
-
-@Composable
-private fun ToolButton(
-    selected: Boolean,
-    label: String,
-    onClick: () -> Unit,
-    content: @Composable () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .size(42.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(
-                if (selected) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant
-                }
-            )
-            .clickable(onClickLabel = label, onClick = onClick)
-            .semantics { contentDescription = label },
-        contentAlignment = Alignment.Center,
-    ) {
-        content()
+    val index = viewerIndex
+    if (index != null && index in journalMedia.indices) {
+        MediaViewerDialog(
+            items = journalMedia,
+            startIndex = index,
+            onDismiss = { viewerIndex = null },
+            onDelete = { item ->
+                viewerIndex = null
+                app.appScope.launch { repository.deleteMedia(item) }
+            },
+        )
     }
-}
-
-/** Le bouton porte son propre effet : le gras est ecrit en gras. */
-@Composable
-private fun MarkGlyph(style: TextStyleKind) {
-    Text(
-        text = when (style) {
-            TextStyleKind.BOLD -> "G"
-            TextStyleKind.ITALIC -> "I"
-            TextStyleKind.UNDERLINE -> "S"
-            TextStyleKind.STRIKETHROUGH -> "B"
-            else -> "A"
-        },
-        fontSize = 17.sp,
-        fontWeight = if (style == TextStyleKind.BOLD) FontWeight.Bold else FontWeight.Medium,
-        fontStyle = if (style == TextStyleKind.ITALIC) FontStyle.Italic else FontStyle.Normal,
-        textDecoration = when (style) {
-            TextStyleKind.UNDERLINE -> TextDecoration.Underline
-            TextStyleKind.STRIKETHROUGH -> TextDecoration.LineThrough
-            else -> null
-        },
-    )
 }
 
 /** L'apercu du journal sur la carte de la journee : lecture seule. */

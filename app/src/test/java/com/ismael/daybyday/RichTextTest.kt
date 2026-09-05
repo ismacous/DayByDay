@@ -330,6 +330,14 @@ class RichTextTest {
     }
 
     @Test
+    fun `un journal sans retour a la ligne n est qu une seule ligne`() {
+        // C'est pour ca qu'un titre ne s'applique plus a "la ligne" quand rien
+        // n'est selectionne : sur un paragraphe d'un bloc, il prenait tout.
+        val paragraphe = "Alors aujourd'hui j'etais chez Dune, et je suis rentre tard."
+        assertEquals(0 until paragraphe.length, RichText.lineRange(paragraphe, 20))
+    }
+
+    @Test
     fun `un texte vide donne une ligne vide`() {
         assertTrue(RichText.lineRange("", 0).isEmpty())
     }

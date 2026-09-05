@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Card
@@ -50,6 +51,7 @@ fun YearScreen(
     onYearChange: (Int) -> Unit,
     onMonthClick: (YearMonth) -> Unit,
     onDayClick: (LocalDate) -> Unit,
+    onBack: () -> Unit,
 ) {
     val repository = LocalContext.current.dayByDayApp.repository
     val today = LocalDate.now()
@@ -69,6 +71,14 @@ fun YearScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Année $year") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Retour au mois",
+                        )
+                    }
+                },
                 actions = {
                     IconButton(onClick = { onYearChange(year - 1) }) {
                         Icon(

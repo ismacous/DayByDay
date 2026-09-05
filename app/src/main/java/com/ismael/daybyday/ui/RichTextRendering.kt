@@ -5,7 +5,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -15,11 +14,13 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
-import com.ismael.daybyday.R
 import com.ismael.daybyday.data.RichText
 import com.ismael.daybyday.data.StyleFamily
 import com.ismael.daybyday.data.TextSpan
 import com.ismael.daybyday.data.TextStyleKind
+import com.ismael.daybyday.ui.theme.Hand
+import com.ismael.daybyday.ui.theme.Sans
+import com.ismael.daybyday.ui.theme.Serif
 
 /**
  * Les polices proposees dans le journal.
@@ -32,9 +33,9 @@ import com.ismael.daybyday.data.TextStyleKind
  * Une seule graisse est embarquee par police : Android fabrique le gras et
  * l'italique a partir d'elle, ce qui evite de tripler le poids de l'APK.
  */
-val HandFontFamily = FontFamily(Font(R.font.caveat_regular))
-val SerifFontFamily = FontFamily(Font(R.font.lora_regular))
-val ModernFontFamily = FontFamily(Font(R.font.poppins_regular))
+val HandFontFamily = Hand
+val SerifFontFamily = Serif
+val ModernFontFamily = Sans
 
 /** La police d'un style, ou null pour les styles qui n'en changent pas. */
 fun TextStyleKind.fontFamily(): FontFamily? = when (this) {

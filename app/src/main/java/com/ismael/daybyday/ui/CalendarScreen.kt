@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,20 +27,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -53,13 +53,13 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarScreen(
     month: YearMonth,
     onMonthChange: (YearMonth) -> Unit,
     onDayClick: (LocalDate) -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenYear: (Int) -> Unit,
 ) {
     val app = LocalContext.current.dayByDayApp
     val repository = app.repository
@@ -87,30 +87,40 @@ fun CalendarScreen(
     }
     val monthSummary = Stats.summarize(Dates.monthTitle(month), monthEntries, month.lengthOfMonth())
 
-    val greeting = remember(app.prefs.firstName) {
-        val name = app.prefs.firstName.trim()
-        if (name.isEmpty()) "DayByDay" else "Salut $name"
-    }
+    // Le titre se lit en deux voix : le bonjour en sans-serif, le prenom en
+    // serif italique. C'est la signature typographique de l'application, et
+    // c'est aussi ce qui rend l'accueil personnel plutot qu'administratif.
+    val name = app.prefs.firstName.trim()
+    val greeting = if (name.isEmpty()) "Mon" else "Salut"
+    val accentWord = if (name.isEmpty()) "carnet" else name
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(greeting) },
-                actions = {
-                    IconButton(onClick = onOpenSearch) {
-                        Icon(Icons.Default.Search, contentDescription = "Rechercher")
-                    }
-                },
-            )
-        },
-    ) { innerPadding ->
+    // Pas de barre d'application ici : on n'arrive pas dans un outil, on
+    // ouvre son carnet. Le nom et la date tiennent lieu d'accueil.
+    ScreenBackground(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .statusBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp),
+                .padding(horizontal = 16.dp),
         ) {
+            Spacer(Modifier.height(14.dp))
+
+            ScreenTitle(
+                text = greeting,
+                accent = accentWord,
+                subtitle = Dates.dayLong(today),
+                trailing = {
+                    RoundIconButton(
+                        icon = Icons.Default.Search,
+                        label = "Rechercher",
+                        onClick = onOpenSearch,
+                    )
+                },
+            )
+
+            Spacer(Modifier.height(20.dp))
+
             TodayCard(
                 today = today,
                 entry = todayEntry,
@@ -136,6 +146,7 @@ fun CalendarScreen(
                 month = month,
                 onPrevious = { onMonthChange(month.minusMonths(1)) },
                 onNext = { onMonthChange(month.plusMonths(1)) },
+                onOpenYear = { onOpenYear(month.year) },
             )
 
             WeekDayHeader()
@@ -176,13 +187,9 @@ private fun TodayCard(
     onPickColor: (DayColor) -> Unit,
     onOpenToday: () -> Unit,
 ) {
-    SectionCard {
-        Text(
-            text = "Aujourd'hui · ${Dates.dayMedium(today)}",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(6.dp))
+    SoftCard(onClick = onOpenToday, onClickLabel = "Ouvrir ma journée") {
+        SectionLabelText("Aujourd'hui")
+        Spacer(Modifier.height(8.dp))
         Text(
             text = entry?.color?.label ?: "Comment s'est passée ta journée ?",
             style = MaterialTheme.typography.titleLarge,
@@ -205,22 +212,29 @@ private fun TodayCard(
         ) {
             DayColor.entries.forEach { dayColor ->
                 val selected = entry?.colorKey == dayColor.key
+                // La pastille choisie grandit un peu et s'entoure : on voit son
+                // choix d'un coup d'oeil, sans avoir a chercher une coche.
+                val height by animateDpAsState(
+                    targetValue = if (selected) 62.dp else 52.dp,
+                    animationSpec = tween(Motion.NORMAL),
+                    label = "hauteur",
+                )
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(52.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .height(height)
+                        .clip(RoundedCornerShape(18.dp))
                         .background(dayColor.color)
                         .border(
                             BorderStroke(
-                                if (selected) 3.dp else 1.dp,
+                                if (selected) 3.dp else 0.dp,
                                 if (selected) {
-                                    MaterialTheme.colorScheme.primary
+                                    MaterialTheme.colorScheme.onBackground
                                 } else {
-                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                                    Color.Transparent
                                 },
                             ),
-                            RoundedCornerShape(14.dp),
+                            RoundedCornerShape(18.dp),
                         )
                         .clickable { onPickColor(dayColor) }
                         .testTag("today-${dayColor.name}"),
@@ -233,19 +247,51 @@ private fun TodayCard(
             }
         }
 
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(14.dp))
 
-        TextButton(onClick = onOpenToday) {
-            Text(if (entry == null) "Écrire dans mon journal" else "Ouvrir ma journée")
-        }
+        Text(
+            text = if (entry == null) "Écrire dans mon journal →" else "Ouvrir ma journée →",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
     }
 }
 
+/** Un bouton rond discret, pour les gestes qui accompagnent un titre. */
+@Composable
+fun RoundIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(42.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(onClickLabel = label, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(21.dp),
+        )
+    }
+}
+
+/**
+ * L'en-tete du mois. Le nom du mois est un bouton : il ouvre l'annee entiere.
+ * C'est la qu'on regarde deja quand on veut prendre du recul, donc c'est la
+ * que le geste doit se trouver — plutot que dans un onglet a part.
+ */
 @Composable
 private fun MonthHeader(
     month: YearMonth,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
+    onOpenYear: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -253,18 +299,36 @@ private fun MonthHeader(
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onPrevious) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Mois précédent")
-        }
-        Text(
-            text = Dates.monthTitle(month),
-            style = MaterialTheme.typography.headlineSmall,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.weight(1f),
+        RoundIconButton(
+            icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+            label = "Mois précédent",
+            onClick = onPrevious,
         )
-        IconButton(onClick = onNext) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Mois suivant")
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(14.dp))
+                .clickable(onClickLabel = "Voir l'année entière", onClick = onOpenYear)
+                .padding(vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = Dates.monthTitle(month).substringBefore(' '),
+                style = MaterialTheme.typography.headlineSmall,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                text = "${month.year} · voir l'année",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center,
+            )
         }
+        RoundIconButton(
+            icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            label = "Mois suivant",
+            onClick = onNext,
+        )
     }
 }
 

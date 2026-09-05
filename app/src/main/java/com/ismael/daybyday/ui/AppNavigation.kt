@@ -4,23 +4,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -36,14 +31,20 @@ private fun YearMonth.toIndex(): Int = year * 12 + (monthValue - 1)
 
 private fun indexToMonth(index: Int): YearMonth = YearMonth.of(index / 12, index % 12 + 1)
 
-private data class Tab(val route: String, val label: String, val icon: ImageVector)
-
+/**
+ * Les destinations de la barre du bas.
+ *
+ * "Année" n'y est plus : ce n'etait pas une destination mais un niveau de
+ * zoom du calendrier, et elle occupait une place au meme titre que l'argent
+ * ou les reglages. On y va maintenant en appuyant sur le nom du mois, la ou
+ * l'on regarde deja. Quatre onglets et le bouton du milieu : la barre respire,
+ * et chaque onglet peut afficher son nom.
+ */
 private val tabs = listOf(
-    Tab("calendar", "Mois", Icons.Default.DateRange),
-    Tab("year", "Année", Icons.AutoMirrored.Filled.List),
-    Tab("stats", "Bilan", Icons.Default.Star),
-    Tab("money", "Argent", Icons.Default.ShoppingCart),
-    Tab("settings", "Réglages", Icons.Default.Settings),
+    NavItem("calendar", "Mois", Icons.Default.DateRange),
+    NavItem("stats", "Bilan", Icons.Default.Star),
+    NavItem("money", "Argent", Icons.Default.ShoppingCart),
+    NavItem("settings", "Réglages", Icons.Default.Settings),
 )
 
 @Composable
@@ -54,21 +55,22 @@ fun AppNavigation() {
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+    // L'annee reste une page a part entiere, mais elle s'ouvre par-dessus le
+    // calendrier au lieu d'occuper un onglet.
     val showTabs = tabs.any { it.route == currentRoute }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             if (showTabs) {
-                NavigationBar {
-                    tabs.forEach { tab ->
-                        NavigationBarItem(
-                            selected = currentRoute == tab.route,
-                            onClick = { navController.switchTab(tab.route) },
-                            icon = { Icon(tab.icon, contentDescription = tab.label) },
-                            label = { Text(tab.label) },
-                        )
-                    }
-                }
+                FloatingNavBar(
+                    items = tabs,
+                    currentRoute = currentRoute,
+                    onSelect = { route -> navController.switchTab(route) },
+                    onToday = {
+                        navController.navigate("day/${LocalDate.now().toEpochDay()}")
+                    },
+                )
             }
         },
     ) { scaffoldPadding ->
@@ -91,6 +93,10 @@ fun AppNavigation() {
                         onMonthChange = { monthIndex = it.toIndex() },
                         onDayClick = { date -> navController.navigate("day/${date.toEpochDay()}") },
                         onOpenSearch = { navController.navigate("search") },
+                        onOpenYear = { year ->
+                            yearShown = year
+                            navController.navigate("year")
+                        },
                     )
                 }
 
@@ -100,8 +106,9 @@ fun AppNavigation() {
                         onYearChange = { yearShown = it },
                         onMonthClick = { month ->
                             monthIndex = month.toIndex()
-                            navController.switchTab("calendar")
+                            navController.popBackStack()
                         },
+                        onBack = { navController.popBackStack() },
                         onDayClick = { date -> navController.navigate("day/${date.toEpochDay()}") },
                     )
                 }

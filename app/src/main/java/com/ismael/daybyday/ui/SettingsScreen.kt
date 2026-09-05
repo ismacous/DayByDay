@@ -323,12 +323,12 @@ fun SettingsScreen() {
                 Spacer(Modifier.height(12.dp))
 
                 PermissionRow(
-                    emoji = "\uD83D\uDC5F",
+                    emoji = "👟",
                     title = "Nombre de pas",
                     status = when {
                         !healthAvailable ->
                             "Health Connect n'est pas installé sur ce téléphone."
-                        stepsGranted -> "Lu dans Health Connect, où Samsung Health les écrit."
+                        stepsGranted -> "Tes pas sont lus dans Health Connect, où Samsung Health les écrit."
                         else -> "Samsung Health écrit tes pas dans Health Connect."
                     },
                     granted = stepsGranted,
@@ -345,7 +345,7 @@ fun SettingsScreen() {
                 Spacer(Modifier.height(8.dp))
 
                 PermissionRow(
-                    emoji = "\uD83D\uDCF1",
+                    emoji = "📱",
                     title = "Temps sur les applis",
                     status = if (screenGranted) {
                         "Accès aux données d'utilisation accordé."
@@ -359,7 +359,7 @@ fun SettingsScreen() {
                 Spacer(Modifier.height(8.dp))
 
                 PermissionRow(
-                    emoji = "\uD83D\uDD14",
+                    emoji = "🔔",
                     title = "Notifications",
                     status = if (notificationsGranted) {
                         "Le rappel du soir peut s'afficher."
@@ -370,6 +370,8 @@ fun SettingsScreen() {
                     onClick = { openSystemScreen(context, notificationSettingsIntent(context)) },
                 )
             }
+
+            Spacer(Modifier.height(16.dp))
 
             // --- Rappel ---------------------------------------------------
             SectionCard(title = "Rappel quotidien") {
@@ -692,8 +694,6 @@ fun SettingsScreen() {
                     Text("Effacer toutes mes données", color = MaterialTheme.colorScheme.error)
                 }
             }
-
-            Spacer(Modifier.height(16.dp))
 
             Spacer(Modifier.height(40.dp))
         }

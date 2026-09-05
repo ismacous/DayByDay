@@ -97,10 +97,14 @@ enum class DayCard(
             if (missing.isEmpty()) return chosen
 
             val result = chosen.toMutableList()
-            missing.forEach { card ->
-                // On la replace la ou elle serait sans personnalisation.
-                val insertAt = result.indexOfFirst { it.ordinal > card.ordinal }
-                if (insertAt == -1) result += card else result.add(insertAt, card)
+            missing.sortedBy { it.ordinal }.forEach { card ->
+                // La nouvelle carte se glisse juste apres la derniere de celles
+                // qui la precedent dans la disposition d'origine. Viser plutot
+                // la premiere qui la suit ferait remonter la carte neuve tout en
+                // haut des qu'une carte de fin a ete deplacee la : l'ordre
+                // choisi doit rester intact.
+                val after = result.indexOfLast { it.ordinal < card.ordinal }
+                result.add(after + 1, card)
             }
             return result
         }

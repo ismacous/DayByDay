@@ -41,10 +41,29 @@ class DayCardsTest {
 
     @Test
     fun `une cle inconnue est ignoree sans faire disparaitre les cartes`() {
+        // Cas d'un retour en arriere : la disposition vient d'une version plus
+        // recente et cite une carte que cette version ne connait pas.
         val result = DayCard.order(listOf("carte_d_une_version_future", DayCard.MONEY.key))
 
+        // Toutes les cartes connues sont la, une seule fois, et rien d'autre.
+        assertEquals(DayCard.entries.toSet(), result.toSet())
         assertEquals(DayCard.entries.size, result.size)
-        assertEquals(DayCard.MONEY, result.first())
+    }
+
+    @Test
+    fun `une carte deplacee garde sa place quand une autre arrive`() {
+        // L'argent remonte en deuxieme position, puis une mise a jour apporte
+        // le sommeil : l'argent ne doit pas etre renvoye au fond.
+        val saved = listOf(DayCard.MOOD, DayCard.MONEY) +
+            DayCard.entries.filterNot {
+                it == DayCard.MOOD || it == DayCard.MONEY || it == DayCard.SLEEP
+            }
+
+        val result = DayCard.order(saved.map { it.key })
+
+        assertEquals(DayCard.MOOD, result[0])
+        assertEquals(DayCard.MONEY, result[1])
+        assertTrue(DayCard.SLEEP in result)
     }
 
     @Test

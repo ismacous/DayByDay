@@ -43,10 +43,14 @@ object TagCatalog {
         Builtin("snacking", "🍫", "Grignotage", TagCategory.FOOD),
         Builtin("alcohol", "🍺", "Alcool", TagCategory.FOOD),
 
-        // Travail & argent
+        // Travail & demarches
         Builtin("job_search", "💼", "Recherche d'emploi", TagCategory.WORK, listOf("Travail")),
         Builtin("admin", "📄", "Démarches, paperasse", TagCategory.WORK),
-        Builtin("big_spending", "💸", "Grosse dépense", TagCategory.WORK),
+        Builtin("interview", "🤝", "Entretien", TagCategory.WORK),
+
+        // Argent
+        Builtin("big_spending", "💸", "Grosse dépense", TagCategory.MONEY),
+        Builtin("saved_money", "🐷", "Journée sans dépense", TagCategory.MONEY),
 
         // Ecrans
         Builtin("social_media", "📱", "Réseaux sociaux", TagCategory.SCREENS, listOf("Écrans +++")),
@@ -54,7 +58,6 @@ object TagCatalog {
         Builtin("games", "🎮", "Jeux vidéo", TagCategory.SCREENS),
 
         // Sante
-        Builtin("meds", "💊", "Traitement pris", TagCategory.HEALTH),
         Builtin("appointment", "🩺", "Rendez-vous médical", TagCategory.HEALTH),
         Builtin("anxiety", "🧠", "Grosse angoisse", TagCategory.HEALTH),
         Builtin("cried", "😢", "J'ai pleuré", TagCategory.HEALTH),
@@ -67,6 +70,16 @@ object TagCatalog {
      */
     suspend fun sync(dao: DayDao) {
         val existing = dao.allTags()
+
+        // Une etiquette retiree du catalogue disparait aussi de la base, avec
+        // les journees qui y renvoient : la garder afficherait une etiquette
+        // que plus aucune carte ne montre, impossible a decocher.
+        val known = tags.map { it.slug }.toSet()
+        existing.filter { it.slug != null && it.slug !in known }.forEach { obsolete ->
+            dao.deleteTagLinks(obsolete.id)
+            dao.deleteTag(obsolete.id)
+        }
+
         tags.forEachIndexed { index, builtin ->
             val match = existing.firstOrNull { it.slug == builtin.slug }
                 ?: existing.firstOrNull { it.slug == null && it.name == builtin.name }

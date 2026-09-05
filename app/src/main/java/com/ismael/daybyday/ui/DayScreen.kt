@@ -105,6 +105,7 @@ private const val MEASURE_REFRESH_MS = 60_000L
 fun DayScreen(
     initialDate: LocalDate,
     onBack: () -> Unit,
+    onOrganizeCards: () -> Unit,
 ) {
     val context = LocalContext.current
     val app = context.dayByDayApp
@@ -140,7 +141,6 @@ fun DayScreen(
     var sleepFromDevice by remember { mutableStateOf(false) }
     var waterGlasses by remember { mutableStateOf<Int?>(null) }
     var mealsNote by remember { mutableStateOf("") }
-    var organizing by remember { mutableStateOf(false) }
     var editingTreatment by remember { mutableStateOf<Treatment?>(null) }
     var creatingTreatment by remember { mutableStateOf(false) }
 
@@ -464,7 +464,7 @@ fun DayScreen(
                                 shape = RoundedCornerShape(16.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(min = 160.dp, max = 320.dp)
+                                    .heightIn(min = 220.dp)
                                     .testTag("day-note-field"),
                             )
                         }
@@ -584,6 +584,10 @@ fun DayScreen(
                                 onAdd = { creatingTreatment = true },
                             )
                         }
+                        DayCard.SOCIAL, DayCard.WORK -> {
+                            // Ces deux cartes ne sont faites que de leurs
+                            // reperes : le bloc commun ci-dessous les affiche.
+                        }
                         DayCard.OUTSIDE -> {
                             Text(
                                 "Tu es sorti aujourd'hui ?",
@@ -620,48 +624,6 @@ fun DayScreen(
                                     openSystemScreen(context, ScreenTimeSource.settingsIntent(context))
                                 },
                             )
-                        }
-                        DayCard.TAGS -> {
-                            if (allTags.isEmpty()) {
-                                Text(
-                                    "Les étiquettes arrivent avec l'application.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            } else {
-                                TagCategory.entries.forEach { category ->
-                                    val categoryTags = allTags.filter { it.group == category }
-                                    if (categoryTags.isNotEmpty()) {
-                                        Text(
-                                            text = category.label.uppercase(),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
-                                        )
-                                        FlowRow(
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                                        ) {
-                                            categoryTags.forEach { tag ->
-                                                val selected = tag.id in selectedTagIds
-                                                ChoiceChip(
-                                                    label = tag.display,
-                                                    selected = selected,
-                                                    onClick = {
-                                                        scope.launch {
-                                                            repository.toggleTag(
-                                                                LocalDate.ofEpochDay(epochDay),
-                                                                tag,
-                                                                !selected,
-                                                            )
-                                                        }
-                                                    },
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
                         }
                         DayCard.MONEY -> {
                             if (dayMoney.isEmpty()) {
@@ -760,19 +722,45 @@ fun DayScreen(
                             }
                         }
                     }
+
+                    // Les reperes rapides de cette carte, sous la question
+                    // qu'ils precisent plutot que dans une liste a part.
+                    val cardTags = card.tagCategory?.let { family ->
+                        allTags.filter { it.group == family }
+                    }.orEmpty()
+                    if (cardTags.isNotEmpty()) {
+                        if (card != DayCard.SOCIAL && card != DayCard.WORK) {
+                            Spacer(Modifier.height(14.dp))
+                        }
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            cardTags.forEach { tag ->
+                                val selected = tag.id in selectedTagIds
+                                ChoiceChip(
+                                    label = tag.display,
+                                    selected = selected,
+                                    onClick = {
+                                        scope.launch {
+                                            repository.toggleTag(date, tag, !selected)
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(16.dp))
             }
 
             OutlinedButton(
-                onClick = { organizing = true },
+                onClick = onOrganizeCards,
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Ajouter ou organiser les cartes")
+                Text("Organiser ma journée")
             }
 
             Spacer(Modifier.height(48.dp))
@@ -789,19 +777,6 @@ fun DayScreen(
                 viewerIndex = null
                 scope.launch { repository.deleteMedia(item) }
             },
-        )
-    }
-
-    if (organizing) {
-        OrganizeCardsDialog(
-            order = app.prefs.dayCardOrder,
-            hidden = app.prefs.hiddenDayCards,
-            onChange = { newOrder, newHidden ->
-                app.prefs.dayCardOrder = newOrder
-                app.prefs.hiddenDayCards = newHidden
-                layoutTick += 1
-            },
-            onDismiss = { organizing = false },
         )
     }
 

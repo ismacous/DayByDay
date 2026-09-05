@@ -31,7 +31,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -78,7 +77,7 @@ fun DayCardShell(
                     .clickable(onClick = onToggleCollapse),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("${card.emoji} ${card.title}", style = MaterialTheme.typography.titleMedium)
+                Text(card.title, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.width(8.dp))
                 Spacer(Modifier.weight(1f))
                 Icon(
@@ -419,92 +418,6 @@ fun TreatmentDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
     )
-}
-
-/**
- * Choisir quelles cartes s'affichent et dans quel ordre.
- *
- * Les fleches plutot qu'un glisser-deposer : le geste est net du premier coup,
- * y compris sur une liste longue, et il ne se bat pas avec le defilement.
- */
-@Composable
-fun OrganizeCardsDialog(
-    order: List<DayCard>,
-    hidden: Set<DayCard>,
-    onChange: (List<DayCard>, Set<DayCard>) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Mes cartes") },
-        text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                Text(
-                    "Décoche une carte pour la faire disparaître de ta journée, " +
-                        "les flèches la déplacent. Rien n'est effacé : une carte " +
-                        "masquée garde ce que tu y as noté.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(12.dp))
-                order.forEachIndexed { index, card ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        IconButton(
-                            onClick = { onChange(order.moved(index, index - 1), hidden) },
-                            enabled = index > 0,
-                        ) {
-                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Monter")
-                        }
-                        IconButton(
-                            onClick = { onChange(order.moved(index, index + 1), hidden) },
-                            enabled = index < order.lastIndex,
-                        ) {
-                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Descendre")
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "${card.emoji} ${card.title}",
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
-                            Text(
-                                text = if (card.essential) {
-                                    "Toujours affichée."
-                                } else {
-                                    card.description
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(
-                            checked = card !in hidden,
-                            enabled = !card.essential,
-                            onCheckedChange = { visible ->
-                                onChange(
-                                    order,
-                                    if (visible) hidden - card else hidden + card,
-                                )
-                            },
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Terminé") } },
-    )
-}
-
-/** Deplace un element, en ignorant les destinations hors de la liste. */
-private fun <T> List<T>.moved(from: Int, to: Int): List<T> {
-    if (from !in indices || to !in indices || from == to) return this
-    val copy = toMutableList()
-    copy.add(to, copy.removeAt(from))
-    return copy
 }
 
 /** Selecteur d'heure qui rend des minutes depuis minuit. */

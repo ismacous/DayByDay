@@ -15,70 +15,78 @@ package com.ismael.daybyday.data
 enum class DayCard(
     val key: String,
     val title: String,
-    val emoji: String,
     /** Une carte essentielle ne peut pas etre masquee : elle est le coeur de la journee. */
     val essential: Boolean = false,
     val description: String = "",
+    /**
+     * Famille d'etiquettes montree dans cette carte. Les reperes rapides ne
+     * vivent plus dans une liste a part : chacun s'affiche la ou il a du sens,
+     * sous la question qu'il precise.
+     */
+    val tagCategory: TagCategory? = null,
 ) {
     MOOD(
         key = "humeur",
         title = "Comment tu te sens",
-        emoji = "🎨",
         essential = true,
         description = "La couleur de la journée et de ses quatre moments.",
     ),
     JOURNAL(
         key = "journal",
         title = "Ton journal",
-        emoji = "📓",
         description = "Un titre et le texte libre de la journée.",
     ),
     SLEEP(
         key = "sommeil",
         title = "Sommeil",
-        emoji = "😴",
         description = "Heure de coucher et de lever, durée de la nuit.",
+        tagCategory = TagCategory.SLEEP,
     ),
     ACTIVITY(
         key = "activite",
         title = "Activité physique",
-        emoji = "🏃",
         description = "Pas, séance de sport, poids du jour.",
+        tagCategory = TagCategory.ACTIVITY,
     ),
     FOOD(
         key = "alimentation",
         title = "Alimentation",
-        emoji = "🍽️",
         description = "Comment tu as mangé, ce que tu as mangé, l'eau bue.",
+        tagCategory = TagCategory.FOOD,
     ),
     HEALTH(
         key = "sante",
         title = "Santé & traitements",
-        emoji = "💊",
         description = "Cocher les médicaments pris, matin, midi, soir, nuit.",
+        tagCategory = TagCategory.HEALTH,
+    ),
+    SOCIAL(
+        key = "social",
+        title = "Qui tu as vu",
+        description = "Les gens qui ont compté dans la journée.",
+        tagCategory = TagCategory.SOCIAL,
+    ),
+    WORK(
+        key = "travail",
+        title = "Travail & démarches",
+        description = "Recherche d'emploi, paperasse, entretiens.",
+        tagCategory = TagCategory.WORK,
     ),
     OUTSIDE(
         key = "dehors",
         title = "Dehors & écrans",
-        emoji = "🚪",
         description = "Être sorti ou non, temps passé sur le téléphone.",
-    ),
-    TAGS(
-        key = "etiquettes",
-        title = "Étiquettes",
-        emoji = "🏷️",
-        description = "Les repères rapides comparés à tes bonnes journées.",
+        tagCategory = TagCategory.SCREENS,
     ),
     MONEY(
         key = "argent",
         title = "Argent du jour",
-        emoji = "💶",
         description = "Les rentrées et dépenses de cette journée.",
+        tagCategory = TagCategory.MONEY,
     ),
     MEDIA(
         key = "medias",
         title = "Photos & vidéos",
-        emoji = "📷",
         description = "Les souvenirs attachés à la journée.",
     );
 

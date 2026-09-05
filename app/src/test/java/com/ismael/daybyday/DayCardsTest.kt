@@ -1,6 +1,7 @@
 package com.ismael.daybyday
 
 import com.ismael.daybyday.data.DayCard
+import com.ismael.daybyday.data.TagCatalog
 import com.ismael.daybyday.data.DayEntry
 import com.ismael.daybyday.data.DoseTime
 import com.ismael.daybyday.data.Treatment
@@ -37,6 +38,7 @@ class DayCardsTest {
         assertTrue(DayCard.SLEEP in result)
         // Elle se glisse entre le journal et l'activité, comme prévu au départ.
         assertEquals(DayCard.JOURNAL, result[result.indexOf(DayCard.SLEEP) - 1])
+        assertEquals(DayCard.ACTIVITY, result[result.indexOf(DayCard.SLEEP) + 1])
     }
 
     @Test
@@ -75,6 +77,17 @@ class DayCardsTest {
     fun `la carte de l humeur ne peut pas etre masquee`() {
         assertTrue(DayCard.MOOD.essential)
         assertTrue(DayCard.entries.count { it.essential } == 1)
+    }
+
+    @Test
+    fun `chaque famille d etiquettes a une carte, et une seule`() {
+        // Une famille sans carte serait invisible et impossible a decocher ;
+        // deux cartes pour la meme famille afficheraient les memes reperes.
+        val familles = DayCard.entries.mapNotNull { it.tagCategory }
+        assertEquals(familles.size, familles.toSet().size)
+
+        val utilisees = TagCatalog.tags.map { it.category }.toSet()
+        assertTrue(utilisees.all { it in familles.toSet() })
     }
 
     @Test

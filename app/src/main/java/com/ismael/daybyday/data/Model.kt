@@ -85,9 +85,10 @@ enum class TagCategory(val key: String, val label: String) {
     SOCIAL("social", "Social"),
     ACTIVITY("activite", "Activité"),
     FOOD("alimentation", "Alimentation"),
-    WORK("travail", "Travail & argent"),
+    WORK("travail", "Travail & démarches"),
     SCREENS("ecrans", "Écrans"),
     HEALTH("sante", "Santé"),
+    MONEY("argent", "Argent"),
     OTHER("autre", "Autre");
 
     companion object {

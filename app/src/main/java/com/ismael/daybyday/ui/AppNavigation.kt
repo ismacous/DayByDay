@@ -121,7 +121,12 @@ fun AppNavigation() {
                     DayScreen(
                         initialDate = LocalDate.ofEpochDay(epochDay),
                         onBack = { navController.popBackStack() },
+                        onOrganizeCards = { navController.navigate("organize-cards") },
                     )
+                }
+
+                composable("organize-cards") {
+                    OrganizeCardsScreen(onBack = { navController.popBackStack() })
                 }
 
                 composable("search") {

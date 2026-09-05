@@ -66,7 +66,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -84,7 +83,6 @@ import com.ismael.daybyday.data.MediaKind
 import com.ismael.daybyday.data.MoneyEntry
 import com.ismael.daybyday.data.RichText
 import com.ismael.daybyday.data.SportLevel
-import com.ismael.daybyday.data.TextSpan
 import com.ismael.daybyday.data.Treatment
 import com.ismael.daybyday.data.TagCategory
 import com.ismael.daybyday.dayByDayApp
@@ -109,6 +107,7 @@ fun DayScreen(
     initialDate: LocalDate,
     onBack: () -> Unit,
     onOrganizeCards: () -> Unit,
+    onOpenJournal: (LocalDate) -> Unit,
 ) {
     val context = LocalContext.current
     val app = context.dayByDayApp
@@ -124,8 +123,8 @@ fun DayScreen(
     var colorManual by remember { mutableStateOf(false) }
     var parts by remember { mutableStateOf<Map<DayPart, Int>>(emptyMap()) }
     var title by remember { mutableStateOf("") }
-    var noteValue by remember { mutableStateOf(TextFieldValue("")) }
-    var noteSpans by remember { mutableStateOf<List<TextSpan>>(emptyList()) }
+    var note by remember { mutableStateOf("") }
+    var noteSpansEncoded by remember { mutableStateOf("") }
     var sportLevel by remember { mutableStateOf<Int?>(null) }
     var foodLevel by remember { mutableStateOf<Int?>(null) }
     var wentOut by remember { mutableStateOf<Boolean?>(null) }
@@ -173,8 +172,8 @@ fun DayScreen(
         epochDay = day,
         colorKey = colorKey,
         title = title.trim(),
-        note = noteValue.text,
-        noteSpans = RichText.encode(noteSpans),
+        note = note,
+        noteSpans = noteSpansEncoded,
         sportLevel = sportLevel,
         foodLevel = foodLevel,
         wentOut = wentOut,
@@ -208,9 +207,8 @@ fun DayScreen(
             entry?.partColorKey(part)?.let { part to it }
         }.toMap()
         title = entry?.title.orEmpty()
-        val loadedNote = entry?.note.orEmpty()
-        noteValue = TextFieldValue(loadedNote)
-        noteSpans = RichText.decode(entry?.noteSpans, loadedNote.length)
+        note = entry?.note.orEmpty()
+        noteSpansEncoded = entry?.noteSpans.orEmpty()
         sportLevel = entry?.sportLevel
         foodLevel = entry?.foodLevel
         wentOut = entry?.wentOut
@@ -252,6 +250,14 @@ fun DayScreen(
         }
     }
 
+    LaunchedEffect(epochDay, loadedFor, measuresTick) {
+        if (loadedFor != epochDay) return@LaunchedEffect
+        val entry = repository.dayOnce(LocalDate.ofEpochDay(epochDay)) ?: return@LaunchedEffect
+        title = entry.title
+        note = entry.note
+        noteSpansEncoded = entry.noteSpans
+    }
+
     // Relecture a chaque fois que l'ecran redevient visible, puis chaque
     // minute tant qu'on regarde la journee en cours. Rien ne tourne quand
     // l'application passe en arriere-plan.
@@ -273,8 +279,8 @@ fun DayScreen(
         colorManual,
         parts,
         title,
-        noteValue.text,
-        noteSpans,
+        note,
+        noteSpansEncoded,
         sportLevel,
         foodLevel,
         wentOut,
@@ -467,25 +473,11 @@ fun DayScreen(
                             }
                         }
                         DayCard.JOURNAL -> {
-                            OutlinedTextField(
-                                value = title,
-                                onValueChange = { title = it },
-                                label = { Text("Titre de la journée") },
-                                singleLine = true,
-                                shape = RoundedCornerShape(16.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("day-title-field"),
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            JournalEditor(
-                                value = noteValue,
-                                spans = noteSpans,
-                                onValueChange = { updated, updatedSpans ->
-                                    noteValue = updated
-                                    noteSpans = updatedSpans
-                                },
-                                modifier = Modifier.testTag("day-note-field"),
+                            JournalPreview(
+                                title = title,
+                                body = note,
+                                spans = RichText.decode(noteSpansEncoded, note.length),
+                                onOpen = { onOpenJournal(date) },
                             )
                         }
                         DayCard.SLEEP -> {
@@ -893,10 +885,32 @@ private fun CardMediaRow(
             Spacer(Modifier.height(8.dp))
         }
     }
-    TextButton(onClick = onAdd) {
-        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(if (items.isEmpty()) "Ajouter une photo" else "Ajouter une autre photo")
+    // Une icone plutot qu'un bouton pleine largeur : sur une carte qui a deja
+    // son contenu, un bandeau "Ajouter une photo" pesait plus qu'il ne servait.
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
+                .clickable(onClickLabel = "Ajouter une photo", onClick = onAdd),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Default.Add,
+                contentDescription = "Ajouter une photo",
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (items.isEmpty()) {
+            Spacer(Modifier.width(10.dp))
+            Text(
+                "Ajouter une photo",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

@@ -16,31 +16,79 @@ data class TextSpan(val start: Int, val end: Int, val style: TextStyleKind) {
     val isEmpty: Boolean get() = end <= start
 }
 
+/** A quoi sert une mise en forme, et comment elle se combine aux autres. */
+enum class StyleFamily {
+    /** Gras, italique… Elles se cumulent librement. */
+    MARK,
+
+    /** Couleur du texte : une seule a la fois. */
+    COLOR,
+
+    /** Couleur de surlignage : une seule a la fois. */
+    HIGHLIGHT,
+
+    /** Titre : un seul niveau a la fois, et il prend la ligne entiere. */
+    HEADING,
+}
+
 /**
  * Les mises en forme disponibles. Le [code] est enregistre tel quel : le
- * changer casserait la mise en forme des journees deja ecrites.
+ * changer casserait la mise en forme des journees deja ecrites. En ajouter
+ * est sans risque.
  */
-enum class TextStyleKind(val code: String, val label: String) {
-    BOLD("b", "Gras"),
-    ITALIC("i", "Italique"),
-    UNDERLINE("u", "Souligné"),
-    STRIKETHROUGH("s", "Barré"),
-    HIGHLIGHT("h", "Surligné"),
-    COLOR_RED("cr", "Rouge"),
-    COLOR_ORANGE("co", "Orange"),
-    COLOR_GREEN("cg", "Vert"),
-    COLOR_BLUE("cb", "Bleu"),
-    COLOR_VIOLET("cv", "Violet");
+enum class TextStyleKind(
+    val code: String,
+    val label: String,
+    val family: StyleFamily,
+    /** Teinte affichee sur le bouton, pour les couleurs et les surlignages. */
+    val argb: Long = 0L,
+) {
+    BOLD("b", "Gras", StyleFamily.MARK),
+    ITALIC("i", "Italique", StyleFamily.MARK),
+    UNDERLINE("u", "Souligné", StyleFamily.MARK),
+    STRIKETHROUGH("s", "Barré", StyleFamily.MARK),
 
-    /** Une couleur remplace la precedente : deux teintes ne se superposent pas. */
-    val isColor: Boolean get() = code.startsWith("c")
+    TITLE_1("t1", "Titre 1", StyleFamily.HEADING),
+    TITLE_2("t2", "Titre 2", StyleFamily.HEADING),
+    TITLE_3("t3", "Titre 3", StyleFamily.HEADING),
+
+    // Teintes moyennes : lisibles sur fond clair comme sur fond sombre.
+    COLOR_RED("cr", "Rouge", StyleFamily.COLOR, 0xFFE1483F),
+    COLOR_ORANGE("co", "Orange", StyleFamily.COLOR, 0xFFEF8A2B),
+    COLOR_AMBER("ca", "Ambre", StyleFamily.COLOR, 0xFFD4A017),
+    COLOR_GREEN("cg", "Vert", StyleFamily.COLOR, 0xFF3FBF6A),
+    COLOR_TEAL("ct", "Turquoise", StyleFamily.COLOR, 0xFF1FA6A6),
+    COLOR_BLUE("cb", "Bleu", StyleFamily.COLOR, 0xFF4A9BE8),
+    COLOR_INDIGO("cn", "Indigo", StyleFamily.COLOR, 0xFF5C6BC0),
+    COLOR_VIOLET("cv", "Violet", StyleFamily.COLOR, 0xFF9B6BD6),
+    COLOR_PINK("cp", "Rose", StyleFamily.COLOR, 0xFFE0559B),
+    COLOR_BROWN("cw", "Brun", StyleFamily.COLOR, 0xFF8D6E63),
+    COLOR_GREY("cy", "Gris", StyleFamily.COLOR, 0xFF8A9199),
+
+    // "h" garde son code d'origine : le jaune existait deja.
+    HIGHLIGHT("h", "Surligné jaune", StyleFamily.HIGHLIGHT, 0xFFFFD54F),
+    HIGHLIGHT_GREEN("hg", "Surligné vert", StyleFamily.HIGHLIGHT, 0xFF9BE8A8),
+    HIGHLIGHT_BLUE("hb", "Surligné bleu", StyleFamily.HIGHLIGHT, 0xFF9BD1F5),
+    HIGHLIGHT_PINK("hp", "Surligné rose", StyleFamily.HIGHLIGHT, 0xFFF7A8CE),
+    HIGHLIGHT_ORANGE("ho", "Surligné orange", StyleFamily.HIGHLIGHT, 0xFFFFC08A),
+    HIGHLIGHT_VIOLET("hv", "Surligné violet", StyleFamily.HIGHLIGHT, 0xFFCDB4F0),
+    HIGHLIGHT_GREY("hy", "Surligné gris", StyleFamily.HIGHLIGHT, 0xFFD2D7DC);
+
+    /** Un titre habille la ligne entiere : il ne se pose pas sur trois mots. */
+    val takesWholeLine: Boolean get() = family == StyleFamily.HEADING
 
     companion object {
         fun fromCode(code: String): TextStyleKind? = entries.firstOrNull { it.code == code }
 
-        val colors: List<TextStyleKind> get() = entries.filter { it.isColor }
+        fun of(family: StyleFamily): List<TextStyleKind> = entries.filter { it.family == family }
 
-        val marks: List<TextStyleKind> get() = entries.filter { !it.isColor }
+        val marks: List<TextStyleKind> get() = of(StyleFamily.MARK)
+
+        val headings: List<TextStyleKind> get() = of(StyleFamily.HEADING)
+
+        val colors: List<TextStyleKind> get() = of(StyleFamily.COLOR)
+
+        val highlights: List<TextStyleKind> get() = of(StyleFamily.HIGHLIGHT)
     }
 }
 
@@ -90,10 +138,16 @@ object RichText {
         end: Int,
         style: TextStyleKind,
     ): List<TextSpan> {
-        // Une couleur chasse les autres : du texte n'a qu'une teinte a la fois.
-        val cleaned = if (style.isColor) {
+        // Couleur, surlignage et titre s'excluent au sein de leur famille :
+        // du texte n'a qu'une teinte, et une ligne qu'un niveau de titre.
+        val exclusive = style.family != StyleFamily.MARK
+        val cleaned = if (exclusive) {
             spans.flatMap { span ->
-                if (span.style.isColor && span.style != style) cut(span, start, end) else listOf(span)
+                if (span.style.family == style.family && span.style != style) {
+                    cut(span, start, end)
+                } else {
+                    listOf(span)
+                }
             }
         } else {
             spans
@@ -214,6 +268,19 @@ object RichText {
     ): List<TextSpan> {
         if (end <= start || styles.isEmpty()) return spans
         return styles.fold(spans) { current, style -> add(current, start, end, style) }
+    }
+
+    /**
+     * Les bornes de la ligne qui contient [offset], ou de toutes les lignes
+     * touchees par [start] jusqu'a [end]. Un titre habille la ligne entiere :
+     * l'appliquer a trois mots au milieu d'un paragraphe n'aurait pas de sens.
+     */
+    fun lineRange(text: String, start: Int, end: Int = start): IntRange {
+        val from = text.lastIndexOf('\n', (start - 1).coerceAtLeast(0))
+            .let { if (it == -1 || start == 0) 0 else it + 1 }
+        val next = text.indexOf('\n', end.coerceAtMost(text.length))
+        val to = if (next == -1) text.length else next
+        return from until maxOf(to, from)
     }
 
     /** Format compact : "debut,fin,code;debut,fin,code". */

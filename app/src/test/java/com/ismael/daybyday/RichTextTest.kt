@@ -259,6 +259,78 @@ class RichTextTest {
     fun `les codes des styles sont uniques et stables`() {
         val codes = TextStyleKind.entries.map { it.code }
         assertEquals(codes.size, codes.toSet().size)
-        assertEquals(TextStyleKind.entries.size, TextStyleKind.marks.size + TextStyleKind.colors.size)
+        // Chaque style appartient a une famille et une seule.
+        assertEquals(
+            TextStyleKind.entries.size,
+            TextStyleKind.marks.size + TextStyleKind.headings.size +
+                TextStyleKind.colors.size + TextStyleKind.highlights.size,
+        )
+    }
+
+    @Test
+    fun `les codes deja enregistres n ont pas bouge`() {
+        // Les changer rendrait illisible la mise en forme deja ecrite.
+        assertEquals("b", TextStyleKind.BOLD.code)
+        assertEquals("i", TextStyleKind.ITALIC.code)
+        assertEquals("u", TextStyleKind.UNDERLINE.code)
+        assertEquals("s", TextStyleKind.STRIKETHROUGH.code)
+        assertEquals("h", TextStyleKind.HIGHLIGHT.code)
+        assertEquals("cr", TextStyleKind.COLOR_RED.code)
+        assertEquals("cg", TextStyleKind.COLOR_GREEN.code)
+        assertEquals("cb", TextStyleKind.COLOR_BLUE.code)
+        assertEquals("cv", TextStyleKind.COLOR_VIOLET.code)
+        assertEquals("co", TextStyleKind.COLOR_ORANGE.code)
+    }
+
+    @Test
+    fun `un surlignage chasse le precedent mais pas la couleur du texte`() {
+        val jaune = RichText.toggle(emptyList(), 0, 5, TextStyleKind.HIGHLIGHT)
+        val rouge = RichText.toggle(jaune, 0, 5, TextStyleKind.COLOR_RED)
+        val vert = RichText.toggle(rouge, 0, 5, TextStyleKind.HIGHLIGHT_GREEN)
+
+        val actifs = RichText.stylesOn(vert, 0, 5)
+        assertTrue(TextStyleKind.HIGHLIGHT_GREEN in actifs)
+        assertTrue(TextStyleKind.HIGHLIGHT !in actifs)
+        assertTrue(TextStyleKind.COLOR_RED in actifs)
+    }
+
+    @Test
+    fun `un titre remplace le niveau precedent`() {
+        val un = RichText.toggle(emptyList(), 0, 5, TextStyleKind.TITLE_1)
+        val deux = RichText.toggle(un, 0, 5, TextStyleKind.TITLE_2)
+
+        assertEquals(spans(Triple(0, 5, TextStyleKind.TITLE_2)), deux)
+    }
+
+    // --- Trouver la ligne ------------------------------------------------
+
+    @Test
+    fun `la ligne du curseur va d un retour a l autre`() {
+        val texte = "premiere\nseconde\ntroisieme"
+
+        // Un titre prend la ligne entiere, meme si le curseur est au milieu.
+        assertEquals(9..15, RichText.lineRange(texte, 12))
+    }
+
+    @Test
+    fun `la premiere ligne commence a zero`() {
+        assertEquals(0..7, RichText.lineRange("premiere\nseconde", 3))
+    }
+
+    @Test
+    fun `la derniere ligne va jusqu au bout du texte`() {
+        val texte = "premiere\nseconde"
+        assertEquals(9..15, RichText.lineRange(texte, 16))
+    }
+
+    @Test
+    fun `une selection sur plusieurs lignes les prend toutes`() {
+        val texte = "premiere\nseconde\ntroisieme"
+        assertEquals(0..25, RichText.lineRange(texte, 3, 20))
+    }
+
+    @Test
+    fun `un texte vide donne une ligne vide`() {
+        assertTrue(RichText.lineRange("", 0).isEmpty())
     }
 }

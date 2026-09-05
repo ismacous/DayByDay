@@ -58,7 +58,11 @@ class CalendarUiTest {
         composeRule.onNodeWithText("Comment tu te sens").assertIsDisplayed()
 
         composeRule.onNodeWithTag("color-GREEN").performClick()
+
+        // Le journal s'ecrit sur son propre ecran, ouvert depuis son apercu.
+        composeRule.onNodeWithTag("journal-preview").performClick()
         composeRule.onNodeWithTag("day-title-field").performTextInput(title)
+        composeRule.onNodeWithContentDescription("Retour").performClick()
 
         composeRule.onNodeWithContentDescription("Retour").performClick()
         composeRule.onNodeWithTag(dayTag).performClick()
@@ -115,7 +119,9 @@ class CalendarUiTest {
         val marker = "Ruisseau${System.currentTimeMillis() % 100000}"
 
         composeRule.onNodeWithTag("day-${today.toEpochDay()}").performClick()
+        composeRule.onNodeWithTag("journal-preview").performClick()
         composeRule.onNodeWithTag("day-note-field").performTextInput(marker)
+        composeRule.onNodeWithContentDescription("Retour").performClick()
         composeRule.onNodeWithContentDescription("Retour").performClick()
 
         composeRule.onNodeWithContentDescription("Rechercher").performClick()

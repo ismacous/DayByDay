@@ -122,6 +122,20 @@ fun AppNavigation() {
                         initialDate = LocalDate.ofEpochDay(epochDay),
                         onBack = { navController.popBackStack() },
                         onOrganizeCards = { navController.navigate("organize-cards") },
+                        onOpenJournal = { day ->
+                            navController.navigate("journal/${day.toEpochDay()}")
+                        },
+                    )
+                }
+
+                composable(
+                    route = "journal/{epochDay}",
+                    arguments = listOf(navArgument("epochDay") { type = NavType.LongType }),
+                ) { entry ->
+                    val day = entry.arguments?.getLong("epochDay") ?: LocalDate.now().toEpochDay()
+                    JournalScreen(
+                        date = LocalDate.ofEpochDay(day),
+                        onBack = { navController.popBackStack() },
                     )
                 }
 

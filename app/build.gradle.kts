@@ -13,8 +13,8 @@ android {
         applicationId = "com.ismael.daybyday"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = "2.1"
+        versionCode = 13
+        versionName = "2.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         resourceConfigurations += listOf("fr")
 
@@ -76,7 +76,11 @@ ksp {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
+    // Compose 1.7 a reecrit la saisie de texte, et la selection d'un mot par
+    // double appui en a fait les frais : elle ne repond pas dans les premieres
+    // versions de cette serie. On prend la derniere correction de la meme
+    // ligne, qui ne change aucune API utilisee ici.
+    val composeBom = platform("androidx.compose:compose-bom:2025.02.00")
     implementation(composeBom)
 
     implementation("androidx.core:core-ktx:1.13.1")

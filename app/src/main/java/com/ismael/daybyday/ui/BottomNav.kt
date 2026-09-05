@@ -8,6 +8,12 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +21,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -29,10 +36,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.ismael.daybyday.ui.theme.Brand
 
 /**
  * La barre de navigation.
@@ -58,10 +69,14 @@ fun FloatingNavBar(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            // La barre du telephone passe par-dessus la notre : sans cette
+            // marge, on n'atteint que le haut des boutons. C'est le genre de
+            // detail qui rend une belle barre inutilisable.
+            .navigationBarsPadding()
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .brandShadow(elevation = 18.dp, shape = CircleShape),
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 10.dp,
     ) {
         Row(
             modifier = Modifier
@@ -164,24 +179,40 @@ private fun TodayButton(onClick: () -> Unit) {
         label = "pression",
     )
 
-    Surface(
+    // Une respiration lente, a peine perceptible : le bouton du jour est
+    // vivant, il appelle sans clignoter.
+    val breath = rememberInfiniteTransition(label = "souffle")
+    val glow by breath.animateFloat(
+        initialValue = 0.75f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2600, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "halo",
+    )
+
+    Box(
         modifier = Modifier
-            .size(52.dp)
-            .scale(scale),
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.primary,
-        shadowElevation = 6.dp,
-        onClick = onClick,
-        interactionSource = interaction,
+            .size(56.dp)
+            .scale(scale)
+            .brandShadow(elevation = (16 * glow).dp, shape = CircleShape)
+            .clip(CircleShape)
+            .background(Brush.linearGradient(Brand.gradient))
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                onClickLabel = "Ma journée d'aujourd'hui",
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "Ma journée d'aujourd'hui",
-                tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(26.dp),
-            )
-        }
+        Icon(
+            imageVector = Icons.Default.Add,
+            contentDescription = "Ma journée d'aujourd'hui",
+            tint = Color.White,
+            modifier = Modifier.size(28.dp),
+        )
     }
 }
 

@@ -3,13 +3,16 @@ package com.ismael.daybyday.ui
 import android.content.Context
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
@@ -27,6 +30,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -34,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.ismael.daybyday.data.Prefs
+import com.ismael.daybyday.ui.theme.Brand
 
 @Composable
 fun LockScreen(prefs: Prefs, onUnlocked: () -> Unit) {
@@ -53,28 +61,55 @@ fun LockScreen(prefs: Prefs, onUnlocked: () -> Unit) {
         }
     }
 
+    // C'est le premier ecran de la journee : il doit accueillir, pas barrer la
+    // route. Un fond vivant, un cadenas dans un rond de la couleur de
+    // l'application, et le reste dans une carte blanche posee dessus.
+    ScreenBackground(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(32.dp),
+            .padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(
-            Icons.Default.Lock,
-            contentDescription = null,
-            modifier = Modifier.size(48.dp),
-            tint = MaterialTheme.colorScheme.primary,
-        )
-        Spacer(Modifier.height(16.dp))
-        Text("DayByDay", style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(4.dp))
+        Box(
+            modifier = Modifier
+                .size(88.dp)
+                .brandShadow(elevation = 20.dp, shape = CircleShape)
+                .clip(CircleShape)
+                .background(Brush.linearGradient(Brand.gradient)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Default.Lock,
+                contentDescription = null,
+                modifier = Modifier.size(40.dp),
+                tint = Color.White,
+            )
+        }
+        Spacer(Modifier.height(22.dp))
         Text(
-            "Ton journal est verrouillé.",
-            style = MaterialTheme.typography.bodyMedium,
+            text = androidx.compose.ui.text.buildAnnotatedString {
+                append("Ton ")
+                withStyle(
+                    androidx.compose.ui.text.SpanStyle(
+                        fontFamily = com.ismael.daybyday.ui.theme.Serif,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                    )
+                ) {
+                    append("journal")
+                }
+            },
+            style = MaterialTheme.typography.displaySmall,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            "Il t'attend, bien fermé.",
+            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(26.dp))
 
         OutlinedTextField(
             value = pin,
@@ -115,12 +150,13 @@ fun LockScreen(prefs: Prefs, onUnlocked: () -> Unit) {
         }
 
         if (prefs.biometricEnabled && biometricAvailable) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
             TextButton(onClick = { showBiometricPrompt(context, onUnlocked) }) {
                 Text("Utiliser l'empreinte")
             }
         }
     }
+}
 }
 
 private fun showBiometricPrompt(context: Context, onSuccess: () -> Unit) {

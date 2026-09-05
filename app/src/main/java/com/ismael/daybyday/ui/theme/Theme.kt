@@ -20,66 +20,97 @@ import androidx.compose.ui.unit.sp
  *
  * Le point de depart n'est pas une couleur de marque : ce sont les quatre
  * couleurs des journees — vert, orange, rouge, noir. Elles portent le sens de
- * l'application et doivent rester les seules taches vives de l'ecran. La
- * couleur de l'application se choisit donc **contre** elles : une prune
- * profonde, qui ne ressemble a aucune des quatre, ne se confond avec aucun
- * etat d'humeur, et reste chaleureuse.
+ * l'application et doivent rester les seules taches vives **du contenu**. La
+ * couleur de l'application se choisit donc contre elles : un indigo vif qui
+ * file vers le ciel, une menthe pour ce qui va bien, un rose pour ce qui
+ * s'anime. Aucune ne ressemble a un etat d'humeur, et ensemble elles donnent
+ * le ton — jeune, franc, de bonne humeur.
  *
- * Le fond n'est pas blanc mais creme : c'est un carnet, pas un tableau de
- * bord. Le blanc est reserve aux cartes, qui se detachent ainsi du papier
- * sans avoir besoin d'un trait autour.
+ * Le fond n'est ni blanc ni creme mais un blanc a peine lavande, choisi pour
+ * que l'indigo et la menthe y claquent. C'est le seul role du fond : faire
+ * exister ce qu'on pose dessus.
+ *
+ * Rien n'est plat : les surfaces importantes portent un degrade, les cartes
+ * une ombre teintee de la couleur de l'application, et le fond un halo de
+ * couleurs qui derive lentement. Une application qu'on ouvre chaque soir doit
+ * donner envie d'etre ouverte.
  */
-private val Plum = Color(0xFF7A3E5D)
-private val PlumLight = Color(0xFFE9D4DF)
-private val Apricot = Color(0xFFD98F63)
+private val Indigo = Color(0xFF5B4DF0)
+private val Sky = Color(0xFF3BA6FF)
+private val Mint = Color(0xFF17C99A)
+private val Blush = Color(0xFFFF7BA9)
 
-private val Paper = Color(0xFFFBF6F1)
-private val Ink = Color(0xFF241F26)
+private val Cloud = Color(0xFFF5F5FE)
+private val Night = Color(0xFF16142B)
+
+/**
+ * Les degrades de la marque. Un degrade dit quelque chose qu'une couleur plate
+ * ne dit pas : qu'il y a du mouvement dessous.
+ */
+object Brand {
+    val Primary = Indigo
+    val PrimaryEnd = Sky
+    val Accent = Mint
+    val Playful = Blush
+
+    /** Le degrade principal : celui du bouton du jour et des cartes fortes. */
+    val gradient = listOf(Indigo, Sky)
+
+    /** Un degrade plus doux, pour les surfaces qui ne doivent pas crier. */
+    val softGradient = listOf(Color(0xFF7A6BFF), Color(0xFF5FBEFF))
+
+    /** Le vert de ce qui va bien : progression, reussite, bonne nouvelle. */
+    val accentGradient = listOf(Mint, Color(0xFF5BE3C0))
+}
 
 private val LightColors = lightColorScheme(
-    primary = Plum,
+    primary = Indigo,
     onPrimary = Color.White,
-    primaryContainer = PlumLight,
-    onPrimaryContainer = Color(0xFF33132A),
-    secondary = Apricot,
+    primaryContainer = Color(0xFFE4E1FF),
+    onPrimaryContainer = Color(0xFF231A6B),
+    secondary = Mint,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFF7E2D4),
-    onSecondaryContainer = Color(0xFF41210F),
-    tertiary = Color(0xFF4C6B5A),
-    background = Paper,
-    onBackground = Ink,
-    // Les cartes sont blanches sur le creme du fond : c'est ce leger ecart qui
-    // les fait exister, sans bordure ni ombre appuyee.
+    secondaryContainer = Color(0xFFD3F7EC),
+    onSecondaryContainer = Color(0xFF06463A),
+    tertiary = Blush,
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFFFE0EA),
+    onTertiaryContainer = Color(0xFF5C0F2C),
+    background = Cloud,
+    onBackground = Night,
     surface = Color.White,
-    onSurface = Ink,
-    surfaceVariant = Color(0xFFF2EAE3),
-    onSurfaceVariant = Color(0xFF5C5259),
-    outline = Color(0xFFCFC3BB),
-    outlineVariant = Color(0xFFE6DCD4),
-    error = Color(0xFFB3261E),
+    onSurface = Night,
+    surfaceVariant = Color(0xFFEFEFFA),
+    onSurfaceVariant = Color(0xFF5C5A75),
+    outline = Color(0xFFC9C7DE),
+    outlineVariant = Color(0xFFE6E5F3),
+    error = Color(0xFFE0384A),
     onError = Color.White,
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFFE7B4CE),
-    onPrimary = Color(0xFF43172F),
-    primaryContainer = Color(0xFF5C2A45),
-    onPrimaryContainer = Color(0xFFFFD8E7),
-    secondary = Color(0xFFEFB48C),
-    onSecondary = Color(0xFF4A2410),
-    secondaryContainer = Color(0xFF63381E),
-    onSecondaryContainer = Color(0xFFFFDCC7),
-    tertiary = Color(0xFFA9CDB6),
-    background = Color(0xFF16131A),
-    onBackground = Color(0xFFEDE4EA),
-    surface = Color(0xFF201C25),
-    onSurface = Color(0xFFEDE4EA),
-    surfaceVariant = Color(0xFF2B2531),
-    onSurfaceVariant = Color(0xFFC9BDC6),
-    outline = Color(0xFF574C58),
-    outlineVariant = Color(0xFF3A3341),
-    error = Color(0xFFFFB4AB),
-    onError = Color(0xFF690005),
+    primary = Color(0xFF9E93FF),
+    onPrimary = Color(0xFF1B1157),
+    primaryContainer = Color(0xFF352B8C),
+    onPrimaryContainer = Color(0xFFE4E1FF),
+    secondary = Color(0xFF45E3B8),
+    onSecondary = Color(0xFF00382C),
+    secondaryContainer = Color(0xFF075243),
+    onSecondaryContainer = Color(0xFFB9F5E4),
+    tertiary = Color(0xFFFFA6C4),
+    onTertiary = Color(0xFF5C0F2C),
+    tertiaryContainer = Color(0xFF7C2848),
+    onTertiaryContainer = Color(0xFFFFE0EA),
+    background = Color(0xFF0F0E1C),
+    onBackground = Color(0xFFEAE8FA),
+    surface = Color(0xFF1A1930),
+    onSurface = Color(0xFFEAE8FA),
+    surfaceVariant = Color(0xFF262541),
+    onSurfaceVariant = Color(0xFFB9B6D4),
+    outline = Color(0xFF4A4870),
+    outlineVariant = Color(0xFF32304F),
+    error = Color(0xFFFF9AA4),
+    onError = Color(0xFF5C0511),
 )
 
 /**

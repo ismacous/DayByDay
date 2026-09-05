@@ -121,6 +121,7 @@ fun CalendarScreen(
 
             Spacer(Modifier.height(20.dp))
 
+            Appear(index = 0) {
             TodayCard(
                 today = today,
                 entry = todayEntry,
@@ -139,9 +140,12 @@ fun CalendarScreen(
                 },
                 onOpenToday = { onDayClick(today) },
             )
+            }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
 
+            Appear(index = 1) {
+            SoftCard(padding = 14.dp) {
             MonthHeader(
                 month = month,
                 onPrevious = { onMonthChange(month.minusMonths(1)) },
@@ -161,10 +165,14 @@ fun CalendarScreen(
                     onDayClick = onDayClick,
                 )
             }
+            }
+            }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
 
-            SummaryCard(title = "Bilan du mois", summary = monthSummary)
+            Appear(index = 2) {
+                SummaryCard(title = "Bilan du mois", summary = monthSummary)
+            }
 
             if (month != YearMonth.from(today)) {
                 TextButton(
@@ -187,20 +195,28 @@ private fun TodayCard(
     onPickColor: (DayColor) -> Unit,
     onOpenToday: () -> Unit,
 ) {
-    SoftCard(onClick = onOpenToday, onClickLabel = "Ouvrir ma journée") {
-        SectionLabelText("Aujourd'hui")
+    // La carte du jour porte le degrade de la marque : c'est la premiere chose
+    // qu'on voit, et la seule qu'on vient faire la plupart du temps. Tout le
+    // reste de l'ecran est blanc pour qu'elle reste seule a briller.
+    HeroCard(onClick = onOpenToday, onClickLabel = "Ouvrir ma journée") {
+        Text(
+            text = "AUJOURD'HUI",
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(alpha = 0.75f),
+        )
         Spacer(Modifier.height(8.dp))
         Text(
             text = entry?.color?.label ?: "Comment s'est passée ta journée ?",
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.headlineSmall,
+            color = Color.White,
         )
         val todayTitle = entry?.title.orEmpty()
         if (todayTitle.isNotBlank()) {
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(4.dp))
             Text(
                 text = todayTitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color.White.copy(alpha = 0.85f),
             )
         }
 
@@ -228,11 +244,7 @@ private fun TodayCard(
                         .border(
                             BorderStroke(
                                 if (selected) 3.dp else 0.dp,
-                                if (selected) {
-                                    MaterialTheme.colorScheme.onBackground
-                                } else {
-                                    Color.Transparent
-                                },
+                                if (selected) Color.White else Color.Transparent,
                             ),
                             RoundedCornerShape(18.dp),
                         )
@@ -247,12 +259,12 @@ private fun TodayCard(
             }
         }
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(16.dp))
 
         Text(
             text = if (entry == null) "Écrire dans mon journal →" else "Ouvrir ma journée →",
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
+            color = Color.White,
         )
     }
 }

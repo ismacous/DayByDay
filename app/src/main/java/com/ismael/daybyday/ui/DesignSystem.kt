@@ -4,8 +4,15 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -24,12 +31,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -38,7 +52,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.ismael.daybyday.ui.theme.Brand
 import com.ismael.daybyday.ui.theme.Serif
+import kotlinx.coroutines.delay
 
 /**
  * Les briques visuelles communes a toute l'application.
@@ -150,11 +166,13 @@ fun SoftCard(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .scale(scale),
+            .scale(scale)
+            // Une ombre legere mais teintee : la carte flotte au-dessus du
+            // fond au lieu d'y etre collee.
+            .brandShadow(elevation = 10.dp, shape = MaterialTheme.shapes.large),
         shape = MaterialTheme.shapes.large,
         color = color,
         tonalElevation = 0.dp,
-        shadowElevation = if (color == MaterialTheme.colorScheme.surface) 1.dp else 0.dp,
         onClick = onClick ?: {},
         enabled = onClick != null,
         interactionSource = interaction,
@@ -237,31 +255,169 @@ fun SoftChip(
 }
 
 /**
- * Le fond de l'application : le creme du carnet, avec un halo de la couleur
- * principale en haut. Sans lui, un fond uni sur toute la hauteur donne
- * l'impression d'une feuille de calcul.
+ * Le fond de l'application.
+ *
+ * Pas un aplat : trois halos de couleur, tres doux, qui derivent lentement les
+ * uns par rapport aux autres. On ne les regarde pas — on les sent. C'est la
+ * difference entre une page qui attend et une page qui vit, et ca ne coute que
+ * trois cercles degrades par image.
+ *
+ * Les halos restent pales : le contenu doit rester la chose la plus lisible de
+ * l'ecran, et les quatre couleurs des journees les seules taches franches.
  */
 @Composable
 fun ScreenBackground(
     modifier: Modifier = Modifier,
     content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit,
 ) {
+    val base = MaterialTheme.colorScheme.background
+    val halos = listOf(
+        Brand.Primary.copy(alpha = 0.22f),
+        Brand.Accent.copy(alpha = 0.20f),
+        Brand.Playful.copy(alpha = 0.18f),
+    )
+
+    val drift = rememberInfiniteTransition(label = "halos")
+    val phase by drift.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(22_000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "derive",
+    )
+
+    Box(modifier = modifier) {
+        Canvas(modifier = Modifier.matchParentSize()) {
+            drawRect(base)
+
+            fun halo(color: Color, x: Float, y: Float, radius: Float) {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(color, Color.Transparent),
+                        center = Offset(x, y),
+                        radius = radius,
+                    ),
+                    radius = radius,
+                    center = Offset(x, y),
+                )
+            }
+
+            val w = size.width
+            val h = size.height
+            halo(halos[0], w * (0.18f + 0.10f * phase), h * 0.06f, w * 0.85f)
+            halo(halos[1], w * (0.95f - 0.12f * phase), h * (0.20f + 0.05f * phase), w * 0.70f)
+            halo(halos[2], w * (0.10f + 0.20f * phase), h * 0.42f, w * 0.60f)
+        }
+        content()
+    }
+}
+
+/**
+ * L'ombre de la marque : teintee de la couleur de l'application plutot que
+ * grise. Une ombre grise pose un objet sur une feuille ; une ombre coloree le
+ * fait flotter dans la lumiere de la page.
+ */
+fun Modifier.brandShadow(
+    elevation: Dp = 16.dp,
+    shape: androidx.compose.ui.graphics.Shape,
+    color: Color = Brand.Primary,
+): Modifier = shadow(
+    elevation = elevation,
+    shape = shape,
+    ambientColor = color.copy(alpha = 0.35f),
+    spotColor = color.copy(alpha = 0.45f),
+)
+
+/**
+ * La carte forte : celle qu'on voit en premier sur un ecran. Elle porte le
+ * degrade de la marque, une ombre de sa propre couleur, et un halo clair en
+ * haut a droite qui lui donne du volume.
+ */
+@Composable
+fun HeroCard(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    onClickLabel: String? = null,
+    colors: List<Color> = Brand.gradient,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && onClick != null) 0.975f else 1f,
+        animationSpec = tween(Motion.QUICK),
+        label = "pression",
+    )
+    val shape = MaterialTheme.shapes.extraLarge
+
     Box(
-        modifier = modifier.background(MaterialTheme.colorScheme.background),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(220.dp)
-                .background(
-                    androidx.compose.ui.graphics.Brush.verticalGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                            Color.Transparent,
-                        )
+        modifier = modifier
+            .fillMaxWidth()
+            .scale(scale)
+            .brandShadow(shape = shape, color = colors.first())
+            .clip(shape)
+            .background(Brush.linearGradient(colors))
+            .then(
+                if (onClick == null) {
+                    Modifier
+                } else {
+                    Modifier.clickable(
+                        interactionSource = interaction,
+                        indication = null,
+                        onClickLabel = onClickLabel,
+                        onClick = onClick,
                     )
+                }
+            ),
+    ) {
+        // Le reflet : un halo clair en haut a droite. Sans lui, un degrade
+        // reste une bande de couleur ; avec lui, la carte a un volume.
+        Canvas(modifier = Modifier.matchParentSize()) {
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color.White.copy(alpha = 0.22f), Color.Transparent),
+                    center = Offset(size.width * 0.85f, -size.height * 0.15f),
+                    radius = size.width * 0.75f,
                 ),
-        )
+                radius = size.width * 0.75f,
+                center = Offset(size.width * 0.85f, -size.height * 0.15f),
+            )
+        }
+        Column(modifier = Modifier.padding(22.dp), content = content)
+    }
+}
+
+/**
+ * Une entree en scene. Les cartes ne sont pas la d'un coup : elles montent et
+ * apparaissent, decalees les unes des autres. C'est ce qui donne l'impression
+ * que l'ecran se compose devant soi au lieu d'etre affiche.
+ */
+@Composable
+fun Appear(
+    index: Int = 0,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(index * 70L)
+        shown = true
+    }
+    val progress by animateFloatAsState(
+        targetValue = if (shown) 1f else 0f,
+        animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
+        label = "entree",
+    )
+
+    Box(
+        modifier = modifier
+            .graphicsLayer {
+                alpha = progress
+                translationY = (1f - progress) * 40f
+            },
+    ) {
         content()
     }
 }

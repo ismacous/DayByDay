@@ -247,7 +247,7 @@ private fun TodayCard(
                         .weight(1f)
                         .height(height)
                         .clip(RoundedCornerShape(18.dp))
-                        .background(dayColor.color)
+                        .background(Brush.linearGradient(dayColor.gradient))
                         .border(
                             BorderStroke(
                                 if (selected) 3.dp else 0.dp,

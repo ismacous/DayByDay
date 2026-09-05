@@ -1,5 +1,9 @@
 package com.ismael.daybyday.ui
 
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Color
+import com.ismael.daybyday.ui.theme.Brand
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -43,7 +47,6 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -116,38 +119,65 @@ fun MoneyScreen(onDayClick: (LocalDate) -> Unit) {
     val summary = Stats.summarizeMoney(monthEntries)
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Mon argent") }) },
+        containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snackbar) },
     ) { innerPadding ->
+        ScreenBackground(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .statusBarsPadding()
+                .padding(bottom = innerPadding.calculateBottomPadding())
                 .padding(horizontal = 16.dp),
         ) {
             item {
-                SectionCard {
-                    Text(
-                        "Ce qu'il te reste",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = formatMoney(balance),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (balance < 0) DayColor.RED.color else MaterialTheme.colorScheme.onSurface,
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedButton(
-                        onClick = { adjusting = true },
-                        modifier = Modifier.fillMaxWidth(),
+                Spacer(Modifier.height(14.dp))
+                ScreenTitle(text = "Mon", accent = "argent")
+                Spacer(Modifier.height(20.dp))
+            }
+
+            item {
+                // Le point chaud de l'ecran : ce qu'il reste, en grand, sur la
+                // carte en degrade. Un solde negatif passe au corail — c'est la
+                // seule information qui doit sauter aux yeux d'ici.
+                Appear(index = 0) {
+                    HeroCard(
+                        colors = if (balance < 0) {
+                            DayColor.RED.gradient
+                        } else {
+                            Brand.gradient
+                        },
                     ) {
-                        Text("Corriger mon solde")
+                        Text(
+                            "CE QU'IL TE RESTE",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.75f),
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text = formatMoney(balance),
+                            style = MaterialTheme.typography.displaySmall,
+                            color = Color.White,
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.22f))
+                                .clickable(onClickLabel = "Corriger mon solde") {
+                                    adjusting = true
+                                }
+                                .padding(horizontal = 18.dp, vertical = 10.dp),
+                        ) {
+                            Text(
+                                "Corriger mon solde",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = Color.White,
+                            )
+                        }
                     }
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(18.dp))
             }
 
             item {
@@ -247,6 +277,7 @@ fun MoneyScreen(onDayClick: (LocalDate) -> Unit) {
             }
 
             item { Spacer(Modifier.height(32.dp)) }
+        }
         }
     }
 

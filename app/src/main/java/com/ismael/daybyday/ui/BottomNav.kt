@@ -13,7 +13,6 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -40,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -181,40 +181,41 @@ private fun TodayButton(onClick: () -> Unit) {
         label = "pression",
     )
 
-    // La respiration : un anneau qui s'ecarte du bouton et s'efface, en boucle.
-    // La version precedente ne faisait varier que l'ombre — invisible. Un halo
-    // qui grandit, lui, se voit du coin de l'oeil sans jamais clignoter.
-    val breath = rememberInfiniteTransition(label = "souffle")
-    val pulse by breath.animateFloat(
+    // La vie du bouton, deuxieme essai. Un anneau qui pulse ressemblait a une
+    // notification : ca dit "quelque chose t'attend", alors qu'ici rien ne
+    // t'attend. Ce qui tourne lentement, en revanche, dit simplement que
+    // l'objet est vivant. Le degrade fait donc le tour du bouton, sans jamais
+    // rien annoncer.
+    val life = rememberInfiniteTransition(label = "vie")
+    val angle by life.animateFloat(
         initialValue = 0f,
-        targetValue = 1f,
+        targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2400, easing = LinearEasing),
+            animation = tween(6000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
-        label = "onde",
+        label = "rotation",
+    )
+    val radians = Math.toRadians(angle.toDouble())
+    val sweep = Brush.linearGradient(
+        colors = Brand.gradient + Brand.Primary,
+        start = Offset(
+            0.5f + 0.5f * kotlin.math.cos(radians).toFloat(),
+            0.5f + 0.5f * kotlin.math.sin(radians).toFloat(),
+        ) * 140f,
+        end = Offset(
+            0.5f - 0.5f * kotlin.math.cos(radians).toFloat(),
+            0.5f - 0.5f * kotlin.math.sin(radians).toFloat(),
+        ) * 140f,
     )
 
     Box(
-        modifier = Modifier.size(78.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Canvas(modifier = Modifier.matchParentSize()) {
-            val radius = size.minDimension / 2f
-            val ring = radius * (0.68f + 0.32f * pulse)
-            drawCircle(
-                color = Brand.Primary.copy(alpha = 0.30f * (1f - pulse)),
-                radius = ring,
-            )
-        }
-
-    Box(
         modifier = Modifier
-            .size(56.dp)
+            .size(58.dp)
             .scale(scale)
-            .brandShadow(elevation = 16.dp, shape = CircleShape)
+            .brandShadow(elevation = 18.dp, shape = CircleShape)
             .clip(CircleShape)
-            .background(Brush.linearGradient(Brand.gradient))
+            .background(sweep)
             .clickable(
                 interactionSource = interaction,
                 indication = null,
@@ -229,7 +230,6 @@ private fun TodayButton(onClick: () -> Unit) {
             tint = Color.White,
             modifier = Modifier.size(28.dp),
         )
-    }
     }
 }
 

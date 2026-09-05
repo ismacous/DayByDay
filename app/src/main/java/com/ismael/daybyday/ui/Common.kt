@@ -31,7 +31,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ismael.daybyday.data.DayColor
@@ -100,13 +102,18 @@ fun readableOn(background: Color): Color {
 
 @Composable
 fun AverageChip(average: Double?, modifier: Modifier = Modifier) {
-    val background = average?.let { DayColor.fromAverage(it) } ?: MaterialTheme.colorScheme.surfaceVariant
-    val textColor = if (average == null) MaterialTheme.colorScheme.onSurfaceVariant else readableOn(background)
+    val base = average?.let { DayColor.fromAverage(it) }
+    val fill: Brush = if (average != null) {
+        Brush.linearGradient(DayColor.gradientForAverage(average))
+    } else {
+        SolidColor(MaterialTheme.colorScheme.surfaceVariant)
+    }
+    val textColor = if (base == null) MaterialTheme.colorScheme.onSurfaceVariant else readableOn(base)
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(background)
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+            .clip(CircleShape)
+            .background(fill)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
         Text(
             text = formatAverage(average),

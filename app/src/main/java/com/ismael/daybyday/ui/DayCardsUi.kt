@@ -24,8 +24,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -62,36 +61,56 @@ fun DayCardShell(
     card: DayCard,
     collapsed: Boolean,
     onToggleCollapse: () -> Unit,
+    /**
+     * Le degrade de la carte, quand elle doit se detacher des autres. Une
+     * seule carte par ecran le porte : celle de l'humeur, qui est la raison
+     * d'etre de la page. Les autres restent blanches autour d'elle — c'est ce
+     * contraste qui donne une hierarchie, pas la taille des titres.
+     */
+    accent: List<Color>? = null,
     content: @Composable () -> Unit,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable(onClick = onToggleCollapse),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(card.title, style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.width(8.dp))
-                Spacer(Modifier.weight(1f))
-                Icon(
-                    imageVector = if (collapsed) {
-                        Icons.Default.KeyboardArrowDown
-                    } else {
-                        Icons.Default.KeyboardArrowUp
-                    },
-                    contentDescription = if (collapsed) "Déplier" else "Replier",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+    val onAccent = accent?.let { readableOn(it.first()) }
+    val title = @Composable {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .clickable(onClick = onToggleCollapse),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                card.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = onAccent ?: MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.weight(1f))
+            Icon(
+                imageVector = if (collapsed) {
+                    Icons.Default.KeyboardArrowDown
+                } else {
+                    Icons.Default.KeyboardArrowUp
+                },
+                contentDescription = if (collapsed) "Déplier" else "Replier",
+                tint = onAccent ?: MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+
+    if (accent != null) {
+        HeroCard(colors = accent) {
+            title()
             if (!collapsed) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(14.dp))
+                content()
+            }
+        }
+    } else {
+        SoftCard {
+            title()
+            if (!collapsed) {
+                Spacer(Modifier.height(14.dp))
                 content()
             }
         }

@@ -1,5 +1,10 @@
 package com.ismael.daybyday.ui
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -85,7 +90,24 @@ fun AppNavigation() {
                     bottom = if (showTabs) scaffoldPadding.calculateBottomPadding() else 0.dp
                 ),
         ) {
-            NavHost(navController = navController, startDestination = "calendar") {
+            // Les ecrans ne se remplacent plus d'un coup : celui qui arrive
+            // monte en apparaissant, celui qui part s'efface. Un basculement
+            // brut donne l'impression de changer d'application ; un fondu
+            // glisse donne celle de tourner une page.
+            NavHost(
+                navController = navController,
+                startDestination = "calendar",
+                enterTransition = {
+                    fadeIn(tween(Motion.NORMAL)) +
+                        slideInVertically(tween(Motion.NORMAL)) { it / 14 }
+                },
+                exitTransition = { fadeOut(tween(Motion.QUICK)) },
+                popEnterTransition = { fadeIn(tween(Motion.NORMAL)) },
+                popExitTransition = {
+                    fadeOut(tween(Motion.QUICK)) +
+                        slideOutVertically(tween(Motion.NORMAL)) { it / 14 }
+                },
+            ) {
 
                 composable("calendar") {
                     CalendarScreen(

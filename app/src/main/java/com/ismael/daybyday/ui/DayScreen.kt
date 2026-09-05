@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,10 +44,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -61,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -86,6 +86,7 @@ import com.ismael.daybyday.data.SportLevel
 import com.ismael.daybyday.data.Treatment
 import com.ismael.daybyday.data.TagCategory
 import com.ismael.daybyday.dayByDayApp
+import com.ismael.daybyday.ui.theme.Brand
 import com.ismael.daybyday.health.HealthConnectSource
 import com.ismael.daybyday.health.ScreenTimeSource
 import kotlinx.coroutines.Dispatchers
@@ -336,47 +337,50 @@ fun DayScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Ma journée") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
-                    }
-                },
-            )
-        },
-    ) { innerPadding ->
+    ScreenBackground(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .statusBarsPadding()
                 // imePadding avant verticalScroll : la zone visible se reduit
                 // quand le clavier s'ouvre, donc le curseur reste au-dessus.
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { epochDay -= 1 }) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                        contentDescription = "Jour précédent",
+            Spacer(Modifier.height(10.dp))
+
+            ScreenTitle(
+                text = "Ma",
+                accent = "journée",
+                trailing = {
+                    RoundIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        label = "Retour",
+                        onClick = onBack,
                     )
-                }
+                },
+            )
+
+            Spacer(Modifier.height(14.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RoundIconButton(
+                    icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                    label = "Jour précédent",
+                    onClick = { epochDay -= 1 },
+                )
                 Text(
                     text = Dates.dayLong(date),
                     style = MaterialTheme.typography.titleMedium,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.weight(1f),
                 )
-                IconButton(onClick = { epochDay += 1 }) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "Jour suivant",
-                    )
-                }
+                RoundIconButton(
+                    icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    label = "Jour suivant",
+                    onClick = { epochDay += 1 },
+                )
             }
 
             if (isBirthday) {
@@ -405,6 +409,15 @@ fun DayScreen(
                 DayCardShell(
                     card = card,
                     collapsed = card in collapsedCards,
+                    // Une seule carte porte la couleur : celle de l'humeur, qui
+                    // est la raison d'etre de la page. Elle prend la teinte du
+                    // jour choisi, ou celle de l'application tant qu'on n'a
+                    // rien choisi. Les autres restent blanches autour.
+                    accent = if (card == DayCard.MOOD) {
+                        DayColor.fromKey(colorKey)?.gradient ?: Brand.softGradient
+                    } else {
+                        null
+                    },
                     onToggleCollapse = {
                         val current = app.prefs.collapsedDayCards
                         app.prefs.collapsedDayCards =
@@ -972,18 +985,20 @@ private fun PartRow(part: DayPart, selectedKey: Int?, onPick: (Int?) -> Unit) {
                     modifier = Modifier
                         .weight(1f)
                         .height(38.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(dayColor.color)
+                        .clip(RoundedCornerShape(14.dp))
+                        // Un degrade, pas un aplat : chaque couleur de journee
+                        // a le meme relief que le reste de l'application.
+                        .background(Brush.linearGradient(dayColor.gradient))
                         .border(
                             BorderStroke(
-                                if (selected) 3.dp else 1.dp,
+                                if (selected) 3.dp else 0.dp,
                                 if (selected) {
-                                    MaterialTheme.colorScheme.primary
+                                    MaterialTheme.colorScheme.onBackground
                                 } else {
-                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                                    Color.Transparent
                                 },
                             ),
-                            RoundedCornerShape(12.dp),
+                            RoundedCornerShape(14.dp),
                         )
                         .clickable { onPick(if (selected) null else dayColor.key) }
                         .testTag("part-${part.name}-${dayColor.name}"),
@@ -1012,18 +1027,15 @@ private fun ColorChoice(
     Box(
         modifier = modifier
             .aspectRatio(1f)
-            .clip(RoundedCornerShape(18.dp))
-            .background(dayColor.color)
+            .brandShadow(elevation = 8.dp, shape = RoundedCornerShape(20.dp), color = dayColor.color)
+            .clip(RoundedCornerShape(20.dp))
+            .background(Brush.linearGradient(dayColor.gradient))
             .border(
                 BorderStroke(
-                    if (selected) 3.dp else 1.dp,
-                    if (selected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                    },
+                    if (selected) 3.dp else 0.dp,
+                    if (selected) MaterialTheme.colorScheme.onBackground else Color.Transparent,
                 ),
-                RoundedCornerShape(18.dp),
+                RoundedCornerShape(20.dp),
             )
             .clickable(onClick = onClick)
             .testTag("color-${dayColor.name}"),

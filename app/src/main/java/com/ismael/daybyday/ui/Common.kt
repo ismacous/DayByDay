@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -31,9 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ismael.daybyday.data.DayColor
@@ -94,20 +91,58 @@ fun formatSignedMoney(cents: Long): String {
     return sign + formatMoney(kotlin.math.abs(cents))
 }
 
+/** L'encre sombre de l'application : jamais un noir pur, qui vibre sur couleur. */
+val InkDark = Color(0xFF101318)
+
 /** Noir ou blanc selon la luminosite du fond, pour rester lisible. */
 fun readableOn(background: Color): Color {
     val luminance = 0.299f * background.red + 0.587f * background.green + 0.114f * background.blue
-    return if (luminance > 0.6f) Color(0xFF101318) else Color.White
+    return if (luminance > 0.6f) InkDark else Color.White
+}
+
+/**
+ * L'encre d'un **degrade**, et non d'une couleur.
+ *
+ * Choisir d'apres la seule couleur de depart se paie tout de suite : un vert
+ * moyen appelle du blanc, mais le meme degrade finit dans un vert clair ou le
+ * blanc disparait. On essaie donc les deux encres sur **toutes** les couleurs du
+ * degrade et on garde celle dont le pire contraste est le meilleur. Le calcul
+ * est celui du contraste reel (WCAG), pas une moyenne des canaux : c'est le vert
+ * qui trompe le plus l'oeil, et c'est justement la couleur des bonnes journees.
+ */
+fun readableOnAll(colors: List<Color>): Color {
+    if (colors.isEmpty()) return Color.White
+    val dark = colors.minOf { contrastRatio(InkDark, it) }
+    val light = colors.minOf { contrastRatio(Color.White, it) }
+    return if (dark >= light) InkDark else Color.White
+}
+
+private fun contrastRatio(a: Color, b: Color): Float {
+    val la = relativeLuminance(a)
+    val lb = relativeLuminance(b)
+    val high = kotlin.math.max(la, lb)
+    val low = kotlin.math.min(la, lb)
+    return (high + 0.05f) / (low + 0.05f)
+}
+
+private fun relativeLuminance(color: Color): Float {
+    fun channel(value: Float): Float =
+        if (value <= 0.03928f) value / 12.92f
+        else Math.pow((value + 0.055f).toDouble() / 1.055, 2.4).toFloat()
+    return 0.2126f * channel(color.red) +
+        0.7152f * channel(color.green) +
+        0.0722f * channel(color.blue)
 }
 
 @Composable
 fun AverageChip(average: Double?, modifier: Modifier = Modifier) {
+    // Pas de degrade ici : sur une pastille de deux centimetres, un degrade ne
+    // se lit pas comme une matiere mais comme une autre couleur — le coin clair
+    // d'un vert moyen passait pour un vert eclatant, et la semaine avait l'air
+    // bien meilleure qu'elle ne l'etait. Les degrades restent aux grandes
+    // surfaces ; ici, un aplat qui dit juste la bonne teinte.
     val base = average?.let { DayColor.fromAverage(it) }
-    val fill: Brush = if (average != null) {
-        Brush.linearGradient(DayColor.gradientForAverage(average))
-    } else {
-        SolidColor(MaterialTheme.colorScheme.surfaceVariant)
-    }
+    val fill = base ?: MaterialTheme.colorScheme.surfaceVariant
     val textColor = if (base == null) MaterialTheme.colorScheme.onSurfaceVariant else readableOn(base)
     Box(
         modifier = modifier
@@ -179,15 +214,17 @@ fun ChoiceChip(
 fun SectionCard(
     modifier: Modifier = Modifier,
     title: String? = null,
+    /**
+     * Le rang de la carte dans l'ecran. Quand il est donne, la carte arrive en
+     * glissant, un peu apres la precedente : c'est ce decalage qui fait qu'un
+     * ecran s'ouvre au lieu d'apparaitre d'un bloc. `null` pour les cartes
+     * d'une liste, ou l'effet se repeterait a chaque defilement.
+     */
+    index: Int? = null,
     content: @Composable () -> Unit,
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 1.dp,
-    ) {
-        Column(modifier = Modifier.padding(18.dp)) {
+    val card = @Composable {
+        SoftCard(modifier = modifier) {
             if (title != null) {
                 Text(title, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(12.dp))
@@ -195,6 +232,7 @@ fun SectionCard(
             content()
         }
     }
+    if (index == null) card() else Appear(index = index) { card() }
 }
 
 @Composable

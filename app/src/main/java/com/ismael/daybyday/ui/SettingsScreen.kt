@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -41,7 +42,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -101,6 +102,8 @@ fun SettingsScreen() {
     var reminderHour by remember { mutableIntStateOf(prefs.reminderHour) }
     var reminderMinute by remember { mutableIntStateOf(prefs.reminderMinute) }
 
+    var lastReminder by remember { mutableLongStateOf(prefs.lastReminderAt) }
+
     var autoBackupEnabled by remember { mutableStateOf(prefs.autoBackupEnabled) }
     var autoBackupHour by remember { mutableIntStateOf(prefs.autoBackupHour) }
     var autoBackupMinute by remember { mutableIntStateOf(prefs.autoBackupMinute) }
@@ -119,6 +122,7 @@ fun SettingsScreen() {
     var screenGranted by remember { mutableStateOf(false) }
     var permissionsChecked by remember { mutableIntStateOf(0) }
     var notificationsGranted by remember { mutableStateOf(true) }
+    var batteryUnrestricted by remember { mutableStateOf(true) }
     var busy by remember { mutableStateOf(false) }
     var contents by remember { mutableStateOf<DatabaseContents?>(null) }
     var exportYear by remember { mutableIntStateOf(LocalDate.now().year) }
@@ -140,6 +144,8 @@ fun SettingsScreen() {
         stepsGranted = HealthConnectSource.hasPermission(context)
         screenGranted = ScreenTimeSource.hasPermission(context)
         notificationsGranted = notificationsAllowed(context)
+        batteryUnrestricted = isBatteryUnrestricted(context)
+        lastReminder = prefs.lastReminderAt
     }
 
     // Les autorisations se changent dans les reglages d'Android, hors de
@@ -246,19 +252,58 @@ fun SettingsScreen() {
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Réglages") }) },
+        containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snackbar) },
     ) { innerPadding ->
+        ScreenBackground(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .statusBarsPadding()
+                .padding(bottom = innerPadding.calculateBottomPadding())
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
+            Spacer(Modifier.height(12.dp))
+            ScreenTitle(text = "Mes", accent = "réglages")
+            Spacer(Modifier.height(20.dp))
+
+            // La carte forte de l'ecran, et elle ne dit qu'une chose : rien ne
+            // sort du telephone. C'est la promesse de l'application, elle merite
+            // mieux qu'une ligne perdue dans « A propos ».
+            Appear(index = 0) {
+                HeroCard {
+                    // Blanc, comme sur les autres cartes en degrade de
+                    // l'application : c'est la meme carte forte, elle doit se
+                    // lire pareil d'un ecran a l'autre.
+                    val ink = Color.White
+                    Text(
+                        text = if (firstName.isBlank()) "Tout reste ici" else "$firstName, tout reste ici",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = ink,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Tes journées, tes photos et tes notes ne quittent jamais ce " +
+                            "téléphone. L'application n'a même pas le droit d'aller sur " +
+                            "Internet : ce n'est pas un réglage, c'est impossible.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ink.copy(alpha = 0.86f),
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Row {
+                        HeroPill("🔒 Aucun accès réseau", ink)
+                        Spacer(Modifier.width(8.dp))
+                        HeroPill("v${appVersion.name}", ink)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
             // --- Profil ---------------------------------------------------
-            SectionCard(title = "Toi") {
+            SectionCard(title = "Toi", index = 1) {
                 OutlinedTextField(
                     value = firstName,
                     onValueChange = {
@@ -312,7 +357,7 @@ fun SettingsScreen() {
             Spacer(Modifier.height(16.dp))
 
             // --- Autorisations --------------------------------------------
-            SectionCard(title = "Autorisations") {
+            SectionCard(title = "Autorisations", index = 2) {
                 Text(
                     "Ce que l'application a le droit de lire sur le téléphone. " +
                         "Tout est lu en local et reste dedans : sans permission " +
@@ -375,7 +420,7 @@ fun SettingsScreen() {
             Spacer(Modifier.height(16.dp))
 
             // --- Rappel ---------------------------------------------------
-            SectionCard(title = "Rappel quotidien") {
+            SectionCard(title = "Rappel quotidien", index = 3) {
                 SettingSwitchRow(
                     title = "Me rappeler de noter ma journée",
                     subtitle = "Une notification, seulement si la journée n'est pas encore notée.",
@@ -407,12 +452,56 @@ fun SettingsScreen() {
                         Text(formatTime(reminderHour, reminderMinute))
                     }
                 }
+
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = if (lastReminder == 0L) {
+                        "Aucun rappel envoyé pour l'instant."
+                    } else {
+                        "Dernier rappel : ${formatDateTime(lastReminder)}"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = {
+                        DailyScheduler.sendTestReminder(context)
+                        scope.launch {
+                            snackbar.showSnackbar(
+                                "Rappel d'essai envoyé. S'il n'arrive pas, c'est le " +
+                                    "téléphone qui le bloque."
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Envoyer un rappel d'essai")
+                }
+
+                Spacer(Modifier.height(10.dp))
+                // Samsung met les applications en veille au bout de quelques
+                // jours sans usage, et une tache de fond endormie ne sonne
+                // jamais. C'est la premiere chose a verifier quand le rappel
+                // n'arrive pas, et ca ne se regle que dans Android.
+                PermissionRow(
+                    emoji = "🔋",
+                    title = "Mise en veille par Android",
+                    status = if (batteryUnrestricted) {
+                        "L'application peut se réveiller le soir."
+                    } else {
+                        "Samsung peut l'endormir : mets-la en « Sans restriction »."
+                    },
+                    granted = batteryUnrestricted,
+                    onClick = { openSystemScreen(context, batterySettingsIntent(context)) },
+                )
             }
 
             Spacer(Modifier.height(16.dp))
 
             // --- Sauvegarde automatique -----------------------------------
-            SectionCard(title = "Sauvegarde automatique") {
+            SectionCard(title = "Sauvegarde automatique", index = 4) {
                 Text(
                     "Une sauvegarde par jour dans le dossier de ton choix. Le fichier " +
                         "précédent est remplacé, donc ça ne prend pas de place en plus.",
@@ -503,7 +592,7 @@ fun SettingsScreen() {
             Spacer(Modifier.height(16.dp))
 
             // --- Sauvegarde manuelle --------------------------------------
-            SectionCard(title = "Sauvegarde manuelle") {
+            SectionCard(title = "Sauvegarde manuelle", index = 5) {
                 Button(
                     onClick = { exportBackup.launch("DayByDay-${LocalDate.now()}.zip") },
                     enabled = !busy,
@@ -536,7 +625,7 @@ fun SettingsScreen() {
             Spacer(Modifier.height(16.dp))
 
             // --- Resume annuel --------------------------------------------
-            SectionCard(title = "Résumé annuel") {
+            SectionCard(title = "Résumé annuel", index = 6) {
                 Text(
                     "Exporte une année entière en texte (titres, notes, détails, " +
                         "statistiques) pour préparer ta vidéo de fin d'année.",
@@ -561,7 +650,7 @@ fun SettingsScreen() {
             Spacer(Modifier.height(16.dp))
 
             // --- Confidentialite ------------------------------------------
-            SectionCard(title = "Confidentialité") {
+            SectionCard(title = "Confidentialité", index = 7) {
                 SettingSwitchRow(
                     title = "Verrouiller l'application",
                     subtitle = if (hasPin) {
@@ -632,7 +721,7 @@ fun SettingsScreen() {
             Spacer(Modifier.height(16.dp))
 
             // --- A propos -------------------------------------------------
-            SectionCard(title = "À propos") {
+            SectionCard(title = "À propos", index = 8) {
                 InfoRow("Version", "${appVersion.name} (build ${appVersion.code})")
                 InfoRow("Terminée le", formatDateTime(BuildConfig.BUILD_TIME))
                 InfoRow("Identifiant", appVersion.packageName)
@@ -661,7 +750,7 @@ fun SettingsScreen() {
             Spacer(Modifier.height(16.dp))
 
             // --- Effacer --------------------------------------------------
-            SectionCard(title = "Effacer mes données") {
+            SectionCard(title = "Effacer mes données", index = 9) {
                 Text(
                     "Supprime définitivement toutes les journées, notes, photos, " +
                         "vidéos et mouvements d'argent. C'est irréversible : fais " +
@@ -679,7 +768,8 @@ fun SettingsScreen() {
                 }
             }
 
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(48.dp))
+        }
         }
     }
 
@@ -807,7 +897,10 @@ private fun PermissionRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
+            // Une carte est blanche : une ligne blanche dessus ne se voit pas.
+            // Le gris tres pale du theme suffit a la detacher sans faire un
+            // deuxieme fond.
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
             .clickable(enabled = available, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -835,6 +928,20 @@ private fun PermissionRow(
             )
         }
     }
+}
+
+/** Une pastille posee sur la carte en degrade : le blanc translucide de l'encre. */
+@Composable
+private fun HeroPill(label: String, ink: Color) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelMedium,
+        color = ink,
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(ink.copy(alpha = 0.18f))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    )
 }
 
 @Composable
@@ -973,6 +1080,26 @@ data class AppVersion(val name: String, val code: Long, val packageName: String)
 
 private fun notificationsAllowed(context: Context): Boolean =
     NotificationManagerCompat.from(context).areNotificationsEnabled()
+
+/**
+ * Android laisse-t-il l'application se reveiller ? Sur Samsung, une application
+ * « optimisee » est endormie apres quelques jours, et ses taches de fond ne
+ * s'executent plus : c'est la cause la plus frequente d'un rappel qui n'arrive
+ * jamais, et rien dans le code de l'application ne peut la contourner.
+ */
+private fun isBatteryUnrestricted(context: Context): Boolean = runCatching {
+    val manager = context.getSystemService(android.os.PowerManager::class.java)
+    manager?.isIgnoringBatteryOptimizations(context.packageName) ?: true
+}.getOrDefault(true)
+
+/**
+ * La liste des applications et de leur optimisation de batterie. On ouvre la
+ * liste plutot que la demande directe : celle-ci exigerait une permission de
+ * plus dans le manifeste, et le manifeste de cette application se garde court.
+ */
+private fun batterySettingsIntent(context: Context): Intent =
+    Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
 private fun notificationSettingsIntent(context: Context): Intent =
     Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)

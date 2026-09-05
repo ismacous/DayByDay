@@ -32,6 +32,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -70,7 +71,10 @@ fun DayCardShell(
     accent: List<Color>? = null,
     content: @Composable () -> Unit,
 ) {
-    val onAccent = accent?.let { readableOn(it.first()) }
+    // L'encre se choisit sur **tout** le degrade, pas sur sa premiere couleur :
+    // le vert des bonnes journees part d'un vert moyen et finit clair, et une
+    // encre choisie sur le depart s'efface a l'arrivee.
+    val onAccent = accent?.let { readableOnAll(it) }
     val title = @Composable {
         Row(
             modifier = Modifier
@@ -98,20 +102,25 @@ fun DayCardShell(
         }
     }
 
-    if (accent != null) {
-        HeroCard(colors = accent) {
-            title()
-            if (!collapsed) {
-                Spacer(Modifier.height(14.dp))
-                content()
+    // L'encre est annoncee une fois pour toute la carte : sans ca, seul le titre
+    // etait lisible et le reste du contenu gardait les couleurs du theme, gris
+    // sur vert ou bleu nuit sur indigo.
+    CompositionLocalProvider(LocalCardInk provides onAccent) {
+        if (accent != null) {
+            HeroCard(colors = accent) {
+                title()
+                if (!collapsed) {
+                    Spacer(Modifier.height(14.dp))
+                    content()
+                }
             }
-        }
-    } else {
-        SoftCard {
-            title()
-            if (!collapsed) {
-                Spacer(Modifier.height(14.dp))
-                content()
+        } else {
+            SoftCard {
+                title()
+                if (!collapsed) {
+                    Spacer(Modifier.height(14.dp))
+                    content()
+                }
             }
         }
     }

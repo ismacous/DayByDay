@@ -32,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -76,6 +77,34 @@ import kotlinx.coroutines.delay
  *    toujours les memes durees, pour que l'application ait un rythme et pas
  *    une collection d'effets.
  */
+
+/**
+ * L'encre d'une carte coloree.
+ *
+ * Une carte a fond de couleur ne peut pas laisser son contenu se peindre avec
+ * les couleurs du theme : le gris-violet des textes secondaires devient illisible
+ * des qu'il tombe sur un vert ou un orange, et le bleu nuit disparait sur une
+ * journee tres noire. Plutot que de passer une couleur a chaque ligne de texte,
+ * la carte annonce son encre ici et tout ce qu'elle contient la lit.
+ *
+ * Vaut `null` sur une carte blanche : on retombe alors sur le theme, ce qui est
+ * exactement ce qu'il faut.
+ */
+val LocalCardInk = compositionLocalOf<Color?> { null }
+
+/** L'encre principale : titres, valeurs, tout ce qui doit se lire d'un coup. */
+@Composable
+fun cardInk(): Color = LocalCardInk.current ?: MaterialTheme.colorScheme.onSurface
+
+/** L'encre secondaire : explications, libelles. Jamais un gris, toujours l'encre attenuee. */
+@Composable
+fun cardInkSoft(): Color =
+    LocalCardInk.current?.copy(alpha = 0.78f) ?: MaterialTheme.colorScheme.onSurfaceVariant
+
+/** Un trait ou une bordure sur la carte : la meme encre, presque effacee. */
+@Composable
+fun cardInkFaint(): Color =
+    LocalCardInk.current?.copy(alpha = 0.22f) ?: MaterialTheme.colorScheme.outlineVariant
 
 /** Les durees. Une seule serie, partout : c'est ce qui fait un rythme. */
 object Motion {

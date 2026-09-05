@@ -8,11 +8,6 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -181,32 +176,15 @@ private fun TodayButton(onClick: () -> Unit) {
         label = "pression",
     )
 
-    // La vie du bouton, deuxieme essai. Un anneau qui pulse ressemblait a une
-    // notification : ca dit "quelque chose t'attend", alors qu'ici rien ne
-    // t'attend. Ce qui tourne lentement, en revanche, dit simplement que
-    // l'objet est vivant. Le degrade fait donc le tour du bouton, sans jamais
-    // rien annoncer.
-    val life = rememberInfiniteTransition(label = "vie")
-    val angle by life.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(6000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "rotation",
-    )
-    val radians = Math.toRadians(angle.toDouble())
+    // Pas d'animation de fond ici. Un anneau qui pulse ressemblait a une
+    // notification, un degrade qui tourne attirait l'oeil en permanence : ce
+    // bouton n'a rien a annoncer, il doit juste etre le plus evident de la
+    // barre. Un degrade fixe, en diagonale, y suffit — c'est le degrade de
+    // l'application, et il reste le seul de la barre.
     val sweep = Brush.linearGradient(
-        colors = Brand.gradient + Brand.Primary,
-        start = Offset(
-            0.5f + 0.5f * kotlin.math.cos(radians).toFloat(),
-            0.5f + 0.5f * kotlin.math.sin(radians).toFloat(),
-        ) * 140f,
-        end = Offset(
-            0.5f - 0.5f * kotlin.math.cos(radians).toFloat(),
-            0.5f - 0.5f * kotlin.math.sin(radians).toFloat(),
-        ) * 140f,
+        colors = Brand.gradient,
+        start = Offset(0f, 0f),
+        end = Offset(140f, 140f),
     )
 
     Box(

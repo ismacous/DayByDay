@@ -1,20 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Quatre cases : un mois en miniature.
+
+    Trois portent les couleurs des journees — le vert, l'orange, le corail — et
+    la quatrieme est blanche : la journee pas encore notee, c'est-a-dire
+    exactement ce que l'application vient demander. Le quatrieme etat, la
+    journee tres noire, est l'indigo profond du fond : la palette est complete
+    sans ajouter une case sombre qui ferait un trou dans l'icone.
+
+    Tout tient dans le cercle de securite des icones adaptatives (72 dp sur
+    108) : les coins de la grille sont a 34,6 du centre, sous les 36 permis,
+    donc rien n'est rogne, quelle que soit la forme du masque du telephone.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Quatre tuiles : les quatre couleurs d'une journee. -->
+
     <path
-        android:fillColor="#3FBF6A"
-        android:pathData="M34,27 h10 a7,7 0 0 1 7,7 v10 a7,7 0 0 1 -7,7 h-10 a7,7 0 0 1 -7,-7 v-10 a7,7 0 0 1 7,-7 z" />
+        android:fillColor="#15C48E"
+        android:pathData="M36.5,29.5 h7 a7,7 0 0 1 7,7 v7 a7,7 0 0 1 -7,7 h-7 a7,7 0 0 1 -7,-7 v-7 a7,7 0 0 1 7,-7 z" />
     <path
-        android:fillColor="#F2A93B"
-        android:pathData="M64,27 h10 a7,7 0 0 1 7,7 v10 a7,7 0 0 1 -7,7 h-10 a7,7 0 0 1 -7,-7 v-10 a7,7 0 0 1 7,-7 z" />
+        android:fillColor="#FFA92E"
+        android:pathData="M64.5,29.5 h7 a7,7 0 0 1 7,7 v7 a7,7 0 0 1 -7,7 h-7 a7,7 0 0 1 -7,-7 v-7 a7,7 0 0 1 7,-7 z" />
     <path
-        android:fillColor="#E1483F"
-        android:pathData="M34,57 h10 a7,7 0 0 1 7,7 v10 a7,7 0 0 1 -7,7 h-10 a7,7 0 0 1 -7,-7 v-10 a7,7 0 0 1 7,-7 z" />
+        android:fillColor="#FF5D6E"
+        android:pathData="M36.5,57.5 h7 a7,7 0 0 1 7,7 v7 a7,7 0 0 1 -7,7 h-7 a7,7 0 0 1 -7,-7 v-7 a7,7 0 0 1 7,-7 z" />
     <path
-        android:fillColor="#15171D"
-        android:pathData="M64,57 h10 a7,7 0 0 1 7,7 v10 a7,7 0 0 1 -7,7 h-10 a7,7 0 0 1 -7,-7 v-10 a7,7 0 0 1 7,-7 z" />
+        android:fillColor="#FFFFFF"
+        android:pathData="M64.5,57.5 h7 a7,7 0 0 1 7,7 v7 a7,7 0 0 1 -7,7 h-7 a7,7 0 0 1 -7,-7 v-7 a7,7 0 0 1 7,-7 z" />
 </vector>

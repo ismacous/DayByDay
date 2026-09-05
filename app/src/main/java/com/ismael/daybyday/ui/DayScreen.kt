@@ -86,7 +86,6 @@ import com.ismael.daybyday.data.SportLevel
 import com.ismael.daybyday.data.Treatment
 import com.ismael.daybyday.data.TagCategory
 import com.ismael.daybyday.dayByDayApp
-import com.ismael.daybyday.ui.theme.Brand
 import com.ismael.daybyday.health.HealthConnectSource
 import com.ismael.daybyday.health.ScreenTimeSource
 import kotlinx.coroutines.Dispatchers
@@ -413,8 +412,13 @@ fun DayScreen(
                     // est la raison d'etre de la page. Elle prend la teinte du
                     // jour choisi, ou celle de l'application tant qu'on n'a
                     // rien choisi. Les autres restent blanches autour.
+                    // La carte de l'humeur s'allume quand la journee a une
+                    // couleur, et reste blanche tant qu'il n'y en a pas. Le
+                    // degrade de l'application faisait joli mais annoncait une
+                    // couleur avant qu'elle soit choisie, et c'est justement ce
+                    // qu'on vient faire ici.
                     accent = if (card == DayCard.MOOD) {
-                        DayColor.fromKey(colorKey)?.gradient ?: Brand.softGradient
+                        DayColor.fromKey(colorKey)?.gradient
                     } else {
                         null
                     },
@@ -452,6 +456,7 @@ fun DayScreen(
                             Text(
                                 text = DayColor.fromKey(colorKey)?.label ?: "Aucune couleur pour l'instant",
                                 style = MaterialTheme.typography.bodyLarge,
+                                color = cardInk(),
                             )
                             if (parts.isNotEmpty()) {
                                 Text(
@@ -461,20 +466,24 @@ fun DayScreen(
                                         "Calculée à partir de tes moments."
                                     },
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = cardInkSoft(),
                                 )
                             }
 
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 16.dp),
+                                color = cardInkFaint(),
+                            )
 
                             Text(
                                 "Moment par moment",
                                 style = MaterialTheme.typography.titleMedium,
+                                color = cardInk(),
                             )
                             Text(
                                 "Ton humeur bouge dans la journée : la couleur du jour se calcule à partir d'ici.",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = cardInkSoft(),
                             )
                             Spacer(Modifier.height(12.dp))
                             DayPart.entries.forEach { part ->
@@ -968,11 +977,12 @@ private fun MeasureRow(
 /** Ligne d'un moment de la journee : le libelle et les quatre couleurs. */
 @Composable
 private fun PartRow(part: DayPart, selectedKey: Int?, onPick: (Int?) -> Unit) {
+    val partBorder = cardInk()
     Column(modifier = Modifier.padding(bottom = 12.dp)) {
         Text(
             text = "${part.emoji} ${part.label}",
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = cardInkSoft(),
         )
         Spacer(Modifier.height(6.dp))
         Row(
@@ -989,14 +999,13 @@ private fun PartRow(part: DayPart, selectedKey: Int?, onPick: (Int?) -> Unit) {
                         // Un degrade, pas un aplat : chaque couleur de journee
                         // a le meme relief que le reste de l'application.
                         .background(Brush.linearGradient(dayColor.gradient))
+                        // La bordure du choix se peint a l'encre de la carte :
+                        // le bleu nuit du theme se perdait sur une journee tres
+                        // noire, et on ne voyait plus ce qui etait selectionne.
                         .border(
                             BorderStroke(
                                 if (selected) 3.dp else 0.dp,
-                                if (selected) {
-                                    MaterialTheme.colorScheme.onBackground
-                                } else {
-                                    Color.Transparent
-                                },
+                                if (selected) partBorder else Color.Transparent,
                             ),
                             RoundedCornerShape(14.dp),
                         )
@@ -1024,6 +1033,7 @@ private fun ColorChoice(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val border = cardInk()
     Box(
         modifier = modifier
             .aspectRatio(1f)
@@ -1033,7 +1043,7 @@ private fun ColorChoice(
             .border(
                 BorderStroke(
                     if (selected) 3.dp else 0.dp,
-                    if (selected) MaterialTheme.colorScheme.onBackground else Color.Transparent,
+                    if (selected) border else Color.Transparent,
                 ),
                 RoundedCornerShape(20.dp),
             )

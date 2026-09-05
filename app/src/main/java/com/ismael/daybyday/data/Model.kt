@@ -41,95 +41,32 @@ enum class DayColor(
         /**
          * Couleur representant une moyenne (0..3), utilisee pour les resumes.
          *
-         * Le melange se fait en **teinte**, pas en composantes rouge / vert /
-         * bleu. C'est la toute la difference : melanger un orange et un vert
-         * canal par canal donne un kaki terne, alors que faire tourner la
-         * teinte de l'un vers l'autre passe par un vert-jaune franc. Une
-         * moyenne de 2,5 doit ressembler a une bonne journee un peu moins
-         * bonne, pas a de la boue.
+         * Deux essais ont echoue avant celui-ci, et ils disent pourquoi la
+         * regle est ce qu'elle est. Melanger deux couleurs canal par canal
+         * donne un kaki terne au milieu ; les melanger par la teinte donne un
+         * vert-jaune fluo, qui a l'air **meilleur** que le vert de la bonne
+         * journee — une moyenne de 2,5 avait l'air d'un 10 sur 10.
+         *
+         * On ne fabrique donc plus de couleur intermediaire. La moyenne prend
+         * la couleur de la journee **la plus proche**, simplement eclaircie a
+         * mesure qu'elle s'en eloigne. Une moyenne reste toujours dans sa
+         * famille, ne depasse jamais la couleur qu'elle approche, et le chiffre
+         * exact est de toute facon ecrit a cote.
          */
         fun fromAverage(average: Double): Color {
             val clamped = average.coerceIn(0.0, MAX_SCORE.toDouble())
-            val stops = listOf(
-                0.0 to BLACK.color,
-                1.0 to RED.color,
-                2.0 to ORANGE.color,
-                3.0 to GREEN.color,
-            )
-            for (i in 0 until stops.size - 1) {
-                val (lowValue, lowColor) = stops[i]
-                val (highValue, highColor) = stops[i + 1]
-                if (clamped <= highValue) {
-                    val t = ((clamped - lowValue) / (highValue - lowValue)).toFloat()
-                    return blendHue(lowColor, highColor, t)
-                }
-            }
-            return GREEN.color
+            val nearest = entries.minByOrNull { kotlin.math.abs(it.score - clamped) } ?: GREEN
+            // A mi-chemin entre deux notes, la couleur est a moitie eclaircie.
+            val distance = kotlin.math.abs(nearest.score - clamped).toFloat()
+            return blend(nearest.color, nearest.light, distance.coerceIn(0f, 0.5f))
         }
 
-        /** Le degrade correspondant a une moyenne, pour les pastilles de resume. */
-        fun gradientForAverage(average: Double): List<Color> {
-            val base = fromAverage(average)
-            val lighter = fromAverage((average + 0.45).coerceAtMost(MAX_SCORE.toDouble()))
-            return listOf(base, lighten(lighter, 0.18f))
-        }
-
-        private fun lighten(color: Color, amount: Float): Color = Color(
-            red = color.red + (1f - color.red) * amount,
-            green = color.green + (1f - color.green) * amount,
-            blue = color.blue + (1f - color.blue) * amount,
+        private fun blend(from: Color, to: Color, t: Float): Color = Color(
+            red = from.red + (to.red - from.red) * t,
+            green = from.green + (to.green - from.green) * t,
+            blue = from.blue + (to.blue - from.blue) * t,
             alpha = 1f,
         )
-
-        /**
-         * Melange deux couleurs par leur teinte, en gardant la saturation et la
-         * clarte les plus vives des deux. La teinte prend le chemin le plus
-         * court sur le cercle : d'un orange a un vert on passe par le
-         * vert-jaune, jamais par le rose.
-         */
-        private fun blendHue(from: Color, to: Color, t: Float): Color {
-            val (h1, s1, l1) = toHsl(from)
-            val (h2, s2, l2) = toHsl(to)
-            var delta = h2 - h1
-            if (delta > 180f) delta -= 360f
-            if (delta < -180f) delta += 360f
-            val hue = (h1 + delta * t + 360f) % 360f
-            return fromHsl(hue, s1 + (s2 - s1) * t, l1 + (l2 - l1) * t)
-        }
-
-        private fun toHsl(color: Color): Triple<Float, Float, Float> {
-            val r = color.red
-            val g = color.green
-            val b = color.blue
-            val max = maxOf(r, g, b)
-            val min = minOf(r, g, b)
-            val light = (max + min) / 2f
-            if (max == min) return Triple(0f, 0f, light)
-            val d = max - min
-            val saturation = if (light > 0.5f) d / (2f - max - min) else d / (max + min)
-            val hue = when (max) {
-                r -> ((g - b) / d + if (g < b) 6f else 0f)
-                g -> ((b - r) / d + 2f)
-                else -> ((r - g) / d + 4f)
-            } * 60f
-            return Triple(hue, saturation, light)
-        }
-
-        private fun fromHsl(hue: Float, saturation: Float, light: Float): Color {
-            if (saturation == 0f) return Color(light, light, light, 1f)
-            val q = if (light < 0.5f) light * (1f + saturation) else light + saturation - light * saturation
-            val p = 2f * light - q
-            fun channel(offset: Float): Float {
-                var t = (hue / 360f + offset + 1f) % 1f
-                return when {
-                    t < 1f / 6f -> p + (q - p) * 6f * t
-                    t < 1f / 2f -> q
-                    t < 2f / 3f -> p + (q - p) * (2f / 3f - t) * 6f
-                    else -> p
-                }
-            }
-            return Color(channel(1f / 3f), channel(0f), channel(-1f / 3f), 1f)
-        }
 
     }
 }

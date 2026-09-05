@@ -57,6 +57,28 @@ téléphone (Samsung S25, Android 15).
 
 - **Clavier** : sur l'écran d'une journée, `imePadding()` doit rester **avant**
   `verticalScroll()`, sinon le texte passe sous le clavier.
+- **Rappel du soir** : `DailyScheduler.rescheduleAll` est appelé dans
+  `DayByDayApp.onCreate()`, donc **à chaque ouverture**. Avec
+  `CANCEL_AND_REENQUEUE`, le compte à rebours repartait de zéro chaque fois et
+  le rappel de 21 h n'arrivait jamais. On ne reprogramme donc que si l'heure a
+  changé (`Prefs.scheduledReminder`), sinon `KEEP` — qui garde la tâche en place
+  et la recrée seulement si elle a disparu. Même règle pour la sauvegarde
+  automatique. Reste la cause qui n'est pas dans le code : Samsung endort les
+  applications, d'où la ligne « Mise en veille par Android » et le rappel
+  d'essai dans les Réglages.
+- **Encre d'une carte colorée** : une carte à fond de couleur ne peut pas
+  laisser son contenu prendre les couleurs du thème — le gris des textes
+  secondaires devient illisible sur un vert, le bleu nuit disparaît sur une
+  journée très noire. La carte annonce son encre une fois via `LocalCardInk`
+  (`cardInk` / `cardInkSoft` / `cardInkFaint`), et tout ce qu'elle contient la
+  lit. Cette encre se choisit avec `readableOnAll`, sur **toutes** les couleurs
+  du dégradé et au contraste réel (WCAG) : le vert part d'un vert moyen où le
+  blanc passe encore, et finit clair où il disparaît.
+- **Dégradés et petites surfaces** : un dégradé sur une pastille de deux
+  centimètres ne se lit pas comme une matière mais comme une autre couleur — le
+  coin clair d'un vert moyen faisait passer une semaine correcte pour un 10/10.
+  Les dégradés sont réservés aux grandes surfaces ; `AverageChip` et `WeekScore`
+  sont des aplats.
 - **Sauvegarde automatique du jour** : dans le `DisposableEffect`, le jour est
   figé au démarrage de l'effet ; au moment du `onDispose`, `epochDay` peut déjà
   pointer vers le jour suivant alors que les champs contiennent l'ancien.

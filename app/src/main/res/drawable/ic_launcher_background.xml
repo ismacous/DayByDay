@@ -1,10 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Le fond de l'icone : le degrade de l'application, indigo vers ciel — le meme
+    que le bouton du jour et les cartes fortes. Une icone plate se perd dans un
+    ecran d'accueil ; celle-ci porte la couleur de la marque avant meme d'etre
+    ouverte.
+
+    Le halo clair en haut a droite est le meme reflet que sur les cartes : sans
+    lui, un degrade reste une bande de couleur.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="#F4F6FA"
-        android:pathData="M0,0 h108 v108 h-108 z" />
+
+    <path android:pathData="M0,0 h108 v108 h-108 z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="6"
+                android:startY="0"
+                android:endX="102"
+                android:endY="108"
+                android:type="linear">
+                <item android:offset="0" android:color="#FF5B4DF0" />
+                <item android:offset="1" android:color="#FF3BA6FF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <path android:pathData="M0,0 h108 v108 h-108 z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="86"
+                android:centerY="18"
+                android:gradientRadius="62"
+                android:type="radial">
+                <item android:offset="0" android:color="#38FFFFFF" />
+                <item android:offset="1" android:color="#00FFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
 </vector>

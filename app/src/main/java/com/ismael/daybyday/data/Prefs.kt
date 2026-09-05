@@ -166,6 +166,26 @@ class Prefs(context: Context) {
         get() = prefs.getInt(KEY_REMINDER_MINUTE, 0)
         set(value) = prefs.edit().putInt(KEY_REMINDER_MINUTE, value).apply()
 
+    /**
+     * L'heure pour laquelle le rappel est **deja** programme, ou `null` s'il ne
+     * l'est pas. Elle sert a ne pas reprogrammer la tache a chaque ouverture de
+     * l'application : reprogrammer, c'est repartir de zero, et un rappel du soir
+     * qu'on repousse chaque matin n'arrive jamais.
+     */
+    var scheduledReminder: String?
+        get() = prefs.getString(KEY_SCHEDULED_REMINDER, null)
+        set(value) = prefs.edit().putString(KEY_SCHEDULED_REMINDER, value).apply()
+
+    /** Meme chose pour la sauvegarde automatique. */
+    var scheduledBackup: String?
+        get() = prefs.getString(KEY_SCHEDULED_BACKUP, null)
+        set(value) = prefs.edit().putString(KEY_SCHEDULED_BACKUP, value).apply()
+
+    /** Quand le dernier rappel a ete envoye. Zero tant qu'il n'y en a pas eu. */
+    var lastReminderAt: Long
+        get() = prefs.getLong(KEY_LAST_REMINDER, 0L)
+        set(value) = prefs.edit().putLong(KEY_LAST_REMINDER, value).apply()
+
     // --- Sauvegarde automatique -------------------------------------------
 
     var autoBackupEnabled: Boolean
@@ -223,6 +243,9 @@ class Prefs(context: Context) {
         const val KEY_REMINDER_ENABLED = "reminder_enabled"
         const val KEY_REMINDER_HOUR = "reminder_hour"
         const val KEY_REMINDER_MINUTE = "reminder_minute"
+        const val KEY_SCHEDULED_REMINDER = "reminder_scheduled_for"
+        const val KEY_SCHEDULED_BACKUP = "backup_scheduled_for"
+        const val KEY_LAST_REMINDER = "reminder_last_at"
         const val KEY_AUTO_BACKUP = "auto_backup_enabled"
         const val KEY_AUTO_BACKUP_HOUR = "auto_backup_hour"
         const val KEY_AUTO_BACKUP_MINUTE = "auto_backup_minute"

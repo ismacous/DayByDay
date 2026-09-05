@@ -69,12 +69,19 @@ fun DayCardShell(
      * contraste qui donne une hierarchie, pas la taille des titres.
      */
     accent: List<Color>? = null,
+    /**
+     * L'encre a utiliser, quand elle est imposee. Sert au degrade de
+     * l'application, qui se porte en blanc partout ailleurs : le calcul
+     * automatique choisirait du sombre, et la carte ne ressemblerait plus a
+     * celle qu'on a touchee pour arriver ici.
+     */
+    accentInk: Color? = null,
     content: @Composable () -> Unit,
 ) {
     // L'encre se choisit sur **tout** le degrade, pas sur sa premiere couleur :
     // le vert des bonnes journees part d'un vert moyen et finit clair, et une
     // encre choisie sur le depart s'efface a l'arrivee.
-    val onAccent = accent?.let { readableOnAll(it) }
+    val onAccent = accent?.let { accentInk ?: readableOnAll(it) }
     val title = @Composable {
         Row(
             modifier = Modifier

@@ -36,13 +36,27 @@ class DayByDayApp : Application() {
         }
     }
 
+    /**
+     * Le canal du rappel du soir.
+     *
+     * Il est en importance **haute**, pour que le rappel s'affiche en bandeau
+     * par-dessus l'ecran, comme un SMS, au lieu d'attendre sagement dans le
+     * volet. Attention : l'importance d'un canal ne se change plus une fois
+     * qu'il existe — Android la confie a l'utilisateur et ignore toute
+     * modification ensuite. Passer de « normale » a « haute » demande donc un
+     * **nouveau** canal, et de supprimer l'ancien pour ne pas laisser deux
+     * lignes « Rappel quotidien » dans les reglages du telephone.
+     */
     private fun createReminderChannel() {
+        val manager = NotificationManagerCompat.from(this)
+        manager.deleteNotificationChannel(ReminderWorker.LEGACY_CHANNEL_ID)
         val channel = NotificationChannelCompat
-            .Builder(ReminderWorker.CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_DEFAULT)
+            .Builder(ReminderWorker.CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_HIGH)
             .setName("Rappel quotidien")
             .setDescription("Le petit rappel du soir pour noter ta journée.")
+            .setVibrationEnabled(true)
             .build()
-        NotificationManagerCompat.from(this).createNotificationChannel(channel)
+        manager.createNotificationChannel(channel)
     }
 }
 

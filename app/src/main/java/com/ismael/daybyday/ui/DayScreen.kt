@@ -88,6 +88,7 @@ import com.ismael.daybyday.data.TagCategory
 import com.ismael.daybyday.dayByDayApp
 import com.ismael.daybyday.health.HealthConnectSource
 import com.ismael.daybyday.health.ScreenTimeSource
+import com.ismael.daybyday.ui.theme.Brand
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -409,16 +410,23 @@ fun DayScreen(
                     card = card,
                     collapsed = card in collapsedCards,
                     // Une seule carte porte la couleur : celle de l'humeur, qui
-                    // est la raison d'etre de la page. Elle prend la teinte du
-                    // jour choisi, ou celle de l'application tant qu'on n'a
-                    // rien choisi. Les autres restent blanches autour.
-                    // La carte de l'humeur s'allume quand la journee a une
-                    // couleur, et reste blanche tant qu'il n'y en a pas. Le
-                    // degrade de l'application faisait joli mais annoncait une
-                    // couleur avant qu'elle soit choisie, et c'est justement ce
-                    // qu'on vient faire ici.
+                    // est la raison d'etre de la page. Les autres restent
+                    // blanches autour — c'est ce contraste qui donne la
+                    // hierarchie, pas la taille des titres.
+                    //
+                    // Elle porte toujours un degrade : c'est
+                    // une carte en degrade qu'on a touchee pour arriver ici, on
+                    // doit tomber sur la meme. Elle prend la couleur du jour
+                    // des qu'il y en a une, celle de l'application tant qu'il
+                    // n'y en a pas — et alors son encre est le blanc des autres
+                    // cartes fortes, pas celle que le calcul choisirait.
                     accent = if (card == DayCard.MOOD) {
-                        DayColor.fromKey(colorKey)?.gradient
+                        DayColor.fromKey(colorKey)?.gradient ?: Brand.gradient
+                    } else {
+                        null
+                    },
+                    accentInk = if (card == DayCard.MOOD && DayColor.fromKey(colorKey) == null) {
+                        Color.White
                     } else {
                         null
                     },

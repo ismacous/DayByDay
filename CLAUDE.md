@@ -66,6 +66,17 @@ téléphone (Samsung S25, Android 15).
   automatique. Reste la cause qui n'est pas dans le code : Samsung endort les
   applications, d'où la ligne « Mise en veille par Android » et le rappel
   d'essai dans les Réglages.
+- **Importance d'un canal de notification** : elle ne se change plus une fois le
+  canal créé — Android la confie à l'utilisateur et ignore toute modification du
+  code. Faire passer le rappel en bandeau (comme un SMS) a donc demandé un
+  **nouveau** canal (`rappel_quotidien_bandeau`) et la suppression de l'ancien,
+  sinon deux lignes « Rappel quotidien » restent dans les réglages du téléphone.
+- **Encre imposée d'une carte** : la carte de l'humeur porte toujours un
+  dégradé, y compris avant qu'une couleur soit choisie — on arrive dessus en
+  touchant une carte en dégradé, on doit tomber sur la même. Sur le dégradé de
+  l'application, l'encre est imposée en blanc (`accentInk`) : `readableOnAll`
+  choisirait du sombre, correct au contraste mais différent des autres cartes
+  fortes.
 - **Encre d'une carte colorée** : une carte à fond de couleur ne peut pas
   laisser son contenu prendre les couleurs du thème — le gris des textes
   secondaires devient illisible sur un vert, le bleu nuit disparaît sur une

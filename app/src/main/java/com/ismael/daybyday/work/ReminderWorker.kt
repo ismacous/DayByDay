@@ -53,7 +53,12 @@ class ReminderWorker(
                     "Prends 30 secondes pour lui donner une couleur."
                 }
             )
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            // PRIORITY_HIGH est ce que lisent les Android d'avant les canaux ;
+            // sur les recents, c'est l'importance du canal qui decide. Les deux
+            // sont necessaires pour que le rappel s'affiche en bandeau.
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .build()
@@ -69,7 +74,16 @@ class ReminderWorker(
     }
 
     companion object {
-        const val CHANNEL_ID = "rappel_quotidien"
+        /**
+         * Le canal actuel. Le suffixe compte : l'importance d'un canal ne se
+         * change plus une fois qu'il existe, donc passer le rappel en bandeau
+         * a demande d'en creer un nouveau.
+         */
+        const val CHANNEL_ID = "rappel_quotidien_bandeau"
+
+        /** L'ancien canal, en importance normale. Supprime au demarrage. */
+        const val LEGACY_CHANNEL_ID = "rappel_quotidien"
+
         const val NOTIFICATION_ID = 1001
 
         /** Envoyer le rappel quoi qu'il arrive : c'est le rappel d'essai. */

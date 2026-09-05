@@ -36,7 +36,7 @@ object Backup {
 
     private const val JSON_NAME = "daybyday.json"
     private const val MEDIA_PREFIX = "media/"
-    private const val FORMAT_VERSION = 4
+    private const val FORMAT_VERSION = 5
 
     const val AUTO_BACKUP_NAME = "DayByDay-sauvegarde-auto.zip"
 
@@ -76,6 +76,8 @@ object Backup {
         val tags = repository.allTags()
         val links = repository.allDayTags()
         val money = repository.allMoney()
+        val treatments = repository.allTreatments()
+        val doses = repository.allDoses()
 
         val root = JSONObject()
         root.put("version", FORMAT_VERSION)
@@ -101,6 +103,11 @@ object Backup {
                     .put("colorManual", day.colorManual ?: JSONObject.NULL)
                     .put("steps", day.steps ?: JSONObject.NULL)
                     .put("screenMinutes", day.screenMinutes ?: JSONObject.NULL)
+                    .put("sleepStartMinutes", day.sleepStartMinutes ?: JSONObject.NULL)
+                    .put("sleepEndMinutes", day.sleepEndMinutes ?: JSONObject.NULL)
+                    .put("sleepFromDevice", day.sleepFromDevice ?: JSONObject.NULL)
+                    .put("waterGlasses", day.waterGlasses ?: JSONObject.NULL)
+                    .put("mealsNote", day.mealsNote)
             )
         }
         root.put("days", daysJson)
@@ -152,6 +159,32 @@ object Backup {
             )
         }
         root.put("money", moneyJson)
+
+        val treatmentsJson = JSONArray()
+        treatments.forEach { treatment ->
+            treatmentsJson.put(
+                JSONObject()
+                    .put("id", treatment.id)
+                    .put("name", treatment.name)
+                    .put("dose", treatment.dose)
+                    .put("timesMask", treatment.timesMask)
+                    .put("active", treatment.active)
+                    .put("sortOrder", treatment.sortOrder)
+            )
+        }
+        root.put("treatments", treatmentsJson)
+
+        val dosesJson = JSONArray()
+        doses.forEach { dose ->
+            dosesJson.put(
+                JSONObject()
+                    .put("epochDay", dose.epochDay)
+                    .put("treatmentId", dose.treatmentId)
+                    .put("timeKey", dose.timeKey)
+                    .put("takenAt", dose.takenAt)
+            )
+        }
+        root.put("doses", dosesJson)
 
         var copied = 0
         ZipOutputStream(output.buffered()).use { zip ->
@@ -283,6 +316,15 @@ object Backup {
                         },
                         steps = item.optIntOrNull("steps"),
                         screenMinutes = item.optIntOrNull("screenMinutes"),
+                        sleepStartMinutes = item.optIntOrNull("sleepStartMinutes"),
+                        sleepEndMinutes = item.optIntOrNull("sleepEndMinutes"),
+                        sleepFromDevice = if (item.isNull("sleepFromDevice")) {
+                            null
+                        } else {
+                            item.optBoolean("sleepFromDevice")
+                        },
+                        waterGlasses = item.optIntOrNull("waterGlasses"),
+                        mealsNote = item.optString("mealsNote", ""),
                     )
                 }
 
@@ -338,12 +380,39 @@ object Backup {
                     )
                 }
 
+                val treatments = mutableListOf<Treatment>()
+                val treatmentsJson = json.optJSONArray("treatments") ?: JSONArray()
+                for (i in 0 until treatmentsJson.length()) {
+                    val item = treatmentsJson.getJSONObject(i)
+                    treatments += Treatment(
+                        // L'identifiant est conserve : les prises y renvoient.
+                        id = item.optLong("id", 0L),
+                        name = item.optString("name", ""),
+                        dose = item.optString("dose", ""),
+                        timesMask = item.optInt("timesMask", DoseTime.MORNING.bit),
+                        active = item.optBoolean("active", true),
+                        sortOrder = item.optInt("sortOrder", 0),
+                    )
+                }
+
+                val doses = mutableListOf<DoseTaken>()
+                val dosesJson = json.optJSONArray("doses") ?: JSONArray()
+                for (i in 0 until dosesJson.length()) {
+                    val item = dosesJson.getJSONObject(i)
+                    doses += DoseTaken(
+                        epochDay = item.getLong("epochDay"),
+                        treatmentId = item.getLong("treatmentId"),
+                        timeKey = item.getInt("timeKey"),
+                        takenAt = item.optLong("takenAt", System.currentTimeMillis()),
+                    )
+                }
+
                 repository.media.deleteAll()
                 staging.walkTopDown().filter { it.isFile }.forEach { file ->
                     val relative = file.relativeTo(staging).path.replace(File.separatorChar, '/')
                     file.inputStream().use { repository.media.writeFrom(relative, it) }
                 }
-                repository.replaceAll(days, mediaItems, tags, links, money)
+                repository.replaceAll(days, mediaItems, tags, links, money, treatments, doses)
 
                 BackupSummary(days = days.size, mediaFiles = restoredFiles)
             } finally {

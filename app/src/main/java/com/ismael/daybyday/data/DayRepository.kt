@@ -11,6 +11,37 @@ class DayRepository(context: Context) {
     private val dao = AppDatabase.get(context).dayDao()
     val media = MediaFiles(context)
 
+    // --- Traitements ------------------------------------------------------
+
+    fun observeTreatments(): Flow<List<Treatment>> = dao.observeTreatments()
+
+    fun observeDosesForDay(date: LocalDate): Flow<List<DoseTaken>> =
+        dao.observeDosesForDay(date.toEpochDay())
+
+    fun observeDosesBetween(start: LocalDate, end: LocalDate): Flow<List<DoseTaken>> =
+        dao.observeDosesBetween(start.toEpochDay(), end.toEpochDay())
+
+    suspend fun allTreatments(): List<Treatment> = dao.allTreatments()
+
+    suspend fun allDoses(): List<DoseTaken> = dao.allDoses()
+
+    suspend fun saveTreatment(treatment: Treatment) = dao.upsertTreatment(treatment)
+
+    /** Supprimer un traitement enleve aussi l'historique de ses prises. */
+    suspend fun deleteTreatment(treatment: Treatment) {
+        dao.deleteDosesOfTreatment(treatment.id)
+        dao.deleteTreatment(treatment.id)
+    }
+
+    suspend fun setDoseTaken(date: LocalDate, treatmentId: Long, time: DoseTime, taken: Boolean) {
+        val epochDay = date.toEpochDay()
+        if (taken) {
+            dao.markDose(DoseTaken(epochDay, treatmentId, time.key))
+        } else {
+            dao.unmarkDose(epochDay, treatmentId, time.key)
+        }
+    }
+
     // --- Journees ---------------------------------------------------------
 
     fun observeDay(date: LocalDate): Flow<DayEntry?> = dao.observeDay(date.toEpochDay())
@@ -155,6 +186,8 @@ class DayRepository(context: Context) {
         dao.deleteAllMedia()
         dao.deleteAllDayTags()
         dao.deleteAllMoney()
+        dao.deleteAllDoses()
+        dao.deleteAllTreatments()
         dao.deleteAllDays()
         media.deleteAll()
     }
@@ -165,10 +198,14 @@ class DayRepository(context: Context) {
         tags: List<Tag>,
         links: List<DayTagCrossRef>,
         money: List<MoneyEntry>,
+        treatments: List<Treatment>,
+        doses: List<DoseTaken>,
     ) {
         dao.deleteAllMedia()
         dao.deleteAllDayTags()
         dao.deleteAllMoney()
+        dao.deleteAllDoses()
+        dao.deleteAllTreatments()
         dao.deleteAllDays()
         if (tags.isNotEmpty()) {
             dao.deleteAllTags()
@@ -178,5 +215,9 @@ class DayRepository(context: Context) {
         mediaItems.forEach { dao.insertMedia(it.copy(id = 0)) }
         links.forEach { dao.linkTag(it) }
         money.forEach { dao.upsertMoney(it.copy(id = 0)) }
+        // Les identifiants des traitements sont conserves tels quels : les
+        // prises deja cochees y renvoient.
+        treatments.forEach { dao.upsertTreatment(it) }
+        doses.forEach { dao.markDose(it) }
     }
 }

@@ -40,6 +40,47 @@ class Prefs(context: Context) {
         return weightKg / (height * height)
     }
 
+    // --- Disposition de l'ecran "Ma journee" ------------------------------
+
+    /**
+     * Ordre choisi pour les cartes. Les cles inconnues sont ignorees et les
+     * cartes jamais vues sont ajoutees a leur place d'origine, donc une mise a
+     * jour qui apporte une carte ne casse pas la disposition existante.
+     */
+    var dayCardOrder: List<DayCard>
+        get() = DayCard.order(readKeys(KEY_DAY_CARD_ORDER))
+        set(value) = writeKeys(KEY_DAY_CARD_ORDER, value.map { it.key })
+
+    /** Cartes masquees. Une carte essentielle ne peut pas l'etre. */
+    var hiddenDayCards: Set<DayCard>
+        get() = readKeys(KEY_DAY_CARDS_HIDDEN)
+            .mapNotNull { DayCard.fromKey(it) }
+            .filterNot { it.essential }
+            .toSet()
+        set(value) = writeKeys(KEY_DAY_CARDS_HIDDEN, value.filterNot { it.essential }.map { it.key })
+
+    /** Cartes repliees : le titre reste, le contenu est cache. */
+    var collapsedDayCards: Set<DayCard>
+        get() = readKeys(KEY_DAY_CARDS_COLLAPSED).mapNotNull { DayCard.fromKey(it) }.toSet()
+        set(value) = writeKeys(KEY_DAY_CARDS_COLLAPSED, value.map { it.key })
+
+    /** Les cartes reellement affichees, dans l'ordre. */
+    val visibleDayCards: List<DayCard>
+        get() {
+            val hidden = hiddenDayCards
+            return dayCardOrder.filterNot { it in hidden }
+        }
+
+    private fun readKeys(key: String): List<String> =
+        prefs.getString(key, null)
+            ?.split(SEPARATOR)
+            ?.filter { it.isNotBlank() }
+            .orEmpty()
+
+    private fun writeKeys(key: String, keys: List<String>) {
+        prefs.edit().putString(key, keys.joinToString(SEPARATOR)).apply()
+    }
+
     // --- Verrouillage -----------------------------------------------------
 
     var lockEnabled: Boolean
@@ -164,6 +205,12 @@ class Prefs(context: Context) {
         const val KEY_AUTO_BACKUP_LAST = "auto_backup_last"
         const val KEY_AUTO_BACKUP_ERROR = "auto_backup_error"
         const val KEY_FIRST_RUN_RESTORE = "first_run_restore_checked"
+        const val KEY_DAY_CARD_ORDER = "day_card_order"
+        const val KEY_DAY_CARDS_HIDDEN = "day_cards_hidden"
+        const val KEY_DAY_CARDS_COLLAPSED = "day_cards_collapsed"
+
+        /** Les cles ne contiennent que des lettres, la virgule est sans risque. */
+        private const val SEPARATOR = ","
         const val ITERATIONS = 120_000
     }
 }

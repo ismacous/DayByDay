@@ -72,14 +72,17 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ismael.daybyday.data.DayCard
 import com.ismael.daybyday.data.DayColor
 import com.ismael.daybyday.data.DayEntry
 import com.ismael.daybyday.data.DayPart
+import com.ismael.daybyday.data.DoseTime
 import com.ismael.daybyday.data.FoodLevel
 import com.ismael.daybyday.data.MediaItem
 import com.ismael.daybyday.data.MediaKind
 import com.ismael.daybyday.data.MoneyEntry
 import com.ismael.daybyday.data.SportLevel
+import com.ismael.daybyday.data.Treatment
 import com.ismael.daybyday.data.TagCategory
 import com.ismael.daybyday.dayByDayApp
 import com.ismael.daybyday.health.HealthConnectSource
@@ -132,6 +135,25 @@ fun DayScreen(
     var viewerIndex by remember { mutableStateOf<Int?>(null) }
     var addingMoney by remember { mutableStateOf(false) }
     var editingMoney by remember { mutableStateOf<MoneyEntry?>(null) }
+    var sleepStart by remember { mutableStateOf<Int?>(null) }
+    var sleepEnd by remember { mutableStateOf<Int?>(null) }
+    var sleepFromDevice by remember { mutableStateOf(false) }
+    var waterGlasses by remember { mutableStateOf<Int?>(null) }
+    var mealsNote by remember { mutableStateOf("") }
+    var organizing by remember { mutableStateOf(false) }
+    var editingTreatment by remember { mutableStateOf<Treatment?>(null) }
+    var creatingTreatment by remember { mutableStateOf(false) }
+
+    // La disposition des cartes vit dans les preferences : elle est relue a
+    // chaque changement pour que l'ecran suive immediatement.
+    var layoutTick by remember { mutableIntStateOf(0) }
+    val visibleCards = remember(layoutTick) { app.prefs.visibleDayCards }
+    val collapsedCards = remember(layoutTick) { app.prefs.collapsedDayCards }
+
+    val treatments by remember { repository.observeTreatments() }
+        .collectAsStateWithLifecycle(emptyList())
+    val dosesTaken by remember(epochDay) { repository.observeDosesForDay(date) }
+        .collectAsStateWithLifecycle(emptyList())
 
     val mediaItems by remember(epochDay) { repository.observeMediaForDay(date) }
         .collectAsStateWithLifecycle(emptyList())
@@ -154,6 +176,11 @@ fun DayScreen(
         weightKg = weightText.replace(',', '.').toDoubleOrNull(),
         steps = stepsValue,
         screenMinutes = screenValue,
+        sleepStartMinutes = sleepStart,
+        sleepEndMinutes = sleepEnd,
+        sleepFromDevice = sleepFromDevice,
+        waterGlasses = waterGlasses,
+        mealsNote = mealsNote.trim(),
         partMorning = parts[DayPart.MORNING],
         partAfternoon = parts[DayPart.AFTERNOON],
         partEvening = parts[DayPart.EVENING],
@@ -183,6 +210,11 @@ fun DayScreen(
         weightText = entry?.weightKg?.let { String.format(Locale.FRANCE, "%.1f", it) }.orEmpty()
         stepsValue = entry?.steps
         screenValue = entry?.screenMinutes
+        sleepStart = entry?.sleepStartMinutes
+        sleepEnd = entry?.sleepEndMinutes
+        sleepFromDevice = entry?.sleepFromDevice ?: false
+        waterGlasses = entry?.waterGlasses
+        mealsNote = entry?.mealsNote.orEmpty()
         loadedFor = epochDay
     }
 
@@ -196,11 +228,19 @@ fun DayScreen(
             val granted = HealthConnectSource.hasPermission(context)
             val steps = if (granted) HealthConnectSource.stepsFor(context, day) else null
             val screen = ScreenTimeSource.minutesFor(context, day)
+            // La nuit lue sur le telephone ne remplace jamais une saisie a la
+            // main : elle ne comble que ce qui est encore vide.
+            val night = if (granted) HealthConnectSource.nightFor(context, day) else null
             withContext(Dispatchers.Main) {
                 stepsGranted = granted
                 screenGranted = ScreenTimeSource.hasPermission(context)
                 steps?.let { stepsValue = it }
                 screen?.let { screenValue = it }
+                if (night != null && (sleepStart == null || sleepFromDevice)) {
+                    sleepStart = night.startMinutes
+                    sleepEnd = night.endMinutes
+                    sleepFromDevice = true
+                }
             }
         }
     }
@@ -233,6 +273,10 @@ fun DayScreen(
         weightText,
         stepsValue,
         screenValue,
+        sleepStart,
+        sleepEnd,
+        waterGlasses,
+        mealsNote,
     ) {
         if (loadedFor != epochDay) return@LaunchedEffect
         delay(SAVE_DEBOUNCE_MS)
@@ -327,356 +371,408 @@ fun DayScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            // 1. Comment tu te sens ---------------------------------------
-            SectionCard(title = "Comment tu te sens") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+            // Chaque partie de la journee est une carte : repliable, masquable,
+            // deplacable. La disposition vit dans les preferences, pas ici.
+            visibleCards.forEach { card ->
+                DayCardShell(
+                    card = card,
+                    collapsed = card in collapsedCards,
+                    onToggleCollapse = {
+                        val current = app.prefs.collapsedDayCards
+                        app.prefs.collapsedDayCards =
+                            if (card in current) current - card else current + card
+                        layoutTick += 1
+                    },
                 ) {
-                    DayColor.entries.forEach { dayColor ->
-                        ColorChoice(
-                            dayColor = dayColor,
-                            selected = colorKey == dayColor.key,
-                            onClick = {
-                                if (colorKey == dayColor.key && colorManual) {
-                                    colorManual = false
-                                    colorKey = averageColorKey(parts.values)
-                                } else {
-                                    colorKey = dayColor.key
-                                    colorManual = true
+                    when (card) {
+                        DayCard.MOOD -> {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                DayColor.entries.forEach { dayColor ->
+                                    ColorChoice(
+                                        dayColor = dayColor,
+                                        selected = colorKey == dayColor.key,
+                                        onClick = {
+                                            if (colorKey == dayColor.key && colorManual) {
+                                                colorManual = false
+                                                colorKey = averageColorKey(parts.values)
+                                            } else {
+                                                colorKey = dayColor.key
+                                                colorManual = true
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                    )
                                 }
-                            },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = DayColor.fromKey(colorKey)?.label ?: "Aucune couleur pour l'instant",
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                if (parts.isNotEmpty()) {
-                    Text(
-                        text = if (colorManual) {
-                            "Choisie à la main. Touche-la à nouveau pour revenir à la moyenne de tes moments."
-                        } else {
-                            "Calculée à partir de tes moments."
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
-                Text(
-                    "Moment par moment",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    "Ton humeur bouge dans la journée : la couleur du jour se calcule à partir d'ici.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(12.dp))
-                DayPart.entries.forEach { part ->
-                    PartRow(
-                        part = part,
-                        selectedKey = parts[part],
-                        onPick = { key -> setPart(part, key) },
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // 2. Journal ---------------------------------------------------
-            SectionCard(title = "Ton journal") {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Titre de la journée") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("day-title-field"),
-                )
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text("Ce que tu as vécu") },
-                    placeholder = { Text("Ce que tu as ressenti, ce qui a aidé, ce qui a pesé…") },
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 160.dp, max = 320.dp)
-                        .testTag("day-note-field"),
-                )
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // 3. Activite physique -----------------------------------------
-            SectionCard(title = "🏃 Activité physique") {
-                MeasureRow(
-                    emoji = "👟",
-                    label = if (date == LocalDate.now()) "Pas aujourd'hui" else "Pas ce jour-là",
-                    value = stepsValue?.let { "${formatSteps(it)} pas" },
-                    hint = when {
-                        !healthAvailable ->
-                            "Health Connect n'est pas installé sur ce téléphone."
-                        !stepsGranted -> "Appuie pour autoriser Health Connect."
-                        else -> "Autorisé, mais aucun pas enregistré pour l'instant."
-                    },
-                    onClick = { openSystemScreen(context, HealthConnectSource.settingsIntent()) },
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "Une vraie séance ?",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(6.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    SportLevel.entries.forEach { level ->
-                        ChoiceChip(
-                            label = "${level.emoji} ${level.label}",
-                            selected = sportLevel == level.key,
-                            onClick = {
-                                sportLevel = if (sportLevel == level.key) null else level.key
-                            },
-                        )
-                    }
-                }
-                Spacer(Modifier.height(14.dp))
-                OutlinedTextField(
-                    value = weightText,
-                    onValueChange = { input ->
-                        weightText = input.filter { it.isDigit() || it == ',' || it == '.' }.take(6)
-                    },
-                    label = { Text("Poids du jour (optionnel)") },
-                    suffix = { Text("kg") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // 4. Manger ----------------------------------------------------
-            SectionCard(title = "🍽️ Manger") {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    FoodLevel.entries.forEach { level ->
-                        ChoiceChip(
-                            label = "${level.emoji} ${level.label}",
-                            selected = foodLevel == level.key,
-                            onClick = {
-                                foodLevel = if (foodLevel == level.key) null else level.key
-                            },
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // 5. Dehors et ecrans ------------------------------------------
-            SectionCard(title = "🚪 Dehors & écrans") {
-                Text(
-                    "Tu es sorti aujourd'hui ?",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(6.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    ChoiceChip(
-                        label = "🚪 Oui, je suis sorti",
-                        selected = wentOut == true,
-                        onClick = { wentOut = if (wentOut == true) null else true },
-                    )
-                    ChoiceChip(
-                        label = "🛋️ Resté à la maison",
-                        selected = wentOut == false,
-                        onClick = { wentOut = if (wentOut == false) null else false },
-                    )
-                }
-                Spacer(Modifier.height(14.dp))
-                MeasureRow(
-                    emoji = "📱",
-                    label = "Temps sur le téléphone",
-                    value = screenValue?.let { formatScreenTime(it) },
-                    hint = if (screenGranted) {
-                        "Autorisé, mais rien de mesuré pour l'instant."
-                    } else {
-                        "Appuie pour autoriser l'accès aux données d'utilisation."
-                    },
-                    onClick = {
-                        openSystemScreen(context, ScreenTimeSource.settingsIntent(context))
-                    },
-                )
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // 6. Etiquettes ------------------------------------------------
-            SectionCard(title = "Étiquettes") {
-                if (allTags.isEmpty()) {
-                    Text(
-                        "Les étiquettes arrivent avec l'application.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    TagCategory.entries.forEach { category ->
-                        val categoryTags = allTags.filter { it.group == category }
-                        if (categoryTags.isNotEmpty()) {
+                            }
+                            Spacer(Modifier.height(8.dp))
                             Text(
-                                text = category.label.uppercase(),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
+                                text = DayColor.fromKey(colorKey)?.label ?: "Aucune couleur pour l'instant",
+                                style = MaterialTheme.typography.bodyLarge,
                             )
+                            if (parts.isNotEmpty()) {
+                                Text(
+                                    text = if (colorManual) {
+                                        "Choisie à la main. Touche-la à nouveau pour revenir à la moyenne de tes moments."
+                                    } else {
+                                        "Calculée à partir de tes moments."
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+                            Text(
+                                "Moment par moment",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                "Ton humeur bouge dans la journée : la couleur du jour se calcule à partir d'ici.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            DayPart.entries.forEach { part ->
+                                PartRow(
+                                    part = part,
+                                    selectedKey = parts[part],
+                                    onPick = { key -> setPart(part, key) },
+                                )
+                            }
+                        }
+                        DayCard.JOURNAL -> {
+                            OutlinedTextField(
+                                value = title,
+                                onValueChange = { title = it },
+                                label = { Text("Titre de la journée") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("day-title-field"),
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            OutlinedTextField(
+                                value = note,
+                                onValueChange = { note = it },
+                                label = { Text("Ce que tu as vécu") },
+                                placeholder = { Text("Ce que tu as ressenti, ce qui a aidé, ce qui a pesé…") },
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 160.dp, max = 320.dp)
+                                    .testTag("day-note-field"),
+                            )
+                        }
+                        DayCard.SLEEP -> {
+                            SleepCardBody(
+                                startMinutes = sleepStart,
+                                endMinutes = sleepEnd,
+                                fromDevice = sleepFromDevice,
+                                onPickStart = {
+                                    showClock(context, sleepStart ?: 23 * 60) { minutes ->
+                                        sleepStart = minutes
+                                        sleepFromDevice = false
+                                    }
+                                },
+                                onPickEnd = {
+                                    showClock(context, sleepEnd ?: 8 * 60) { minutes ->
+                                        sleepEnd = minutes
+                                        sleepFromDevice = false
+                                    }
+                                },
+                                onClear = {
+                                    sleepStart = null
+                                    sleepEnd = null
+                                    sleepFromDevice = false
+                                },
+                            )
+                        }
+                        DayCard.ACTIVITY -> {
+                            MeasureRow(
+                                emoji = "👟",
+                                label = if (date == LocalDate.now()) "Pas aujourd'hui" else "Pas ce jour-là",
+                                value = stepsValue?.let { "${formatSteps(it)} pas" },
+                                hint = when {
+                                    !healthAvailable ->
+                                        "Health Connect n'est pas installé sur ce téléphone."
+                                    !stepsGranted -> "Appuie pour autoriser Health Connect."
+                                    else -> "Autorisé, mais aucun pas enregistré pour l'instant."
+                                },
+                                onClick = { openSystemScreen(context, HealthConnectSource.settingsIntent()) },
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                "Une vraie séance ?",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.height(6.dp))
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                categoryTags.forEach { tag ->
-                                    val selected = tag.id in selectedTagIds
+                                SportLevel.entries.forEach { level ->
                                     ChoiceChip(
-                                        label = tag.display,
-                                        selected = selected,
+                                        label = "${level.emoji} ${level.label}",
+                                        selected = sportLevel == level.key,
                                         onClick = {
-                                            scope.launch {
-                                                repository.toggleTag(
-                                                    LocalDate.ofEpochDay(epochDay),
-                                                    tag,
-                                                    !selected,
-                                                )
-                                            }
+                                            sportLevel = if (sportLevel == level.key) null else level.key
                                         },
                                     )
                                 }
                             }
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // 7. Argent du jour --------------------------------------------
-            SectionCard(title = "💶 Argent du jour") {
-                if (dayMoney.isEmpty()) {
-                    Text(
-                        "Rien noté ce jour-là. Ce que tu ajoutes ici remonte tout de suite dans l'onglet Argent.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    dayMoney.forEach { entry ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { editingMoney = entry }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(entry.category?.emoji ?: if (entry.isIncome) "➕" else "➖")
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                text = entry.displayLabel,
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Text(
-                                text = formatSignedMoney(entry.amountCents),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = if (entry.isIncome) DayColor.GREEN.color else DayColor.RED.color,
+                            Spacer(Modifier.height(14.dp))
+                            OutlinedTextField(
+                                value = weightText,
+                                onValueChange = { input ->
+                                    weightText = input.filter { it.isDigit() || it == ',' || it == '.' }.take(6)
+                                },
+                                label = { Text("Poids du jour (optionnel)") },
+                                suffix = { Text("kg") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                modifier = Modifier.fillMaxWidth(),
                             )
                         }
-                    }
-                    val total = dayMoney.sumOf { it.amountCents }
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text("Bilan du jour", style = MaterialTheme.typography.labelLarge)
-                        Text(
-                            text = formatSignedMoney(total),
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = if (total < 0) DayColor.RED.color else DayColor.GREEN.color,
-                        )
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-                OutlinedButton(
-                    onClick = { addingMoney = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("add-day-money"),
-                ) {
-                    Text("Ajouter une dépense ou une rentrée")
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // 8. Medias ----------------------------------------------------
-            SectionCard(title = "📷 Photos & vidéos") {
-                if (mediaItems.isEmpty()) {
-                    Text(
-                        "Aucun média pour ce jour. Les fichiers ajoutés sont copiés dans " +
-                            "l'espace privé de l'application.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    mediaItems.chunked(3).forEach { rowItems ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            rowItems.forEach { item ->
-                                MediaThumb(
-                                    item = item,
-                                    onClick = { viewerIndex = mediaItems.indexOf(item) },
-                                    modifier = Modifier.weight(1f),
+                        DayCard.FOOD -> {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                FoodLevel.entries.forEach { level ->
+                                    ChoiceChip(
+                                        label = "${level.emoji} ${level.label}",
+                                        selected = foodLevel == level.key,
+                                        onClick = {
+                                            foodLevel = if (foodLevel == level.key) null else level.key
+                                        },
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(14.dp))
+                            OutlinedTextField(
+                                value = mealsNote,
+                                onValueChange = { mealsNote = it.take(500) },
+                                label = { Text("Ce que tu as mangé (optionnel)") },
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 90.dp),
+                            )
+                            Spacer(Modifier.height(14.dp))
+                            WaterRow(
+                                glasses = waterGlasses,
+                                onChange = { waterGlasses = it },
+                            )
+                        }
+                        DayCard.HEALTH -> {
+                            TreatmentsCardBody(
+                                treatments = treatments,
+                                taken = dosesTaken,
+                                onToggle = { treatment, time, checked ->
+                                    scope.launch {
+                                        repository.setDoseTaken(date, treatment.id, time, checked)
+                                    }
+                                },
+                                onEdit = { editingTreatment = it },
+                                onAdd = { creatingTreatment = true },
+                            )
+                        }
+                        DayCard.OUTSIDE -> {
+                            Text(
+                                "Tu es sorti aujourd'hui ?",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                ChoiceChip(
+                                    label = "🚪 Oui, je suis sorti",
+                                    selected = wentOut == true,
+                                    onClick = { wentOut = if (wentOut == true) null else true },
+                                )
+                                ChoiceChip(
+                                    label = "🛋️ Resté à la maison",
+                                    selected = wentOut == false,
+                                    onClick = { wentOut = if (wentOut == false) null else false },
                                 )
                             }
-                            repeat(3 - rowItems.size) { Spacer(Modifier.weight(1f)) }
+                            Spacer(Modifier.height(14.dp))
+                            MeasureRow(
+                                emoji = "📱",
+                                label = "Temps sur le téléphone",
+                                value = screenValue?.let { formatScreenTime(it) },
+                                hint = if (screenGranted) {
+                                    "Autorisé, mais rien de mesuré pour l'instant."
+                                } else {
+                                    "Appuie pour autoriser l'accès aux données d'utilisation."
+                                },
+                                onClick = {
+                                    openSystemScreen(context, ScreenTimeSource.settingsIntent(context))
+                                },
+                            )
                         }
-                        Spacer(Modifier.height(8.dp))
+                        DayCard.TAGS -> {
+                            if (allTags.isEmpty()) {
+                                Text(
+                                    "Les étiquettes arrivent avec l'application.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else {
+                                TagCategory.entries.forEach { category ->
+                                    val categoryTags = allTags.filter { it.group == category }
+                                    if (categoryTags.isNotEmpty()) {
+                                        Text(
+                                            text = category.label.uppercase(),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
+                                        )
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            categoryTags.forEach { tag ->
+                                                val selected = tag.id in selectedTagIds
+                                                ChoiceChip(
+                                                    label = tag.display,
+                                                    selected = selected,
+                                                    onClick = {
+                                                        scope.launch {
+                                                            repository.toggleTag(
+                                                                LocalDate.ofEpochDay(epochDay),
+                                                                tag,
+                                                                !selected,
+                                                            )
+                                                        }
+                                                    },
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        DayCard.MONEY -> {
+                            if (dayMoney.isEmpty()) {
+                                Text(
+                                    "Rien noté ce jour-là. Ce que tu ajoutes ici remonte tout de suite dans l'onglet Argent.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else {
+                                dayMoney.forEach { entry ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { editingMoney = entry }
+                                            .padding(vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(entry.category?.emoji ?: if (entry.isIncome) "➕" else "➖")
+                                        Spacer(Modifier.width(10.dp))
+                                        Text(
+                                            text = entry.displayLabel,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        Text(
+                                            text = formatSignedMoney(entry.amountCents),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = if (entry.isIncome) DayColor.GREEN.color else DayColor.RED.color,
+                                        )
+                                    }
+                                }
+                                val total = dayMoney.sumOf { it.amountCents }
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text("Bilan du jour", style = MaterialTheme.typography.labelLarge)
+                                    Text(
+                                        text = formatSignedMoney(total),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (total < 0) DayColor.RED.color else DayColor.GREEN.color,
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            OutlinedButton(
+                                onClick = { addingMoney = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("add-day-money"),
+                            ) {
+                                Text("Ajouter une dépense ou une rentrée")
+                            }
+                        }
+                        DayCard.MEDIA -> {
+                            if (mediaItems.isEmpty()) {
+                                Text(
+                                    "Aucun média pour ce jour. Les fichiers ajoutés sont copiés dans " +
+                                        "l'espace privé de l'application.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else {
+                                mediaItems.chunked(3).forEach { rowItems ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        rowItems.forEach { item ->
+                                            MediaThumb(
+                                                item = item,
+                                                onClick = { viewerIndex = mediaItems.indexOf(item) },
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                        }
+                                        repeat(3 - rowItems.size) { Spacer(Modifier.weight(1f)) }
+                                    }
+                                    Spacer(Modifier.height(8.dp))
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Button(
+                                onClick = {
+                                    pickMedia.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+                                    )
+                                },
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Ajouter une photo ou une vidéo")
+                            }
+                        }
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = {
-                        pickMedia.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
-                        )
-                    },
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Ajouter une photo ou une vidéo")
-                }
+
+                Spacer(Modifier.height(16.dp))
+            }
+
+            OutlinedButton(
+                onClick = { organizing = true },
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("Ajouter ou organiser les cartes")
             }
 
             Spacer(Modifier.height(48.dp))
@@ -692,6 +788,47 @@ fun DayScreen(
             onDelete = { item ->
                 viewerIndex = null
                 scope.launch { repository.deleteMedia(item) }
+            },
+        )
+    }
+
+    if (organizing) {
+        OrganizeCardsDialog(
+            order = app.prefs.dayCardOrder,
+            hidden = app.prefs.hiddenDayCards,
+            onChange = { newOrder, newHidden ->
+                app.prefs.dayCardOrder = newOrder
+                app.prefs.hiddenDayCards = newHidden
+                layoutTick += 1
+            },
+            onDismiss = { organizing = false },
+        )
+    }
+
+    if (creatingTreatment) {
+        TreatmentDialog(
+            initial = null,
+            onDismiss = { creatingTreatment = false },
+            onSave = { treatment ->
+                creatingTreatment = false
+                scope.launch {
+                    repository.saveTreatment(treatment.copy(sortOrder = treatments.size))
+                }
+            },
+        )
+    }
+
+    editingTreatment?.let { current ->
+        TreatmentDialog(
+            initial = current,
+            onDismiss = { editingTreatment = null },
+            onSave = { treatment ->
+                editingTreatment = null
+                scope.launch { repository.saveTreatment(treatment) }
+            },
+            onDelete = {
+                editingTreatment = null
+                scope.launch { repository.deleteTreatment(current) }
             },
         )
     }

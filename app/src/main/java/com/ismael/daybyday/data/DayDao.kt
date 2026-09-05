@@ -130,6 +130,41 @@ interface DayDao {
     @Query("DELETE FROM media_items WHERE id = :id")
     suspend fun deleteMedia(id: Long)
 
+    // --- Traitements ------------------------------------------------------
+
+    @Query("SELECT * FROM treatments ORDER BY sortOrder, name")
+    fun observeTreatments(): Flow<List<Treatment>>
+
+    @Query("SELECT * FROM treatments ORDER BY sortOrder, name")
+    suspend fun allTreatments(): List<Treatment>
+
+    @Upsert
+    suspend fun upsertTreatment(treatment: Treatment)
+
+    @Query("DELETE FROM treatments WHERE id = :id")
+    suspend fun deleteTreatment(id: Long)
+
+    @Query("DELETE FROM doses_taken WHERE treatmentId = :treatmentId")
+    suspend fun deleteDosesOfTreatment(treatmentId: Long)
+
+    @Query("SELECT * FROM doses_taken WHERE epochDay = :epochDay")
+    fun observeDosesForDay(epochDay: Long): Flow<List<DoseTaken>>
+
+    @Query("SELECT * FROM doses_taken WHERE epochDay BETWEEN :start AND :end")
+    fun observeDosesBetween(start: Long, end: Long): Flow<List<DoseTaken>>
+
+    @Query("SELECT * FROM doses_taken ORDER BY epochDay, treatmentId, timeKey")
+    suspend fun allDoses(): List<DoseTaken>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun markDose(dose: DoseTaken)
+
+    @Query(
+        "DELETE FROM doses_taken WHERE epochDay = :epochDay " +
+            "AND treatmentId = :treatmentId AND timeKey = :timeKey"
+    )
+    suspend fun unmarkDose(epochDay: Long, treatmentId: Long, timeKey: Int)
+
     // --- Comptages (ecran "A propos") -------------------------------------
 
     @Query("SELECT COUNT(*) FROM day_entries")
@@ -157,4 +192,10 @@ interface DayDao {
 
     @Query("DELETE FROM tags")
     suspend fun deleteAllTags()
+
+    @Query("DELETE FROM doses_taken")
+    suspend fun deleteAllDoses()
+
+    @Query("DELETE FROM treatments")
+    suspend fun deleteAllTreatments()
 }

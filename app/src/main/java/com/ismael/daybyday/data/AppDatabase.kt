@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Version du schema. Affichee dans les reglages, a propos, pour savoir ce que
  * fait tourner le telephone en cas de probleme.
  */
-const val DATABASE_VERSION = 6
+const val DATABASE_VERSION = 7
 
 @Database(
     entities = [
@@ -20,6 +20,8 @@ const val DATABASE_VERSION = 6
         Tag::class,
         DayTagCrossRef::class,
         MoneyEntry::class,
+        Treatment::class,
+        DoseTaken::class,
     ],
     version = DATABASE_VERSION,
     exportSchema = true,
@@ -161,6 +163,48 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * L'ecran d'une journee devient modulaire : le sommeil, l'eau, ce qui a
+         * ete mange et les traitements arrivent. Les colonnes s'ajoutent vides,
+         * donc les journees deja ecrites restent telles quelles.
+         */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE day_entries ADD COLUMN sleepStartMinutes INTEGER")
+                db.execSQL("ALTER TABLE day_entries ADD COLUMN sleepEndMinutes INTEGER")
+                db.execSQL("ALTER TABLE day_entries ADD COLUMN sleepFromDevice INTEGER")
+                db.execSQL("ALTER TABLE day_entries ADD COLUMN waterGlasses INTEGER")
+                db.execSQL(
+                    "ALTER TABLE day_entries ADD COLUMN mealsNote TEXT NOT NULL DEFAULT ''"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `treatments` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`dose` TEXT NOT NULL, " +
+                        "`timesMask` INTEGER NOT NULL, " +
+                        "`active` INTEGER NOT NULL, " +
+                        "`sortOrder` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `doses_taken` (" +
+                        "`epochDay` INTEGER NOT NULL, " +
+                        "`treatmentId` INTEGER NOT NULL, " +
+                        "`timeKey` INTEGER NOT NULL, " +
+                        "`takenAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`epochDay`, `treatmentId`, `timeKey`))"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_doses_taken_epochDay` " +
+                        "ON `doses_taken` (`epochDay`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_doses_taken_treatmentId` " +
+                        "ON `doses_taken` (`treatmentId`)"
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -176,6 +220,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_3_4,
                     MIGRATION_4_5,
                     MIGRATION_5_6,
+                    MIGRATION_6_7,
                 )
                 .build()
                 .also { instance = it }

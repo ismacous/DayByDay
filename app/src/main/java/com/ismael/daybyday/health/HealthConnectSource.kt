@@ -6,10 +6,13 @@ import android.os.Build
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.aggregate.AggregationResult
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.request.AggregateRequest
+import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 
 /**
@@ -19,7 +22,13 @@ import java.time.ZoneId
  */
 object HealthConnectSource {
 
-    val permissions: Set<String> = setOf(HealthPermission.getReadPermission(StepsRecord::class))
+    val permissions: Set<String> = setOf(
+        HealthPermission.getReadPermission(StepsRecord::class),
+        HealthPermission.getReadPermission(SleepSessionRecord::class),
+    )
+
+    /** Une nuit lue sur le telephone : coucher et lever en minutes depuis minuit. */
+    data class Night(val startMinutes: Int, val endMinutes: Int)
 
     fun isAvailable(context: Context): Boolean =
         runCatching { HealthConnectClient.getSdkStatus(context) }
@@ -66,5 +75,44 @@ object HealthConnectSource {
             )
         }.getOrNull() ?: return null
         return result[StepsRecord.COUNT_TOTAL]?.toInt()
+    }
+
+    /**
+     * La nuit qui a mene a [date], si le telephone ou une montre l'a enregistree.
+     *
+     * On cherche entre midi la veille et midi le jour meme : une nuit commence
+     * le soir precedent et se termine le matin, et cette fenetre l'attrape en
+     * entier sans ramasser la sieste de l'apres-midi. Quand plusieurs sessions
+     * sont enregistrees, la plus longue est la vraie nuit.
+     */
+    suspend fun nightFor(context: Context, date: LocalDate): Night? {
+        if (!hasPermission(context)) return null
+        val client = client(context) ?: return null
+        val zone = ZoneId.systemDefault()
+        val from = date.minusDays(1).atTime(12, 0).atZone(zone).toInstant()
+        val to = date.atTime(12, 0).atZone(zone).toInstant()
+
+        val sessions = runCatching {
+            client.readRecords(
+                ReadRecordsRequest(
+                    recordType = SleepSessionRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(from, to),
+                )
+            ).records
+        }.getOrNull().orEmpty()
+
+        val night = sessions.maxByOrNull { it.endTime.toEpochMilli() - it.startTime.toEpochMilli() }
+            ?: return null
+        if (night.endTime <= night.startTime) return null
+
+        return Night(
+            startMinutes = minutesOfDay(night.startTime, zone),
+            endMinutes = minutesOfDay(night.endTime, zone),
+        )
+    }
+
+    private fun minutesOfDay(instant: java.time.Instant, zone: ZoneId): Int {
+        val time: LocalDateTime = LocalDateTime.ofInstant(instant, zone)
+        return time.hour * 60 + time.minute
     }
 }

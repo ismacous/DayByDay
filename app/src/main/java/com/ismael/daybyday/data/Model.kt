@@ -121,6 +121,20 @@ data class DayEntry(
     val steps: Int? = null,
     /** Minutes passees sur les applications ce jour-la. */
     val screenMinutes: Int? = null,
+    /**
+     * Heure du coucher et du lever, en minutes depuis minuit. Le coucher est
+     * souvent la veille au soir : quand la fin est plus petite que le debut,
+     * la nuit a simplement passe minuit. La nuit est rattachee au jour du
+     * reveil, celui qu'elle a reellement fait.
+     */
+    val sleepStartMinutes: Int? = null,
+    val sleepEndMinutes: Int? = null,
+    /** true si la nuit vient du telephone (montre, Health Connect) et non de la saisie. */
+    val sleepFromDevice: Boolean? = null,
+    /** Verres d'eau bus dans la journee. */
+    val waterGlasses: Int? = null,
+    /** Ce qui a ete mange, en texte libre. */
+    val mealsNote: String = "",
 ) {
     val color: DayColor? get() = DayColor.fromKey(colorKey)
 
@@ -156,11 +170,72 @@ data class DayEntry(
             return DayColor.entries.minByOrNull { kotlin.math.abs(it.score - average) }
         }
 
+    /** Duree de la nuit en minutes, en tenant compte du passage de minuit. */
+    val sleepMinutes: Int?
+        get() {
+            val start = sleepStartMinutes ?: return null
+            val end = sleepEndMinutes ?: return null
+            val length = if (end >= start) end - start else end + MINUTES_PER_DAY - start
+            return if (length in 1 until MINUTES_PER_DAY) length else null
+        }
+
     val isEmpty: Boolean
         get() = colorKey == null && title.isBlank() && note.isBlank() &&
             sportLevel == null && foodLevel == null && wentOut == null && weightKg == null &&
+            sleepStartMinutes == null && sleepEndMinutes == null &&
+            waterGlasses == null && mealsNote.isBlank() &&
             filledParts.isEmpty()
+
+    companion object {
+        const val MINUTES_PER_DAY = 24 * 60
+    }
 }
+
+/** Moment de prise d'un traitement dans la journee. */
+enum class DoseTime(val key: Int, val label: String, val emoji: String) {
+    MORNING(0, "Matin", "🌅"),
+    NOON(1, "Midi", "☀️"),
+    EVENING(2, "Soir", "🌆"),
+    NIGHT(3, "Nuit", "🌙");
+
+    /** Bit de ce moment dans le masque d'un traitement. */
+    val bit: Int get() = 1 shl key
+
+    companion object {
+        fun fromKey(key: Int?): DoseTime? = entries.firstOrNull { it.key == key }
+    }
+}
+
+/**
+ * Un traitement a prendre. Les moments de prise sont ranges dans un masque de
+ * bits pour tenir dans une colonne, sans table supplementaire.
+ */
+@Entity(tableName = "treatments")
+data class Treatment(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val dose: String = "",
+    val timesMask: Int = DoseTime.MORNING.bit,
+    val active: Boolean = true,
+    val sortOrder: Int = 0,
+) {
+    fun isDueAt(time: DoseTime): Boolean = timesMask and time.bit != 0
+
+    val times: List<DoseTime> get() = DoseTime.entries.filter { isDueAt(it) }
+}
+
+/** Une prise cochee : l'absence de ligne veut dire "pas encore pris". */
+@Entity(
+    tableName = "doses_taken",
+    primaryKeys = ["epochDay", "treatmentId", "timeKey"],
+    indices = [Index("epochDay"), Index("treatmentId")],
+)
+data class DoseTaken(
+    val epochDay: Long,
+    val treatmentId: Long,
+    val timeKey: Int,
+    val takenAt: Long = System.currentTimeMillis(),
+)
 
 /** Etiquette personnalisable, attachable a autant de journees que voulu. */
 @Entity(tableName = "tags")

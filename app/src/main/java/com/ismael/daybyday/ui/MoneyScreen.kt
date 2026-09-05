@@ -34,10 +34,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -82,6 +90,22 @@ fun MoneyScreen(onDayClick: (LocalDate) -> Unit) {
     var editing by remember { mutableStateOf<MoneyEntry?>(null) }
     var creating by remember { mutableStateOf(false) }
     var adjusting by remember { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
+
+    /** Suppression immediate, annulable tant que le message reste affiche. */
+    fun removeWithUndo(entry: MoneyEntry) {
+        scope.launch {
+            repository.deleteMoney(entry)
+            val result = snackbar.showSnackbar(
+                message = "« ${entry.displayLabel} » supprimé.",
+                actionLabel = "Annuler",
+                duration = SnackbarDuration.Long,
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                repository.saveMoney(entry.copy(id = 0))
+            }
+        }
+    }
 
     val balance by remember { repository.observeMoneyBalance() }
         .collectAsStateWithLifecycle(0L)
@@ -93,6 +117,7 @@ fun MoneyScreen(onDayClick: (LocalDate) -> Unit) {
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("Mon argent") }) },
+        snackbarHost = { SnackbarHost(snackbar) },
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
@@ -159,6 +184,23 @@ fun MoneyScreen(onDayClick: (LocalDate) -> Unit) {
                         color = if (summary.netCents < 0) DayColor.RED.color else DayColor.GREEN.color,
                         strong = true,
                     )
+                    // Une correction de solde n'est ni un gain ni une depense :
+                    // la compter avec le reste faisait passer un recalage de
+                    // 14,90 pour de l'argent gagne.
+                    if (summary.hasAdjustments) {
+                        Spacer(Modifier.height(6.dp))
+                        MoneyLine(
+                            "Corrections du solde",
+                            summary.adjustmentCents,
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            "Les corrections remettent le total juste : elles ne " +
+                                "comptent pas dans la différence du mois.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 Spacer(Modifier.height(12.dp))
                 Button(
@@ -184,12 +226,23 @@ fun MoneyScreen(onDayClick: (LocalDate) -> Unit) {
                     )
                 }
             } else {
-                items(monthEntries, key = { it.id }) { entry ->
-                    MoneyRow(
-                        entry = entry,
-                        onClick = { editing = entry },
-                        onOpenDay = { onDayClick(LocalDate.ofEpochDay(entry.epochDay)) },
+                item {
+                    Text(
+                        "Appuie sur une ligne pour la corriger, glisse-la sur le " +
+                            "côté pour la supprimer.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 4.dp),
                     )
+                }
+                items(monthEntries, key = { it.id }) { entry ->
+                    SwipeToDelete(entry = entry, onDelete = { removeWithUndo(entry) }) {
+                        MoneyRow(
+                            entry = entry,
+                            onClick = { editing = entry },
+                            onOpenDay = { onDayClick(LocalDate.ofEpochDay(entry.epochDay)) },
+                        )
+                    }
                 }
             }
 
@@ -239,14 +292,71 @@ fun MoneyScreen(onDayClick: (LocalDate) -> Unit) {
                             MoneyEntry(
                                 epochDay = today.toEpochDay(),
                                 amountCents = difference,
-                                label = "Ajustement du solde",
+                                label = MoneyCategory.ADJUSTMENT_LABEL,
+                                categoryKey = MoneyCategory.ADJUSTMENT.key,
                             )
+                        )
+                        snackbar.showSnackbar(
+                            "Solde corrigé de ${formatSignedMoney(difference)}."
                         )
                     }
                 }
             },
         )
     }
+}
+
+/**
+ * Glisser une ligne vers la gauche ou la droite la supprime. Une erreur de
+ * saisie se repare ainsi en un geste, et le message qui suit permet de revenir
+ * en arriere.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeToDelete(
+    entry: MoneyEntry,
+    onDelete: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val state = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            val swipedAway = value != SwipeToDismissBoxValue.Settled
+            if (swipedAway) onDelete()
+            swipedAway
+        }
+    )
+
+    // La ligne supprimee disparait de la liste : l'etat du geste doit repartir
+    // de zero si la meme ligne revient apres une annulation.
+    LaunchedEffect(entry.id) {
+        if (state.currentValue != SwipeToDismissBoxValue.Settled) state.reset()
+    }
+
+    SwipeToDismissBox(
+        state = state,
+        backgroundContent = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(DayColor.RED.color.copy(alpha = 0.18f))
+                    .padding(horizontal = 20.dp, vertical = 18.dp),
+                contentAlignment = if (state.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
+                    Alignment.CenterEnd
+                } else {
+                    Alignment.CenterStart
+                },
+            ) {
+                Text(
+                    "Supprimer",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = DayColor.RED.color,
+                )
+            }
+        },
+        content = { content() },
+    )
 }
 
 @Composable
@@ -295,7 +405,7 @@ private fun MoneyRow(entry: MoneyEntry, onClick: () -> Unit, onOpenDay: () -> Un
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = entry.label.ifBlank { entry.category?.label ?: "Mouvement" },
+                    text = entry.displayLabel,
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Text(
@@ -315,6 +425,11 @@ private fun MoneyRow(entry: MoneyEntry, onClick: () -> Unit, onOpenDay: () -> Un
     }
 }
 
+/**
+ * Correction du solde. Le dialogue montre le mouvement qui va etre cree avant
+ * de l'enregistrer : sans cela, corriger le total juste apres avoir saisi une
+ * depense la comptait une seconde fois, a l'envers.
+ */
 @Composable
 private fun AdjustBalanceDialog(
     currentCents: Long,
@@ -325,35 +440,58 @@ private fun AdjustBalanceDialog(
         mutableStateOf(String.format(java.util.Locale.FRANCE, "%.2f", currentCents / 100.0))
     }
     val target = text.replace(',', '.').toDoubleOrNull()?.let { (it * 100).roundToLong() }
+    val difference = target?.minus(currentCents)
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Corriger mon solde") },
         text = {
-            Column {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Text(
-                    "Indique ce que tu as réellement. J'ajoute la différence comme un " +
-                        "mouvement « Ajustement » pour que le compte tombe juste.",
+                    "À n'utiliser que si le compte ne tombe pas juste. Tes dépenses " +
+                        "et tes rentrées sont déjà retirées ou ajoutées : si tu viens " +
+                        "d'en saisir une, il n'y a rien à corriger.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(12.dp))
+                Text(
+                    "L'application compte ${formatMoney(currentCents)}.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(10.dp))
                 OutlinedTextField(
                     value = text,
                     onValueChange = { input ->
                         text = input.filter { it.isDigit() || it == ',' || it == '.' || it == '-' }.take(10)
                     },
-                    label = { Text("Solde réel") },
+                    label = { Text("Ce que tu as vraiment") },
                     suffix = { Text("€") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth().imePadding(),
                 )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = when {
+                        difference == null -> "Entre un montant pour voir la correction."
+                        difference == 0L -> "Le compte tombe déjà juste : rien à corriger."
+                        else -> "Une correction de ${formatSignedMoney(difference)} sera " +
+                            "ajoutée aujourd'hui. Elle n'est comptée ni dans tes " +
+                            "rentrées ni dans tes dépenses."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (difference == null || difference == 0L) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                )
             }
         },
         confirmButton = {
             TextButton(
-                enabled = target != null,
+                enabled = difference != null && difference != 0L,
                 onClick = { target?.let(onConfirm) },
             ) { Text("Enregistrer") }
         },

@@ -5,6 +5,7 @@ import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Process
 import android.provider.Settings
@@ -21,6 +22,9 @@ import java.time.ZoneId
  * journee) parce que les periodes des applications se recouvrent.
  */
 object ScreenTimeSource {
+
+    /** Un evenement d'usage reduit a ce dont le calcul a besoin. */
+    data class Moment(val type: Int, val timestamp: Long, val activity: String)
 
     fun hasPermission(context: Context): Boolean {
         val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager
@@ -45,6 +49,14 @@ object ScreenTimeSource {
     fun settingsIntent(): Intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
+    /**
+     * Meme ecran, mais ouvert directement sur DayByDay quand le telephone le
+     * permet : sur la liste complete il faut sinon chercher l'application a la
+     * main parmi des dizaines d'autres.
+     */
+    fun settingsIntent(context: Context): Intent =
+        settingsIntent().setData(Uri.fromParts("package", context.packageName, null))
+
     /** Minutes d'utilisation reelle du telephone ce jour-la, ou null sans autorisation. */
     fun minutesFor(context: Context, date: LocalDate): Int? {
         if (!hasPermission(context)) return null
@@ -61,35 +73,69 @@ object ScreenTimeSource {
 
         val events = runCatching { manager.queryEvents(dayStart, dayEnd) }.getOrNull() ?: return null
 
-        var total = 0L
-        var openedAt = 0L
+        val moments = mutableListOf<Moment>()
         val event = UsageEvents.Event()
-
         while (events.hasNextEvent()) {
             events.getNextEvent(event)
-            when (event.eventType) {
-                // Une application passe au premier plan : le telephone est utilise.
-                UsageEvents.Event.ACTIVITY_RESUMED ->
-                    if (openedAt == 0L) openedAt = event.timeStamp
+            moments += Moment(
+                type = event.eventType,
+                timestamp = event.timeStamp,
+                activity = "${event.packageName}/${event.className}",
+            )
+        }
 
-                // Retour en arriere-plan ou ecran eteint : on ferme l'intervalle.
+        val minutes = (foregroundMillis(moments, dayStart, dayEnd) / 60_000L).toInt()
+        return if (minutes <= 0) null else minutes
+    }
+
+    /**
+     * Duree pendant laquelle le telephone a reellement ete utilise entre
+     * [from] et [to].
+     *
+     * Le point delicat : quand on passe de l'application A a l'application B,
+     * Android envoie PAUSED(A), RESUMED(B), puis STOPPED(A) — dans cet ordre.
+     * Fermer l'intervalle sur n'importe quel PAUSED/STOPPED faisait donc
+     * refermer aussitot celui de B, et tout le temps passe ensuite sur B etait
+     * perdu (une nuit entiere comptee comme une heure). On ne ferme que si
+     * l'evenement concerne bien l'activite actuellement au premier plan.
+     */
+    internal fun foregroundMillis(moments: List<Moment>, from: Long, to: Long): Long {
+        var total = 0L
+        var openedAt = 0L
+        var foreground: String? = null
+
+        fun close(at: Long) {
+            if (openedAt != 0L) {
+                total += (at - openedAt).coerceAtLeast(0L)
+                openedAt = 0L
+            }
+            foreground = null
+        }
+
+        moments.sortedBy { it.timestamp }.forEach { moment ->
+            when (moment.type) {
+                // Une application passe au premier plan : le telephone est utilise.
+                UsageEvents.Event.ACTIVITY_RESUMED -> {
+                    foreground = moment.activity
+                    if (openedAt == 0L) openedAt = moment.timestamp
+                }
+
+                // Retour en arriere-plan : seule l'activite visible ferme la periode.
                 UsageEvents.Event.ACTIVITY_PAUSED,
                 UsageEvents.Event.ACTIVITY_STOPPED,
+                -> if (moment.activity == foreground) close(moment.timestamp)
+
+                // Ecran eteint ou verrouille : la periode se ferme quoi qu'il arrive.
                 UsageEvents.Event.SCREEN_NON_INTERACTIVE,
                 UsageEvents.Event.KEYGUARD_SHOWN,
-                -> if (openedAt != 0L) {
-                    total += (event.timeStamp - openedAt).coerceAtLeast(0L)
-                    openedAt = 0L
-                }
+                -> close(moment.timestamp)
             }
         }
 
         // Session encore ouverte a la fin de la periode observee.
-        if (openedAt != 0L) total += (dayEnd - openedAt).coerceAtLeast(0L)
+        if (openedAt != 0L) total += (to - openedAt).coerceAtLeast(0L)
 
         // Filet de securite : jamais plus que le temps ecoule dans la journee.
-        val elapsed = dayEnd - dayStart
-        val minutes = (minOf(total, elapsed) / 60_000L).toInt()
-        return if (minutes <= 0) null else minutes
+        return minOf(total, (to - from).coerceAtLeast(0L))
     }
 }

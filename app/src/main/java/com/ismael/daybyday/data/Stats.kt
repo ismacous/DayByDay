@@ -38,12 +38,23 @@ data class FactorInsight(
 /** Moyenne d'un moment de la journee (matin, apres-midi, soir, nuit). */
 data class PartSummary(val part: DayPart, val average: Double?, val days: Int)
 
-/** Rentrees et depenses d'une periode, en centimes. */
-data class MoneySummary(val incomeCents: Long, val expenseCents: Long) {
+/**
+ * Rentrees et depenses d'une periode, en centimes.
+ *
+ * Les corrections de solde sont mises a part : ce n'est pas de l'argent gagne
+ * ni depense, seulement un recalage du total.
+ */
+data class MoneySummary(
+    val incomeCents: Long,
+    val expenseCents: Long,
+    val adjustmentCents: Long = 0L,
+) {
     /** Depenses en valeur positive, plus lisible a l'affichage. */
     val spentCents: Long get() = -expenseCents
 
     val netCents: Long get() = incomeCents + expenseCents
+
+    val hasAdjustments: Boolean get() = adjustmentCents != 0L
 }
 
 object Stats {
@@ -100,10 +111,14 @@ object Stats {
         )
     }
 
-    fun summarizeMoney(entries: Collection<MoneyEntry>): MoneySummary = MoneySummary(
-        incomeCents = entries.filter { it.amountCents > 0 }.sumOf { it.amountCents },
-        expenseCents = entries.filter { it.amountCents < 0 }.sumOf { it.amountCents },
-    )
+    fun summarizeMoney(entries: Collection<MoneyEntry>): MoneySummary {
+        val (adjustments, movements) = entries.partition { it.isAdjustment }
+        return MoneySummary(
+            incomeCents = movements.filter { it.amountCents > 0 }.sumOf { it.amountCents },
+            expenseCents = movements.filter { it.amountCents < 0 }.sumOf { it.amountCents },
+            adjustmentCents = adjustments.sumOf { it.amountCents },
+        )
+    }
 
     private fun averageScore(entries: Collection<DayEntry>): Double? {
         val colors = entries.mapNotNull { it.color }

@@ -6,9 +6,12 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricManager
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,12 +21,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -46,16 +53,22 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.health.connect.client.PermissionController
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.ismael.daybyday.data.Backup
-import com.ismael.daybyday.data.TagCategory
+import com.ismael.daybyday.data.DATABASE_VERSION
+import com.ismael.daybyday.data.DatabaseContents
+import com.ismael.daybyday.data.DayColor
 import com.ismael.daybyday.dayByDayApp
 import com.ismael.daybyday.health.HealthConnectSource
 import com.ismael.daybyday.health.ScreenTimeSource
@@ -104,11 +117,13 @@ fun SettingsScreen() {
     var stepsGranted by remember { mutableStateOf(false) }
     var screenGranted by remember { mutableStateOf(false) }
     var permissionsChecked by remember { mutableIntStateOf(0) }
+    var notificationsGranted by remember { mutableStateOf(true) }
     var busy by remember { mutableStateOf(false) }
-    var mediaBytes by remember { mutableLongStateOf(0L) }
+    var contents by remember { mutableStateOf<DatabaseContents?>(null) }
     var exportYear by remember { mutableIntStateOf(LocalDate.now().year) }
 
-    val tags by remember { repository.observeTags() }.collectAsStateWithLifecycle(emptyList())
+    val healthAvailable = remember { HealthConnectSource.isAvailable(context) }
+    val appVersion = remember { AppVersion.of(context) }
 
     val biometricAvailable = remember {
         BiometricManager.from(context)
@@ -117,12 +132,23 @@ fun SettingsScreen() {
     }
 
     LaunchedEffect(busy) {
-        mediaBytes = withContext(Dispatchers.IO) { repository.media.totalBytes() }
+        contents = withContext(Dispatchers.IO) { repository.contents() }
     }
 
     LaunchedEffect(permissionsChecked) {
         stepsGranted = HealthConnectSource.hasPermission(context)
         screenGranted = ScreenTimeSource.hasPermission(context)
+        notificationsGranted = notificationsAllowed(context)
+    }
+
+    // Les autorisations se changent dans les reglages d'Android, hors de
+    // l'application : on les relit a chaque retour pour ne jamais afficher un
+    // etat perime.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            permissionsChecked += 1
+        }
     }
 
     val healthPermissions = rememberLauncherForActivityResult(
@@ -284,63 +310,66 @@ fun SettingsScreen() {
 
             Spacer(Modifier.height(16.dp))
 
-            // --- Sante & telephone ----------------------------------------
-            SectionCard(title = "Pas et temps d'écran") {
+            // --- Autorisations --------------------------------------------
+            SectionCard(title = "Autorisations") {
                 Text(
-                    "Ces deux mesures sont lues directement sur le téléphone et " +
-                        "restent dedans. L'application n'a pas accès à Internet : " +
-                        "elle ne peut rien envoyer nulle part.",
+                    "Ce que l'application a le droit de lire sur le téléphone. " +
+                        "Tout est lu en local et reste dedans : sans permission " +
+                        "Internet, rien ne peut sortir d'ici. Appuie sur une ligne " +
+                        "pour l'ouvrir dans les réglages Android.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(12.dp))
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Nombre de pas", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            text = when {
-                                !HealthConnectSource.isAvailable(context) ->
-                                    "Health Connect n'est pas disponible sur ce téléphone."
-                                stepsGranted -> "Connecté à Health Connect."
-                                else -> "Samsung Health écrit tes pas dans Health Connect."
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (HealthConnectSource.isAvailable(context) && !stepsGranted) {
-                        TextButton(
-                            onClick = { healthPermissions.launch(HealthConnectSource.permissions) }
-                        ) { Text("Autoriser") }
-                    }
-                }
+                PermissionRow(
+                    emoji = "\uD83D\uDC5F",
+                    title = "Nombre de pas",
+                    status = when {
+                        !healthAvailable ->
+                            "Health Connect n'est pas installé sur ce téléphone."
+                        stepsGranted -> "Lu dans Health Connect, où Samsung Health les écrit."
+                        else -> "Samsung Health écrit tes pas dans Health Connect."
+                    },
+                    granted = stepsGranted,
+                    available = healthAvailable,
+                    onClick = {
+                        if (healthAvailable && !stepsGranted) {
+                            healthPermissions.launch(HealthConnectSource.permissions)
+                        } else {
+                            openSystemScreen(context, HealthConnectSource.settingsIntent())
+                        }
+                    },
+                )
 
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Temps sur les applis", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            text = if (screenGranted) {
-                                "Autorisé."
-                            } else {
-                                "À activer dans « Accès aux données d'utilisation »."
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (!screenGranted) {
-                        TextButton(onClick = {
-                            runCatching { context.startActivity(ScreenTimeSource.settingsIntent()) }
-                            permissionsChecked += 1
-                        }) { Text("Ouvrir") }
-                    }
-                }
+                PermissionRow(
+                    emoji = "\uD83D\uDCF1",
+                    title = "Temps sur les applis",
+                    status = if (screenGranted) {
+                        "Accès aux données d'utilisation accordé."
+                    } else {
+                        "À activer dans « Accès aux données d'utilisation »."
+                    },
+                    granted = screenGranted,
+                    onClick = { openSystemScreen(context, ScreenTimeSource.settingsIntent(context)) },
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                PermissionRow(
+                    emoji = "\uD83D\uDD14",
+                    title = "Notifications",
+                    status = if (notificationsGranted) {
+                        "Le rappel du soir peut s'afficher."
+                    } else {
+                        "Bloquées : le rappel du soir ne s'affichera pas."
+                    },
+                    granted = notificationsGranted,
+                    onClick = { openSystemScreen(context, notificationSettingsIntent(context)) },
+                )
             }
-
-            Spacer(Modifier.height(16.dp))
 
             // --- Rappel ---------------------------------------------------
             SectionCard(title = "Rappel quotidien") {
@@ -528,35 +557,6 @@ fun SettingsScreen() {
 
             Spacer(Modifier.height(16.dp))
 
-            // --- Etiquettes -----------------------------------------------
-            SectionCard(title = "Mes étiquettes") {
-                Text(
-                    "Les ${tags.size} étiquettes sont fournies avec l'application et rangées " +
-                        "par famille. Elles évoluent avec les mises à jour : rien à gérer ici, " +
-                        "et tes journées déjà marquées sont conservées.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(10.dp))
-                TagCategory.entries.forEach { category ->
-                    val names = tags.filter { it.group == category }
-                    if (names.isNotEmpty()) {
-                        Text(
-                            text = category.label.uppercase(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 10.dp, bottom = 2.dp),
-                        )
-                        Text(
-                            text = names.joinToString(" · ") { it.display },
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
             // --- Confidentialite ------------------------------------------
             SectionCard(title = "Confidentialité") {
                 SettingSwitchRow(
@@ -628,10 +628,45 @@ fun SettingsScreen() {
 
             Spacer(Modifier.height(16.dp))
 
-            // --- Stockage et a propos -------------------------------------
-            SectionCard(title = "Stockage") {
+            // --- A propos -------------------------------------------------
+            SectionCard(title = "À propos") {
                 Text(
-                    "Médias enregistrés : ${formatBytes(mediaBytes)}",
+                    "La fiche technique de l'application : à donner telle quelle " +
+                        "si quelque chose ne marche pas.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+
+                InfoRow("Version", "${appVersion.name} (build ${appVersion.code})")
+                InfoRow("Identifiant", appVersion.packageName)
+                InfoRow("Android", "${Build.VERSION.RELEASE} · API ${Build.VERSION.SDK_INT}")
+                InfoRow("Appareil", "${Build.MANUFACTURER} ${Build.MODEL}")
+                InfoRow("Base de données", "schéma v$DATABASE_VERSION")
+
+                val stored = contents
+                InfoRow(
+                    "Contenu",
+                    if (stored == null) {
+                        "Lecture…"
+                    } else {
+                        "${stored.days} journée(s) · ${stored.moneyEntries} mouvement(s) · " +
+                            "${stored.mediaFiles} média(s)"
+                    },
+                )
+                InfoRow(
+                    "Espace des médias",
+                    if (stored == null) "Lecture…" else formatBytes(stored.mediaBytes),
+                )
+                InfoRow("Permissions", "notifications · pas · temps d'écran")
+                InfoRow("Accès réseau", "aucun — permission INTERNET absente")
+
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Sans la permission INTERNET, l'application est techniquement " +
+                        "incapable d'ouvrir une connexion : rien n'est synchronisé, " +
+                        "rien n'est envoyé. Tout est stocké dans son dossier privé, " +
+                        "que seules tes sauvegardes font sortir du téléphone.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -639,19 +674,26 @@ fun SettingsScreen() {
 
             Spacer(Modifier.height(16.dp))
 
-            SectionCard(title = "À propos") {
+            // --- Effacer --------------------------------------------------
+            SectionCard(title = "Effacer mes données") {
                 Text(
-                    "DayByDay n'a aucune permission Internet : l'application est " +
-                        "techniquement incapable d'envoyer tes données ailleurs. " +
-                        "Rien n'est synchronisé, rien n'est partagé.",
+                    "Supprime définitivement toutes les journées, notes, photos, " +
+                        "vidéos et mouvements d'argent. C'est irréversible : fais " +
+                        "d'abord une sauvegarde si tu hésites.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(10.dp))
-                TextButton(onClick = { showEraseDialog = true }) {
+                OutlinedButton(
+                    onClick = { showEraseDialog = true },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Text("Effacer toutes mes données", color = MaterialTheme.colorScheme.error)
                 }
             }
+
+            Spacer(Modifier.height(16.dp))
 
             Spacer(Modifier.height(40.dp))
         }
@@ -690,31 +732,166 @@ fun SettingsScreen() {
     }
 
     if (showEraseDialog) {
-        AlertDialog(
-            onDismissRequest = { showEraseDialog = false },
-            title = { Text("Tout effacer ?") },
-            text = {
-                Text(
-                    "Toutes les journées, notes, photos et vidéos seront " +
-                        "définitivement supprimées de l'application."
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showEraseDialog = false
-                    scope.launch {
-                        repository.clearEverything()
-                        MediaLoader.clear()
-                        snackbar.showSnackbar("Toutes les données ont été effacées.")
-                    }
-                }) {
-                    Text("Tout effacer", color = MaterialTheme.colorScheme.error)
+        EraseDialog(
+            contents = contents,
+            onDismiss = { showEraseDialog = false },
+            onConfirm = {
+                showEraseDialog = false
+                busy = true
+                scope.launch {
+                    repository.clearEverything()
+                    MediaLoader.clear()
+                    busy = false
+                    snackbar.showSnackbar("Toutes les données ont été effacées.")
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showEraseDialog = false }) { Text("Annuler") }
-            },
         )
+    }
+}
+
+/**
+ * Effacement definitif : la confirmation demande de recopier un mot, pour que
+ * ce ne soit jamais le resultat d'un appui de travers.
+ */
+@Composable
+private fun EraseDialog(
+    contents: DatabaseContents?,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    var typed by remember { mutableStateOf("") }
+    val word = "EFFACER"
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Tout effacer ?") },
+        text = {
+            Column {
+                Text(
+                    if (contents == null) {
+                        "Toutes tes journées, notes, photos, vidéos et mouvements " +
+                            "d'argent seront supprimés."
+                    } else {
+                        "${contents.days} journée(s), ${contents.mediaFiles} média(s) et " +
+                            "${contents.moneyEntries} mouvement(s) d'argent seront supprimés."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "C'est définitif : rien ne pourra être récupéré, sauf depuis " +
+                        "une sauvegarde faite avant.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = typed,
+                    onValueChange = { typed = it.take(10) },
+                    label = { Text("Écris $word pour confirmer") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                enabled = typed.trim().uppercase(Locale.FRANCE) == word,
+            ) {
+                Text("Tout effacer", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
+    )
+}
+
+/**
+ * Une autorisation du telephone : son etat en clair, et un appui qui ouvre
+ * l'ecran Android correspondant pour l'activer ou la retirer quand on veut.
+ */
+@Composable
+private fun PermissionRow(
+    emoji: String,
+    title: String,
+    status: String,
+    granted: Boolean,
+    onClick: () -> Unit,
+    available: Boolean = true,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
+            .clickable(enabled = available, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(emoji, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.width(8.dp))
+                StatePill(granted = granted, available = available)
+            }
+            Text(
+                status,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (available) {
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "Ouvrir dans les réglages",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatePill(granted: Boolean, available: Boolean) {
+    val label = when {
+        !available -> "Indisponible"
+        granted -> "Autorisé"
+        else -> "À activer"
+    }
+    val color = when {
+        !available -> MaterialTheme.colorScheme.onSurfaceVariant
+        granted -> DayColor.GREEN.color
+        else -> DayColor.ORANGE.color
+    }
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelSmall,
+        color = color,
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(color.copy(alpha = 0.15f))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    )
+}
+
+/** Une ligne « intitulé — valeur » de la fiche technique. */
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(120.dp),
+        )
+        Text(value, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -788,6 +965,35 @@ private fun PinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
     )
 }
+
+/** Version installee, lue dans le paquet plutot que codee en dur. */
+data class AppVersion(val name: String, val code: Long, val packageName: String) {
+    companion object {
+        fun of(context: Context): AppVersion {
+            val info = runCatching {
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }.getOrNull()
+            val code = when {
+                info == null -> 0L
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.P -> info.longVersionCode
+                else -> @Suppress("DEPRECATION") info.versionCode.toLong()
+            }
+            return AppVersion(
+                name = info?.versionName ?: "inconnue",
+                code = code,
+                packageName = context.packageName,
+            )
+        }
+    }
+}
+
+private fun notificationsAllowed(context: Context): Boolean =
+    NotificationManagerCompat.from(context).areNotificationsEnabled()
+
+private fun notificationSettingsIntent(context: Context): Intent =
+    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
 private fun showTimePicker(
     context: Context,

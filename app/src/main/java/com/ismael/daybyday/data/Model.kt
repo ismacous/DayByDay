@@ -213,7 +213,23 @@ data class DayMediaCount(val epochDay: Long, val count: Int)
 /** Poids releve un jour donne, pour la courbe de suivi. */
 data class WeightPoint(val epochDay: Long, val weightKg: Double)
 
-/** Categories de mouvements d'argent. */
+/** Contenu reel de la base, affiche dans « A propos » des reglages. */
+data class DatabaseContents(
+    val days: Int,
+    val moneyEntries: Int,
+    val mediaFiles: Int,
+    val taggedDays: Int,
+    val mediaBytes: Long,
+)
+
+/**
+ * Categories de mouvements d'argent.
+ *
+ * ADJUSTMENT n'est pas proposee a la saisie : elle marque les corrections de
+ * solde, qui remettent le compte a la bonne valeur sans etre ni une vraie
+ * rentree ni une vraie depense. Les melanger au reste faisait apparaitre une
+ * correction de 14,90 comme un gain de 14,90.
+ */
 enum class MoneyCategory(val key: String, val label: String, val emoji: String, val isIncome: Boolean) {
     SALARY("salaire", "Salaire / aides", "💶", true),
     GIFT("aide", "Aide, remboursement", "🎁", true),
@@ -224,14 +240,18 @@ enum class MoneyCategory(val key: String, val label: String, val emoji: String, 
     SUBSCRIPTION("abonnement", "Abonnements", "🔁", false),
     HEALTH("sante", "Santé", "💊", false),
     FUN("loisirs", "Loisirs, sorties", "🎮", false),
-    OTHER_OUT("autre_depense", "Autre dépense", "➖", false);
+    OTHER_OUT("autre_depense", "Autre dépense", "➖", false),
+    ADJUSTMENT("ajustement", "Correction du solde", "⚖️", false);
 
     companion object {
+        /** Libelle historique des corrections, avant la categorie dediee. */
+        const val ADJUSTMENT_LABEL = "Ajustement du solde"
+
         fun fromKey(key: String?): MoneyCategory? = entries.firstOrNull { it.key == key }
 
-        fun incomes(): List<MoneyCategory> = entries.filter { it.isIncome }
+        fun incomes(): List<MoneyCategory> = entries.filter { it.isIncome && it != ADJUSTMENT }
 
-        fun expenses(): List<MoneyCategory> = entries.filter { !it.isIncome }
+        fun expenses(): List<MoneyCategory> = entries.filter { !it.isIncome && it != ADJUSTMENT }
     }
 }
 
@@ -254,4 +274,11 @@ data class MoneyEntry(
     val isIncome: Boolean get() = amountCents >= 0
 
     val category: MoneyCategory? get() = MoneyCategory.fromKey(categoryKey)
+
+    /** Correction de solde : ni une rentree ni une depense, juste un recalage. */
+    val isAdjustment: Boolean get() = category == MoneyCategory.ADJUSTMENT
+
+    /** Ce qui s'affiche dans une liste quand aucun libelle n'a ete saisi. */
+    val displayLabel: String
+        get() = label.ifBlank { category?.label ?: "Mouvement" }
 }

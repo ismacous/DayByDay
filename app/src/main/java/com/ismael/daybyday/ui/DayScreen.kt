@@ -51,6 +51,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,6 +68,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ismael.daybyday.data.DayColor
 import com.ismael.daybyday.data.DayEntry
@@ -89,6 +93,9 @@ import java.time.LocalDate
 import java.util.Locale
 
 private const val SAVE_DEBOUNCE_MS = 400L
+
+/** Les pas et le temps d'ecran sont relus a ce rythme sur la journee en cours. */
+private const val MEASURE_REFRESH_MS = 60_000L
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -117,6 +124,10 @@ fun DayScreen(
     var weightText by remember { mutableStateOf("") }
     var stepsValue by remember { mutableStateOf<Int?>(null) }
     var screenValue by remember { mutableStateOf<Int?>(null) }
+    var stepsGranted by remember { mutableStateOf(false) }
+    var screenGranted by remember { mutableStateOf(false) }
+    var measuresTick by remember { mutableIntStateOf(0) }
+    val healthAvailable = remember { HealthConnectSource.isAvailable(context) }
     var loadedFor by remember { mutableStateOf<Long?>(null) }
     var viewerIndex by remember { mutableStateOf<Int?>(null) }
     var addingMoney by remember { mutableStateOf(false) }
@@ -173,12 +184,38 @@ fun DayScreen(
         stepsValue = entry?.steps
         screenValue = entry?.screenMinutes
         loadedFor = epochDay
+    }
 
-        // Pas et temps d'ecran du jour, lus en local si les acces sont donnes.
+    // Pas et temps d'ecran, lus en local. Ces deux mesures bougent toute la
+    // journee : on les relit a chaque retour dans l'application, et toutes les
+    // minutes tant que la journee affichee est celle en cours.
+    LaunchedEffect(epochDay, loadedFor, measuresTick) {
+        if (loadedFor != epochDay) return@LaunchedEffect
         val day = LocalDate.ofEpochDay(epochDay)
         withContext(Dispatchers.IO) {
-            HealthConnectSource.stepsFor(context, day)?.let { stepsValue = it }
-            ScreenTimeSource.minutesFor(context, day)?.let { screenValue = it }
+            val granted = HealthConnectSource.hasPermission(context)
+            val steps = if (granted) HealthConnectSource.stepsFor(context, day) else null
+            val screen = ScreenTimeSource.minutesFor(context, day)
+            withContext(Dispatchers.Main) {
+                stepsGranted = granted
+                screenGranted = ScreenTimeSource.hasPermission(context)
+                steps?.let { stepsValue = it }
+                screen?.let { screenValue = it }
+            }
+        }
+    }
+
+    // Relecture a chaque fois que l'ecran redevient visible, puis chaque
+    // minute tant qu'on regarde la journee en cours. Rien ne tourne quand
+    // l'application passe en arriere-plan.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(epochDay, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            measuresTick += 1
+            while (LocalDate.ofEpochDay(epochDay) == LocalDate.now()) {
+                delay(MEASURE_REFRESH_MS)
+                measuresTick += 1
+            }
         }
     }
 
@@ -381,13 +418,19 @@ fun DayScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // 3. Bouger ----------------------------------------------------
-            SectionCard(title = "🏃 Bouger") {
+            // 3. Activite physique -----------------------------------------
+            SectionCard(title = "🏃 Activité physique") {
                 MeasureRow(
                     emoji = "👟",
-                    label = "Pas aujourd'hui",
+                    label = if (date == LocalDate.now()) "Pas aujourd'hui" else "Pas ce jour-là",
                     value = stepsValue?.let { "${formatSteps(it)} pas" },
-                    hint = "Autorise Health Connect dans les réglages pour les voir.",
+                    hint = when {
+                        !healthAvailable ->
+                            "Health Connect n'est pas installé sur ce téléphone."
+                        !stepsGranted -> "Appuie pour autoriser Health Connect."
+                        else -> "Autorisé, mais aucun pas enregistré pour l'instant."
+                    },
+                    onClick = { openSystemScreen(context, HealthConnectSource.settingsIntent()) },
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
@@ -475,7 +518,14 @@ fun DayScreen(
                     emoji = "📱",
                     label = "Temps sur le téléphone",
                     value = screenValue?.let { formatScreenTime(it) },
-                    hint = "Autorise l'accès aux données d'utilisation dans les réglages.",
+                    hint = if (screenGranted) {
+                        "Autorisé, mais rien de mesuré pour l'instant."
+                    } else {
+                        "Appuie pour autoriser l'accès aux données d'utilisation."
+                    },
+                    onClick = {
+                        openSystemScreen(context, ScreenTimeSource.settingsIntent(context))
+                    },
                 )
             }
 
@@ -547,7 +597,7 @@ fun DayScreen(
                             Text(entry.category?.emoji ?: if (entry.isIncome) "➕" else "➖")
                             Spacer(Modifier.width(10.dp))
                             Text(
-                                text = entry.label.ifBlank { entry.category?.label ?: "Mouvement" },
+                                text = entry.displayLabel,
                                 style = MaterialTheme.typography.bodyLarge,
                                 modifier = Modifier.weight(1f),
                             )
@@ -678,12 +728,19 @@ fun DayScreen(
 
 /** Donnee relevee automatiquement par le telephone, en lecture seule. */
 @Composable
-private fun MeasureRow(emoji: String, label: String, value: String?, hint: String) {
+private fun MeasureRow(
+    emoji: String,
+    label: String,
+    value: String?,
+    hint: String,
+    onClick: (() -> Unit)? = null,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

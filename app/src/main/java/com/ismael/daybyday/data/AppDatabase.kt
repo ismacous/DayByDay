@@ -7,6 +7,12 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
+/**
+ * Version du schema. Affichee dans les reglages, a propos, pour savoir ce que
+ * fait tourner le telephone en cas de probleme.
+ */
+const val DATABASE_VERSION = 6
+
 @Database(
     entities = [
         DayEntry::class,
@@ -15,7 +21,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DayTagCrossRef::class,
         MoneyEntry::class,
     ],
-    version = 5,
+    version = DATABASE_VERSION,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -138,6 +144,23 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Les corrections de solde etaient enregistrees comme des mouvements
+         * ordinaires : une correction de +14,90 apparaissait donc comme une
+         * rentree de 14,90 dans le bilan du mois. Elles recoivent leur propre
+         * categorie pour etre comptees a part. Aucune colonne ne change, seules
+         * les lignes deja enregistrees sont marquees.
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "UPDATE transactions SET categoryKey = ? " +
+                        "WHERE categoryKey IS NULL AND label = ?",
+                    arrayOf<Any>(MoneyCategory.ADJUSTMENT.key, MoneyCategory.ADJUSTMENT_LABEL),
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -147,7 +170,13 @@ abstract class AppDatabase : RoomDatabase() {
                 AppDatabase::class.java,
                 NAME,
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(
+                    MIGRATION_1_2,
+                    MIGRATION_2_3,
+                    MIGRATION_3_4,
+                    MIGRATION_4_5,
+                    MIGRATION_5_6,
+                )
                 .build()
                 .also { instance = it }
         }

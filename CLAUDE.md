@@ -60,6 +60,14 @@ téléphone (Samsung S25, Android 15).
 - **Sauvegarde automatique du jour** : dans le `DisposableEffect`, le jour est
   figé au démarrage de l'effet ; au moment du `onDispose`, `epochDay` peut déjà
   pointer vers le jour suivant alors que les champs contiennent l'ancien.
+- **Temps d'écran** : les événements d'usage arrivent dans l'ordre PAUSED(A),
+  RESUMED(B), STOPPED(A). Ne fermer une période que si l'événement concerne
+  l'activité réellement au premier plan, sinon le STOPPED tardif de A referme
+  la période de B et des heures disparaissent. La logique est isolée dans
+  `ScreenTimeSource.foregroundMillis`, testée dans `ScreenTimeTest`.
+- **Argent** : une correction de solde porte la catégorie `ADJUSTMENT` et n'est
+  comptée ni dans les rentrées ni dans les dépenses. Sans ça, remettre le total
+  juste après une dépense la comptait une seconde fois, à l'envers.
 - **Tests instrumentés** : chaque test `runBlocking` doit déclarer `: Unit`,
   sinon JUnit refuse la classe entière. `CalendarUiTest` désactive l'écran de
   reprise de sauvegarde dans un `@BeforeClass`, avant que la règle ne lance

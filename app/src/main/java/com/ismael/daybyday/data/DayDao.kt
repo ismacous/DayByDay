@@ -130,6 +130,20 @@ interface DayDao {
     @Query("DELETE FROM media_items WHERE id = :id")
     suspend fun deleteMedia(id: Long)
 
+    // --- Comptages (ecran "A propos") -------------------------------------
+
+    @Query("SELECT COUNT(*) FROM day_entries")
+    suspend fun countDays(): Int
+
+    @Query("SELECT COUNT(*) FROM transactions")
+    suspend fun countMoney(): Int
+
+    @Query("SELECT COUNT(*) FROM media_items")
+    suspend fun countMedia(): Int
+
+    @Query("SELECT COUNT(*) FROM day_tags")
+    suspend fun countDayTags(): Int
+
     // --- Remise a zero ----------------------------------------------------
 
     @Query("DELETE FROM media_items")

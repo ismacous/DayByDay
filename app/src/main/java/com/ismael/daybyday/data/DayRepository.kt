@@ -132,6 +132,15 @@ class DayRepository(context: Context) {
 
     suspend fun allMoney(): List<MoneyEntry> = dao.allMoney()
 
+    /** Ce que contient la base, pour la fiche technique des reglages. */
+    suspend fun contents(): DatabaseContents = DatabaseContents(
+        days = dao.countDays(),
+        moneyEntries = dao.countMoney(),
+        mediaFiles = dao.countMedia(),
+        taggedDays = dao.countDayTags(),
+        mediaBytes = media.totalBytes(),
+    )
+
     suspend fun saveMoney(entry: MoneyEntry) {
         dao.upsertMoney(entry)
     }

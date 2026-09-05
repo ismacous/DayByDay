@@ -3,6 +3,9 @@ package com.ismael.daybyday.ui
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -237,5 +240,21 @@ fun SummaryCard(
                 }
             }
         }
+    }
+}
+
+/**
+ * Ouvre un ecran des reglages d'Android. Certains telephones n'ont pas l'ecran
+ * precis demande : on retombe alors sur la fiche de l'application, qui existe
+ * toujours et donne acces aux memes autorisations.
+ */
+fun openSystemScreen(context: Context, intent: Intent) {
+    if (runCatching { context.startActivity(intent) }.isSuccess) return
+    runCatching {
+        context.startActivity(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                .setData(Uri.fromParts("package", context.packageName, null))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
     }
 }

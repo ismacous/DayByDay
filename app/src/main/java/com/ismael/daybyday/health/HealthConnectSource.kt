@@ -1,6 +1,8 @@
 package com.ismael.daybyday.health
 
 import android.content.Context
+import android.content.Intent
+import android.os.Build
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.aggregate.AggregationResult
 import androidx.health.connect.client.permission.HealthPermission
@@ -22,6 +24,20 @@ object HealthConnectSource {
     fun isAvailable(context: Context): Boolean =
         runCatching { HealthConnectClient.getSdkStatus(context) }
             .getOrNull() == HealthConnectClient.SDK_AVAILABLE
+
+    /**
+     * Ecran systeme ou l'autorisation des pas s'accorde et se retire. Depuis
+     * Android 14 Health Connect fait partie des reglages du telephone ; avant,
+     * c'est une application a part.
+     */
+    fun settingsIntent(): Intent {
+        val action = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            "android.health.connect.action.HEALTH_HOME_SETTINGS"
+        } else {
+            HealthConnectClient.ACTION_HEALTH_CONNECT_SETTINGS
+        }
+        return Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
 
     private fun client(context: Context): HealthConnectClient? =
         runCatching { HealthConnectClient.getOrCreate(context) }.getOrNull()

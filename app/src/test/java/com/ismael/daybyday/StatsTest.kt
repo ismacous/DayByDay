@@ -4,6 +4,7 @@ import com.ismael.daybyday.data.DayColor
 import com.ismael.daybyday.data.DayEntry
 import com.ismael.daybyday.data.DayPart
 import com.ismael.daybyday.data.DayTagCrossRef
+import com.ismael.daybyday.data.MoneyCategory
 import com.ismael.daybyday.data.MoneyEntry
 import com.ismael.daybyday.data.FoodLevel
 import com.ismael.daybyday.data.SportLevel
@@ -221,6 +222,48 @@ class StatsTest {
         assertEquals(120_000L, summary.incomeCents)
         assertEquals(84_550L, summary.spentCents)
         assertEquals(35_450L, summary.netCents)
+    }
+
+    @Test
+    fun `une correction de solde n est ni une rentree ni une depense`() {
+        val entries = listOf(
+            MoneyEntry(epochDay = 1, amountCents = -14_90, label = "Pizza"),
+            MoneyEntry(
+                epochDay = 2,
+                amountCents = 14_90,
+                label = MoneyCategory.ADJUSTMENT_LABEL,
+                categoryKey = MoneyCategory.ADJUSTMENT.key,
+            ),
+        )
+
+        val summary = Stats.summarizeMoney(entries)
+
+        // Sans cette separation, le mois affichait « +14,90 de rentrées »
+        // alors qu'il ne s'agissait que d'un recalage du total.
+        assertEquals(0L, summary.incomeCents)
+        assertEquals(14_90L, summary.spentCents)
+        assertEquals(-14_90L, summary.netCents)
+        assertEquals(14_90L, summary.adjustmentCents)
+        assertTrue(summary.hasAdjustments)
+    }
+
+    @Test
+    fun `sans correction le mois n affiche pas de ligne d ajustement`() {
+        val summary = Stats.summarizeMoney(
+            listOf(MoneyEntry(epochDay = 1, amountCents = -1_000, label = "Bus"))
+        )
+
+        assertEquals(0L, summary.adjustmentCents)
+        assertTrue(!summary.hasAdjustments)
+    }
+
+    @Test
+    fun `les categories proposees a la saisie excluent la correction de solde`() {
+        val proposees = MoneyCategory.incomes() + MoneyCategory.expenses()
+
+        assertTrue(MoneyCategory.ADJUSTMENT !in proposees)
+        assertTrue(MoneyCategory.FOOD in proposees)
+        assertTrue(MoneyCategory.SALARY in proposees)
     }
 
     @Test

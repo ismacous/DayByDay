@@ -58,6 +58,10 @@ fun MoneyEntryDialog(
     var category by remember { mutableStateOf(initial?.category) }
     var date by remember { mutableStateOf(defaultDate) }
 
+    // Une correction de solde n'est pas dans les categories proposees : sans
+    // ce rappel, la modifier la transformerait en vraie rentree ou depense.
+    val wasAdjustment = initial?.isAdjustment == true
+
     val amountCents = amountText.replace(',', '.').toDoubleOrNull()
         ?.let { (it * 100).roundToLong() } ?: 0L
 
@@ -113,6 +117,19 @@ fun MoneyEntryDialog(
 
                 Spacer(Modifier.height(12.dp))
 
+                if (wasAdjustment && category?.isIncome != true &&
+                    (category == null || category == MoneyCategory.ADJUSTMENT)
+                ) {
+                    Text(
+                        "C'est une correction de solde. Elle reste à part de tes " +
+                            "rentrées et de tes dépenses, sauf si tu lui donnes une " +
+                            "catégorie ci-dessous.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+
                 Text("Catégorie", style = MaterialTheme.typography.labelLarge)
                 Spacer(Modifier.height(6.dp))
                 FlowRow(
@@ -159,7 +176,8 @@ fun MoneyEntryDialog(
                             epochDay = date.toEpochDay(),
                             amountCents = if (isIncome) amountCents else -amountCents,
                             label = label.trim(),
-                            categoryKey = category?.key,
+                            categoryKey = category?.key
+                                ?: MoneyCategory.ADJUSTMENT.key.takeIf { wasAdjustment },
                         )
                     )
                 },

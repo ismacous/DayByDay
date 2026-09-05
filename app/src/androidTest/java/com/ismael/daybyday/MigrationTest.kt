@@ -5,6 +5,8 @@ import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.ismael.daybyday.data.AppDatabase
+import com.ismael.daybyday.data.MoneyCategory
+import com.ismael.daybyday.data.Stats
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -60,6 +62,7 @@ class MigrationTest {
                 AppDatabase.MIGRATION_2_3,
                 AppDatabase.MIGRATION_3_4,
                 AppDatabase.MIGRATION_4_5,
+                AppDatabase.MIGRATION_5_6,
             )
             .build()
 
@@ -94,6 +97,66 @@ class MigrationTest {
                 assertEquals(null, day?.steps)
                 assertEquals(null, day?.screenMinutes)
                 assertEquals(true, day?.colorManual)
+            }
+        } finally {
+            database.close()
+            context.deleteDatabase(databaseName)
+        }
+    }
+
+    /**
+     * Les corrections de solde enregistrees avant la version 6 passaient pour
+     * de vraies rentrees dans le bilan du mois. La migration les marque pour
+     * qu'elles soient comptees a part, sans toucher aux vrais mouvements.
+     *
+     * La base est d'abord creee par Room, donc avec le bon schema, puis
+     * ramenee a la version 5 : c'est exactement la situation d'un telephone
+     * qui installe la mise a jour.
+     */
+    @Test
+    fun lesAnciennesCorrectionsDeSoldeSontMarquees() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        context.deleteDatabase(databaseName)
+
+        Room.databaseBuilder(context, AppDatabase::class.java, databaseName)
+            .build()
+            .apply { runBlocking { dayDao().allMoney() } }
+            .close()
+
+        // Retour a l'etat d'avant la mise a jour : version 5, et des
+        // corrections de solde enregistrees comme des mouvements ordinaires.
+        val file = context.getDatabasePath(databaseName)
+        val legacy = SQLiteDatabase.openOrCreateDatabase(file, null)
+        legacy.execSQL(
+            "INSERT INTO transactions (epochDay, amountCents, label, categoryKey, createdAt) " +
+                "VALUES (20000, 2826, 'Ajustement du solde', NULL, 1)"
+        )
+        legacy.execSQL(
+            "INSERT INTO transactions (epochDay, amountCents, label, categoryKey, createdAt) " +
+                "VALUES (20000, -1490, 'Pizza + milkshake', 'courses', 1)"
+        )
+        legacy.version = 5
+        legacy.close()
+
+        val database = Room.databaseBuilder(context, AppDatabase::class.java, databaseName)
+            .addMigrations(AppDatabase.MIGRATION_5_6)
+            .build()
+
+        try {
+            runBlocking {
+                val money = database.dayDao().allMoney()
+                val correction = money.first { it.label == "Ajustement du solde" }
+                val depense = money.first { it.label == "Pizza + milkshake" }
+
+                assertTrue(correction.isAdjustment)
+                assertTrue(!depense.isAdjustment)
+                assertEquals(MoneyCategory.FOOD, depense.category)
+
+                // La correction ne pese plus dans les rentrees du mois.
+                val summary = Stats.summarizeMoney(money)
+                assertEquals(0L, summary.incomeCents)
+                assertEquals(1490L, summary.spentCents)
+                assertEquals(2826L, summary.adjustmentCents)
             }
         } finally {
             database.close()

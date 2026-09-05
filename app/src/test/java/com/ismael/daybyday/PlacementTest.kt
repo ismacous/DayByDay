@@ -42,81 +42,164 @@ class PlacementTest {
 
     @Test
     fun `l aimant colle la position sur la grille`() {
-        assertEquals(12f, Placement.snap(14f), 0.01f)
-        assertEquals(24f, Placement.snap(19f), 0.01f)
-        assertEquals(0f, Placement.snap(5f), 0.01f)
+        val pas = Placement.GRID
+
+        assertEquals(pas, Placement.snap(pas * 0.6f), 0.01f)
+        assertEquals(0f, Placement.snap(pas * 0.4f), 0.01f)
+        assertEquals(pas * 3f, Placement.snap(pas * 3.1f), 0.01f)
     }
 
     @Test
     fun `sans aimant la position est gardee telle quelle`() {
-        val moved = Placement.move(photo(), x = 137.4f, y = 51.9f, snapToGrid = false, pageWidth = page)
+        val posee = Placement.apply(
+            item = photo(),
+            centreX = 197.4f,
+            centreY = 96.9f,
+            width = 120f,
+            rotation = 0f,
+            snapToGrid = false,
+            pageWidth = page,
+        )
 
-        assertEquals(137.4f, moved.placedX!!, 0.01f)
-        assertEquals(51.9f, moved.placedY!!, 0.01f)
+        assertEquals(137.4f, posee.placedX!!, 0.01f)
+        assertEquals(51.9f, posee.placedY!!, 0.01f)
     }
 
     @Test
     fun `avec aimant la position tombe sur la grille`() {
-        val moved = Placement.move(photo(), x = 137.4f, y = 51.9f, snapToGrid = true, pageWidth = page)
+        val posee = Placement.apply(
+            item = photo(),
+            centreX = 197.4f,
+            centreY = 96.9f,
+            width = 120f,
+            rotation = 0f,
+            snapToGrid = true,
+            pageWidth = page,
+        )
 
-        assertEquals(0f, moved.placedX!! % Placement.GRID, 0.01f)
-        assertEquals(0f, moved.placedY!! % Placement.GRID, 0.01f)
+        assertEquals(0f, posee.placedX!! % Placement.GRID, 0.01f)
+        assertEquals(0f, posee.placedY!! % Placement.GRID, 0.01f)
+    }
+
+    @Test
+    fun `un petit deplacement finit par sortir de la case de depart`() {
+        // Le piege : aimanter le resultat puis repartir de lui ferait
+        // retomber chaque petit pas sur le meme point de grille, et la photo
+        // semblerait collee. Le centre brut, lui, avance vraiment.
+        val depart = photo(x = 0f, y = 0f)
+        var centreX = depart.placedWidth / 2f
+        var posee = depart
+
+        repeat(6) {
+            centreX += Placement.GRID / 3f
+            posee = Placement.apply(
+                item = depart,
+                centreX = centreX,
+                centreY = depart.displayHeight / 2f,
+                width = depart.placedWidth,
+                rotation = 0f,
+                snapToGrid = true,
+                pageWidth = page,
+            )
+        }
+
+        assertTrue(posee.placedX!! > 0f)
     }
 
     // --- Ne jamais perdre une photo ---------------------------------------
 
     @Test
     fun `une photo poussee au dela du bord reste rattrapable`() {
-        val moved = Placement.move(photo(), x = 5000f, y = 5000f, snapToGrid = false, pageWidth = page)
+        val posee = Placement.apply(
+            item = photo(),
+            centreX = 5000f,
+            centreY = 5000f,
+            width = 120f,
+            rotation = 0f,
+            snapToGrid = false,
+            pageWidth = page,
+        )
 
         // Il en reste toujours un morceau dans la page, sinon plus moyen de la
         // reprendre au doigt.
-        assertTrue(moved.placedX!! < page)
-        assertTrue(moved.placedX!! + moved.placedWidth > 0f)
+        assertTrue(posee.placedX!! < page)
+        assertTrue(posee.placedX!! + posee.placedWidth > 0f)
     }
 
     @Test
     fun `une photo poussee vers le haut ne disparait pas non plus`() {
-        val moved = Placement.move(photo(), x = -5000f, y = -5000f, snapToGrid = false, pageWidth = page)
+        val posee = Placement.apply(
+            item = photo(),
+            centreX = -5000f,
+            centreY = -5000f,
+            width = 120f,
+            rotation = 0f,
+            snapToGrid = false,
+            pageWidth = page,
+        )
 
-        assertTrue(moved.placedX!! + moved.placedWidth > 0f)
-        assertTrue(moved.placedY!! + moved.displayHeight > 0f)
+        assertTrue(posee.placedX!! + posee.placedWidth > 0f)
+        assertTrue(posee.placedY!! + posee.displayHeight > 0f)
     }
 
     @Test
     fun `une photo ne devient jamais plus petite qu une vignette`() {
-        val small = Placement.resize(photo(), width = 2f, rotation = 0f, snapToGrid = false, pageWidth = page)
+        val minuscule = Placement.apply(
+            item = photo(),
+            centreX = 160f,
+            centreY = 145f,
+            width = 2f,
+            rotation = 0f,
+            snapToGrid = false,
+            pageWidth = page,
+        )
 
-        assertEquals(Placement.MIN_SIZE, small.placedWidth, 0.01f)
+        assertEquals(Placement.MIN_SIZE, minuscule.placedWidth, 0.01f)
     }
 
     // --- Redimensionner ---------------------------------------------------
 
     @Test
     fun `agrandir garde les proportions`() {
-        val bigger = Placement.resize(photo(width = 120f, height = 90f), width = 240f, rotation = 0f, snapToGrid = false, pageWidth = page)
+        val plusGrand = Placement.apply(
+            item = photo(width = 120f, height = 90f),
+            centreX = 160f,
+            centreY = 145f,
+            width = 240f,
+            rotation = 0f,
+            snapToGrid = false,
+            pageWidth = page,
+        )
 
-        assertEquals(240f, bigger.placedWidth, 0.01f)
-        assertEquals(180f, bigger.placedHeight, 0.01f)
+        assertEquals(240f, plusGrand.placedWidth, 0.01f)
+        assertEquals(180f, plusGrand.placedHeight, 0.01f)
     }
 
     @Test
     fun `agrandir ne deplace pas le centre`() {
-        val start = photo(x = 100f, y = 100f, width = 120f, height = 90f)
-        val centreX = start.placedX!! + start.placedWidth / 2f
-        val centreY = start.placedY!! + start.displayHeight / 2f
+        val depart = photo(x = 100f, y = 100f, width = 120f, height = 90f)
+        val centreX = depart.placedX!! + depart.placedWidth / 2f
+        val centreY = depart.placedY!! + depart.displayHeight / 2f
 
-        val bigger = Placement.resize(start, width = 240f, rotation = 0f, snapToGrid = false, pageWidth = page)
+        val plusGrand = Placement.apply(
+            item = depart,
+            centreX = centreX,
+            centreY = centreY,
+            width = 240f,
+            rotation = 0f,
+            snapToGrid = false,
+            pageWidth = page,
+        )
 
-        assertEquals(centreX, bigger.placedX!! + bigger.placedWidth / 2f, 0.01f)
-        assertEquals(centreY, bigger.placedY!! + bigger.displayHeight / 2f, 0.01f)
+        assertEquals(centreX, plusGrand.placedX!! + plusGrand.placedWidth / 2f, 0.01f)
+        assertEquals(centreY, plusGrand.placedY!! + plusGrand.displayHeight / 2f, 0.01f)
     }
 
     @Test
     fun `un cercle reste aussi haut que large`() {
-        val round = photo(width = 120f, height = 90f, shape = MediaShape.CIRCLE)
+        val rond = photo(width = 120f, height = 90f, shape = MediaShape.CIRCLE)
 
-        assertEquals(round.placedWidth, round.displayHeight, 0.01f)
+        assertEquals(rond.placedWidth, rond.displayHeight, 0.01f)
     }
 
     // --- Tourner ----------------------------------------------------------

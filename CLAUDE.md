@@ -114,6 +114,23 @@ téléphone (Samsung S25, Android 15).
   le menu « + ». Toutes les règles de position, taille, rotation et
   aimantation sont dans `data/Placement.kt`, sans rien d'Android, et testées
   dans `PlacementTest`.
+- **Gestes sur une photo** : deux pièges qui donnent le même symptôme — l'image
+  revient en place toute seule. (1) `pointerInput` n'installe son détecteur
+  qu'une fois : la photo capturée y reste figée à ce qu'elle était au premier
+  appui, alors que chaque événement n'apporte que le déplacement **depuis le
+  précédent**. Il faut relire la photo courante par `rememberUpdatedState`.
+  (2) L'aimantation doit porter sur un centre **brut** accumulé pendant le
+  geste, jamais sur la position déjà aimantée : sinon chaque petit pas retombe
+  sur le même point de grille et la photo paraît collée. C'est ce que fait
+  `Placement.apply`.
+- **Lignes de la page ≠ grille des photos** : le lignage (`JournalPaper`) est
+  toujours visible et sert à écrire ; la grille (`PhotoGrid`) n'apparaît que
+  pendant qu'on déplace une image. Couper le lignage ne coupe pas
+  l'aimantation. Pour que le texte se pose sur les lignes, sa `lineHeight` est
+  convertie depuis une mesure en **points** (`LINE_SPACING.toSp()`) et non
+  écrite en `sp` : sinon agrandir les caractères dans Android décale le texte
+  de ses lignes. Un titre, plus haut qu'une ligne, désaligne la suite — c'est
+  le prix d'un vrai lignage sur un texte à tailles variables.
 - **Polices** : trois fichiers dans `res/font/` (Caveat, Lora, Poppins, sous
   licence OFL, voir `POLICES.md`), plus deux familles d'Android. Ils sont dans
   l'APK : rien n'est téléchargé, la règle « aucune permission INTERNET » tient.

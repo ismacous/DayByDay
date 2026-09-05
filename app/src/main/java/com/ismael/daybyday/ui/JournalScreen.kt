@@ -3,6 +3,7 @@ package com.ismael.daybyday.ui
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -203,7 +205,16 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
     val pageScroll = rememberScrollState()
     var pageWidth by remember { mutableStateOf(0f) }
     var selectedPhotoId by remember { mutableStateOf<Long?>(null) }
-    var snapToGrid by remember { mutableStateOf(true) }
+
+    // --- L'allure de la page, gardee d'une journee a l'autre -------------
+    val prefs = app.prefs
+    var ruled by remember { mutableStateOf(prefs.journalRuled) }
+    var paperIndex by remember { mutableStateOf(prefs.journalPaperIndex) }
+    var lineIndex by remember { mutableStateOf(prefs.journalLineIndex) }
+    var snapToGrid by remember { mutableStateOf(prefs.journalSnapToGrid) }
+    var showPaperSettings by remember { mutableStateOf(false) }
+    val paper = JournalPaper.paper(paperIndex)
+    val ink = JournalPaper.ink(paper)
 
     // Pendant qu'un doigt deplace une photo, sa nouvelle place vit ici : on
     // n'ecrit pas dans la base a chaque image de l'animation.
@@ -357,6 +368,11 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
                     }
                 },
+                actions = {
+                    IconButton(onClick = { showPaperSettings = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Allure de la page")
+                    }
+                },
             )
         },
     ) { innerPadding ->
@@ -422,8 +438,15 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .background(paper)
                         .verticalScroll(pageScroll),
                 ) {
+                    // Les lignes d'ecriture restent tout le temps ; la grille
+                    // des photos, elle, n'apparait que pendant qu'on en
+                    // deplace une. Deux choses differentes, deux durees de vie.
+                    if (ruled) {
+                        PaperLines(height = pageHeight, color = JournalPaper.line(lineIndex))
+                    }
                     if (selectedPhoto != null && snapToGrid) PhotoGrid(height = pageHeight)
 
                     // Sous le texte : le fond, puis le milieu.
@@ -469,8 +492,12 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                             body = updated
                         },
                         textStyle = MaterialTheme.typography.bodyLarge.copy(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            lineHeight = 26.sp,
+                            color = ink,
+                            // La hauteur de ligne vient d'une mesure en points,
+                            // pas d'une taille de police : agrandir les
+                            // caracteres dans les reglages d'Android decalerait
+                            // sinon le texte de ses lignes.
+                            lineHeight = with(density) { JournalPaper.LINE_SPACING.toSp() },
                         ),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         visualTransformation = run {
@@ -487,7 +514,7 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                                     Text(
                                         "Écris ce que tu veux, comme tu veux.",
                                         style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                        color = ink.copy(alpha = 0.45f),
                                     )
                                 }
                                 field()
@@ -498,7 +525,7 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                             // La page entiere est a l'ecriture : appuyer n'importe ou
                             // dessous pose le curseur, meme loin sous le dernier mot.
                             .heightIn(min = pageHeight)
-                            .padding(horizontal = 20.dp, vertical = 12.dp)
+                            .padding(horizontal = 20.dp, vertical = JournalPaper.TOP_PADDING)
                             .focusRequester(bodyFocus)
                             .onFocusChanged { state ->
                                 // Retourner ecrire referme le panneau : sinon il reste
@@ -539,6 +566,20 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                 }
             }
 
+            if (showPaperSettings) {
+                PaperSettingsDialog(
+                    ruled = ruled,
+                    paperIndex = paperIndex,
+                    lineIndex = lineIndex,
+                    snapToGrid = snapToGrid,
+                    onRuled = { ruled = it; prefs.journalRuled = it },
+                    onPaper = { paperIndex = it; prefs.journalPaperIndex = it },
+                    onLine = { lineIndex = it; prefs.journalLineIndex = it },
+                    onSnap = { snapToGrid = it; prefs.journalSnapToGrid = it },
+                    onDismiss = { showPaperSettings = false },
+                )
+            }
+
             if (selectedPhoto != null) {
                 val photo = selectedPhoto
                 PhotoToolsBar(
@@ -546,7 +587,10 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                     snapToGrid = snapToGrid,
                     onShape = { changePhoto(photo.copy(shapeKey = it.key)) },
                     onLayer = { changePhoto(photo.copy(layerKey = it.key)) },
-                    onSnap = { snapToGrid = it },
+                    onSnap = {
+                        snapToGrid = it
+                        prefs.journalSnapToGrid = it
+                    },
                     onDelete = {
                         selectPhoto(null)
                         app.appScope.launch { repository.deleteMedia(photo) }
@@ -563,17 +607,17 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                         showPanel(if (openPanel == panel) null else panel)
                     },
                     onStyle = { style ->
+                        // Le panneau reste ouvert : on essaie rarement une seule
+                        // nuance, et le refermer a chaque essai obligeait a le
+                        // rouvrir pour comparer. Il ne se ferme que quand
+                        // l'action a insere du texte — la, il n'y a plus rien a
+                        // reessayer, et il faut voir ou on en est.
+                        val inserted = !hasSelection && style.takesWholeLine
                         applyStyle(style)
-                        if (openPanel != null) showPanel(null)
+                        if (inserted) showPanel(null)
                     },
-                    onClearHeading = {
-                        clearHeading()
-                        showPanel(null)
-                    },
-                    onClearFont = {
-                        clearFont()
-                        showPanel(null)
-                    },
+                    onClearHeading = { clearHeading() },
+                    onClearFont = { clearFont() },
                     onList = { marker ->
                         prefixLine(marker.marker)
                         showPanel(null)

@@ -40,6 +40,31 @@ class Prefs(context: Context) {
         return weightKg / (height * height)
     }
 
+    // --- Apparence de la page du journal ----------------------------------
+
+    /** Les lignes d'ecriture sont dessinees derriere le texte. */
+    var journalRuled: Boolean
+        get() = prefs.getBoolean(KEY_JOURNAL_RULED, true)
+        set(value) = prefs.edit().putBoolean(KEY_JOURNAL_RULED, value).apply()
+
+    /**
+     * Couleur du papier et couleur des lignes, en index dans les palettes de
+     * [JournalPaper]. Un index, pas une couleur brute : le theme sombre a
+     * besoin de ses propres teintes, et un index survit au changement de theme.
+     */
+    var journalPaperIndex: Int
+        get() = prefs.getInt(KEY_JOURNAL_PAPER, 0)
+        set(value) = prefs.edit().putInt(KEY_JOURNAL_PAPER, value).apply()
+
+    var journalLineIndex: Int
+        get() = prefs.getInt(KEY_JOURNAL_LINES, 0)
+        set(value) = prefs.edit().putInt(KEY_JOURNAL_LINES, value).apply()
+
+    /** L'aimantation des photos sur la grille, gardee d'une page a l'autre. */
+    var journalSnapToGrid: Boolean
+        get() = prefs.getBoolean(KEY_JOURNAL_SNAP, true)
+        set(value) = prefs.edit().putBoolean(KEY_JOURNAL_SNAP, value).apply()
+
     // --- Disposition de l'ecran "Ma journee" ------------------------------
 
     /**
@@ -205,6 +230,10 @@ class Prefs(context: Context) {
         const val KEY_AUTO_BACKUP_LAST = "auto_backup_last"
         const val KEY_AUTO_BACKUP_ERROR = "auto_backup_error"
         const val KEY_FIRST_RUN_RESTORE = "first_run_restore_checked"
+        const val KEY_JOURNAL_RULED = "journal_ruled"
+        const val KEY_JOURNAL_PAPER = "journal_paper"
+        const val KEY_JOURNAL_LINES = "journal_lines"
+        const val KEY_JOURNAL_SNAP = "journal_snap"
         const val KEY_DAY_CARD_ORDER = "day_card_order"
         const val KEY_DAY_CARDS_HIDDEN = "day_cards_hidden"
         const val KEY_DAY_CARDS_COLLAPSED = "day_cards_collapsed"

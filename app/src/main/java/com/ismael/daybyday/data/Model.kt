@@ -334,8 +334,13 @@ data class MediaItem(
  * une mise en page, au lieu d'une simple suite d'images.
  */
 enum class MediaLayer(val key: Int, val label: String) {
+    /** Le plus loin : sous le texte, et sous les photos "au milieu". */
     BACK(0, "Au fond"),
-    MIDDLE(1, "Derrière le texte"),
+
+    /** Sous le texte, mais par-dessus celles qui sont au fond. */
+    MIDDLE(1, "Au milieu"),
+
+    /** Par-dessus le texte, qu'elle recouvre. */
     FRONT(2, "Devant le texte");
 
     companion object {

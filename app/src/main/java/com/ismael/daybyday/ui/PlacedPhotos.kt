@@ -24,7 +24,11 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -129,35 +133,52 @@ fun PhotoHandle(
     val density = LocalDensity.current
     val accent = MaterialTheme.colorScheme.primary
 
+    // Le detecteur de gestes n'est installe qu'une fois par photo : il garderait
+    // sinon la photo telle qu'elle etait au premier appui. Or chaque evenement
+    // n'apporte que le deplacement depuis le precedent, pas depuis le debut du
+    // geste — l'image repartait donc de son point de depart a chaque image de
+    // l'animation, et semblait revenir en place toute seule. Ces trois valeurs
+    // sont donc relues a chaque fois, au lieu d'etre figees dans le detecteur.
+    val live = rememberUpdatedState(item)
+    val liveSnap = rememberUpdatedState(snapToGrid)
+    val livePageWidth = rememberUpdatedState(pageWidth)
+
+    // Le centre, la largeur et l'angle **bruts**, tels que les doigts les
+    // laissent. La grille ne s'applique qu'a l'affichage : si on repartait de
+    // la position aimantee a chaque evenement, chaque petit deplacement
+    // retomberait sur le meme point de grille et la photo semblerait collee.
+    var centreX by remember(item.id) {
+        mutableStateOf((item.placedX ?: 0f) + item.placedWidth / 2f)
+    }
+    var centreY by remember(item.id) {
+        mutableStateOf((item.placedY ?: 0f) + item.displayHeight / 2f)
+    }
+    var rawWidth by remember(item.id) { mutableStateOf(item.placedWidth) }
+    var rawRotation by remember(item.id) { mutableStateOf(item.placedRotation) }
+
     Box(
         modifier = Modifier
             .offset(x = (item.placedX ?: 0f).dp, y = (item.placedY ?: 0f).dp)
             .size(width = item.placedWidth.dp, height = item.displayHeight.dp)
             .rotate(item.placedRotation)
             .border(2.dp, accent, item.shape.toComposeShape())
-            .pointerInput(item.id, snapToGrid, pageWidth) {
+            .pointerInput(item.id) {
                 detectTransformGestures { _, pan, zoom, rotation ->
-                    val panX = with(density) { pan.x.toDp().value }
-                    val panY = with(density) { pan.y.toDp().value }
-                    val moved = Placement.move(
-                        item = item,
-                        x = (item.placedX ?: 0f) + panX,
-                        y = (item.placedY ?: 0f) + panY,
-                        snapToGrid = snapToGrid,
-                        pageWidth = pageWidth,
-                    )
-                    val changed = if (zoom == 1f && rotation == 0f) {
-                        moved
-                    } else {
-                        Placement.resize(
-                            item = moved,
-                            width = moved.placedWidth * zoom,
-                            rotation = moved.placedRotation + rotation,
-                            snapToGrid = snapToGrid,
-                            pageWidth = pageWidth,
+                    centreX += with(density) { pan.x.toDp().value }
+                    centreY += with(density) { pan.y.toDp().value }
+                    rawWidth *= zoom
+                    rawRotation += rotation
+                    onChange(
+                        Placement.apply(
+                            item = live.value,
+                            centreX = centreX,
+                            centreY = centreY,
+                            width = rawWidth,
+                            rotation = rawRotation,
+                            snapToGrid = liveSnap.value,
+                            pageWidth = livePageWidth.value,
                         )
-                    }
-                    onChange(changed)
+                    )
                 }
             },
     ) {
@@ -247,17 +268,28 @@ fun PhotoToolsBar(
                 )
             }
 
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                MediaLayer.entries.forEach { layer ->
-                    PhotoChip(
-                        label = layer.label,
-                        selected = item.layer == layer,
-                        onClick = { onLayer(layer) },
-                    )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                // "Au fond" et "au milieu" sont toutes deux sous le texte :
+                // elles ne different que l'une par rapport a l'autre. Le dire
+                // vaut mieux que de laisser deviner.
+                Text(
+                    text = "Profondeur — le texte s'écrit entre « au milieu » et « devant »",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 4.dp),
+                )
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    MediaLayer.entries.forEach { layer ->
+                        PhotoChip(
+                            label = layer.label,
+                            selected = item.layer == layer,
+                            onClick = { onLayer(layer) },
+                        )
+                    }
                 }
             }
 

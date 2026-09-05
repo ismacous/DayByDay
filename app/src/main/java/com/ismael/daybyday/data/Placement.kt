@@ -18,7 +18,7 @@ import kotlin.math.roundToInt
 object Placement {
 
     /** Le pas de la grille d'aimantation, en points. */
-    const val GRID = 12f
+    const val GRID = 14f
 
     /** Une photo ne peut pas devenir plus petite qu'une vignette. */
     const val MIN_SIZE = 56f
@@ -49,35 +49,23 @@ object Placement {
     fun normaliseAngle(degrees: Float): Float = ((degrees % 360f) + 360f) % 360f
 
     /**
-     * Deplace une photo. Elle peut deborder de la page — c'est utile pour une
-     * image de fond a cheval sur le bord — mais jamais au point de sortir
-     * entierement, sinon on ne peut plus la rattraper.
+     * La photo telle qu'elle doit apparaitre pendant qu'on la manipule.
+     *
+     * Les doigts donnent un centre, une largeur et un angle **bruts**, gardes
+     * tels quels d'un evenement a l'autre ; la grille ne s'applique qu'au
+     * resultat affiche. C'est essentiel : aimanter la position a chaque
+     * evenement et repartir de la position aimantee ferait disparaitre tous
+     * les petits deplacements, puisque chacun retomberait sur le meme point de
+     * grille. La photo semblerait collee, ou revenir en place toute seule.
+     *
+     * Elle peut deborder de la page — c'est utile pour une image de fond a
+     * cheval sur le bord — mais jamais au point de sortir entierement, sinon
+     * on ne peut plus la rattraper.
      */
-    fun move(
+    fun apply(
         item: MediaItem,
-        x: Float,
-        y: Float,
-        snapToGrid: Boolean,
-        pageWidth: Float,
-    ): MediaItem {
-        val width = item.placedWidth
-        val height = item.displayHeight
-        val placedX = if (snapToGrid) snap(x) else x
-        val placedY = if (snapToGrid) snap(y) else y
-        val margin = 0.6f
-        return item.copy(
-            placedX = placedX.coerceIn(-width * margin, pageWidth - width * (1f - margin)),
-            placedY = placedY.coerceAtLeast(-height * margin),
-        )
-    }
-
-    /**
-     * Redimensionne et fait tourner, en gardant les proportions de l'image.
-     * Le centre ne bouge pas : agrandir une photo ne doit pas la faire fuir
-     * vers le bas a droite.
-     */
-    fun resize(
-        item: MediaItem,
+        centreX: Float,
+        centreY: Float,
         width: Float,
         rotation: Float,
         snapToGrid: Boolean,
@@ -85,19 +73,26 @@ object Placement {
     ): MediaItem {
         val ratio = if (item.placedWidth > 0f) item.placedHeight / item.placedWidth else 1f
         val maxWidth = maxOf(MIN_SIZE, pageWidth * 2f)
-        val target = (if (snapToGrid) snap(width) else width).coerceIn(MIN_SIZE, maxWidth)
+        val wanted = width.coerceIn(MIN_SIZE, maxWidth)
+        val finalWidth = (if (snapToGrid) snap(wanted) else wanted).coerceAtLeast(MIN_SIZE)
+        val finalHeight = finalWidth * ratio
+        val shown = if (item.shape == MediaShape.RECTANGLE) finalHeight else finalWidth
 
-        val centreX = (item.placedX ?: 0f) + item.placedWidth / 2f
-        val centreY = (item.placedY ?: 0f) + item.displayHeight / 2f
-        val newHeight = target * ratio
-        val displayed = if (item.shape == MediaShape.RECTANGLE) newHeight else target
+        val rawX = centreX - finalWidth / 2f
+        val rawY = centreY - shown / 2f
+        val placedX = if (snapToGrid) snap(rawX) else rawX
+        val placedY = if (snapToGrid) snap(rawY) else rawY
+        val margin = 0.6f
 
         return item.copy(
-            placedWidth = target,
-            placedHeight = newHeight,
+            placedX = placedX.coerceIn(
+                -finalWidth * margin,
+                maxOf(-finalWidth * margin, pageWidth - finalWidth * (1f - margin)),
+            ),
+            placedY = placedY.coerceAtLeast(-shown * margin),
+            placedWidth = finalWidth,
+            placedHeight = finalHeight,
             placedRotation = if (snapToGrid) snapAngle(rotation) else normaliseAngle(rotation),
-            placedX = centreX - target / 2f,
-            placedY = centreY - displayed / 2f,
         )
     }
 

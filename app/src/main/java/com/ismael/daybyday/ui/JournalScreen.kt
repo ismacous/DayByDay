@@ -122,8 +122,16 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
     val density = LocalDensity.current
     val imeHeight = with(density) { WindowInsets.ime.getBottom(density).toDp() }
     val navHeight = with(density) { WindowInsets.navigationBars.getBottom(density).toDp() }
-    var lastKeyboardHeight by remember { mutableStateOf(300.dp) }
-    if (imeHeight > 120.dp) lastKeyboardHeight = imeHeight
+    // La hauteur du clavier, retenue pour que le panneau prenne exactement sa
+    // place. On garde le **maximum** vu depuis l'ouverture de l'ecran, et c'est
+    // tout l'interet : en se fermant, l'encart du clavier passe par toutes les
+    // valeurs intermediaires, et retenir la derniere au-dessus d'un seuil
+    // gardait 130 au lieu de 330. Le panneau retrecissait donc a chaque
+    // aller-retour, jusqu'a n'etre plus qu'un bandeau ecrase en bas de l'ecran.
+    var measuredKeyboard by remember { mutableStateOf(0.dp) }
+    if (imeHeight > measuredKeyboard) measuredKeyboard = imeHeight
+    // Tant que le clavier n'a jamais ete vu, une hauteur d'attente plausible.
+    val keyboardHeight = if (measuredKeyboard > 150.dp) measuredKeyboard else 300.dp
 
     // Le panneau et le clavier n'avaient pas la meme taille, et l'ecran se
     // decalait a chaque bascule : le clavier recouvre la barre de navigation,
@@ -132,12 +140,12 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
     // atteindre la hauteur du clavier. Comme le calcul suit l'animation du
     // clavier image par image, le panneau grandit exactement au rythme ou le
     // clavier s'en va : le total ne bouge jamais.
-    val panelHeight = (lastKeyboardHeight - maxOf(imeHeight, navHeight)).coerceAtLeast(0.dp)
+    val panelHeight = (keyboardHeight - maxOf(imeHeight, navHeight)).coerceAtLeast(0.dp)
 
     // Meme chose dans l'autre sens : en refermant le panneau on garde sa place
     // au chaud, le temps que le clavier remonte la prendre.
     var awaitingKeyboard by remember { mutableStateOf(false) }
-    if (imeHeight > 120.dp) awaitingKeyboard = false
+    if (imeHeight > 150.dp) awaitingKeyboard = false
 
     // Demander poliment au clavier de se cacher ne suffit pas : tant que le
     // champ garde le focus, Android le fait revenir. Le panneau et le clavier

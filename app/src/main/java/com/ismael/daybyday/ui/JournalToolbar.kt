@@ -30,7 +30,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -135,13 +137,7 @@ fun JournalToolbar(
                 marked = active.any { it.family == StyleFamily.COLOR },
                 onClick = { onTogglePanel(ToolPanel.COLORS) },
             ) {
-                val chosen = active.firstOrNull { it.family == StyleFamily.COLOR }
-                Text(
-                    "A",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = chosen?.let { Color(it.argb) } ?: MaterialTheme.colorScheme.onSurface,
-                )
+                ColorGlyph(active.firstOrNull { it.family == StyleFamily.COLOR })
             }
 
             GroupButton(
@@ -308,6 +304,45 @@ private fun AllToolsPanel(
             painterResource(R.drawable.ic_photo),
             contentDescription = null,
             modifier = Modifier.size(19.dp),
+        )
+    }
+}
+
+/**
+ * Le bouton des couleurs : un "A" pose sur une barre de couleur, comme dans
+ * les traitements de texte. Sans couleur choisie, la barre montre un degrade :
+ * un "A" noir tout seul ne disait pas de quoi il s'agissait.
+ */
+@Composable
+private fun ColorGlyph(chosen: TextStyleKind?) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            "A",
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            color = chosen?.let { Color(it.argb) } ?: MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(Modifier.height(2.dp))
+        Box(
+            modifier = Modifier
+                .width(19.dp)
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(
+                    if (chosen != null) {
+                        SolidColor(Color(chosen.argb))
+                    } else {
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color(TextStyleKind.COLOR_RED.argb),
+                                Color(TextStyleKind.COLOR_AMBER.argb),
+                                Color(TextStyleKind.COLOR_GREEN.argb),
+                                Color(TextStyleKind.COLOR_BLUE.argb),
+                                Color(TextStyleKind.COLOR_VIOLET.argb),
+                            )
+                        )
+                    }
+                ),
         )
     }
 }

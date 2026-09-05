@@ -84,12 +84,15 @@ téléphone (Samsung S25, Android 15).
   touché : le premier appui l'a déjà posé au bon endroit, et convertir des
   coordonnées d'écran en position dans un texte qui défile est faux dès que le
   champ a défilé. Les bornes du mot sont dans `RichText.wordAt`, testées.
-- **Hauteur du panneau d'outils** : l'encart du clavier (`WindowInsets.ime`)
-  contient déjà la barre de navigation, pas le panneau. Le panneau doit donc
-  mesurer `hauteur du clavier − max(ime, barre de navigation)`, sinon il
-  dépasse le clavier de la hauteur de cette barre et l'écran se décale à chaque
-  bascule. Comme la formule suit l'animation image par image, le panneau
-  grandit exactement au rythme où le clavier s'en va.
+- **Hauteur du panneau d'outils** : deux pièges. (1) L'encart du clavier
+  (`WindowInsets.ime`) contient déjà la barre de navigation, pas le panneau :
+  celui-ci doit donc mesurer `hauteur du clavier − max(ime, barre de
+  navigation)`, sinon il dépasse le clavier de la hauteur de cette barre.
+  (2) Cette hauteur de clavier doit être le **maximum** vu depuis l'ouverture
+  de l'écran. En se fermant, l'encart passe par toutes les valeurs
+  intermédiaires ; retenir « la dernière au-dessus d'un seuil » gardait la
+  valeur du seuil, et le panneau rétrécissait à chaque aller-retour jusqu'à
+  n'être qu'un bandeau écrasé en bas de l'écran.
 - **Polices** : trois fichiers dans `res/font/` (Caveat, Lora, Poppins, sous
   licence OFL, voir `POLICES.md`), plus deux familles d'Android. Ils sont dans
   l'APK : rien n'est téléchargé, la règle « aucune permission INTERNET » tient.

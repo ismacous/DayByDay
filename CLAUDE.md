@@ -92,6 +92,14 @@ téléphone (Samsung S25, Android 15).
   un `drawWithContent`, où la lecture n'invalide que le dessin. Deuxième piège du
   même endroit : `rememberInfiniteTransition` était appelé dans les trente-cinq
   cases alors qu'une seule s'anime — trente-quatre horloges tournaient pour rien.
+  La cause principale était pourtant ailleurs : `ScreenBackground` redessinait
+  **quatre dégradés plein écran à chaque image**, sur tous les écrans, en
+  permanence. Rien ne saccadait à cause de l'élément qu'on regardait, c'est le
+  fond qui mangeait le temps de tout le monde. Chaque halo vit maintenant dans sa
+  propre couche, peinte une fois, que l'animation ne fait que **déplacer**
+  (`graphicsLayer`) — le téléphone sait faire ça sans rien repeindre. Règle
+  générale : une valeur animée se lit dans `graphicsLayer` ou dans un `draw*`,
+  jamais dans la composition.
 - **Dégradés et petites surfaces** : un dégradé sur une pastille de deux
   centimètres ne se lit pas comme une matière mais comme une autre couleur — le
   coin clair d'un vert moyen faisait passer une semaine correcte pour un 10/10.

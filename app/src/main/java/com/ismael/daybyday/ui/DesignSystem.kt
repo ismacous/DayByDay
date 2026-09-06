@@ -18,6 +18,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -41,9 +43,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
@@ -292,8 +296,11 @@ fun SoftChip(
  *
  * Pas un aplat : trois halos de couleur, tres doux, qui derivent lentement les
  * uns par rapport aux autres. On ne les regarde pas — on les sent. C'est la
- * difference entre une page qui attend et une page qui vit, et ca ne coute que
- * trois cercles degrades par image.
+ * difference entre une page qui attend et une page qui vit.
+ *
+ * Chaque halo vit dans sa propre couche et n'est peint qu'une fois ; la derive
+ * ne fait que la deplacer. Voir [Halo] : les avoir dessines ensemble a chaque
+ * image rendait toute l'application saccadee.
  *
  * Les halos restent pales : le contenu doit rester la chose la plus lisible de
  * l'ecran, et les quatre couleurs des journees les seules taches franches.
@@ -310,14 +317,13 @@ fun ScreenBackground(
     // haut de l'ecran, la ou il n'y a pas encore de carte, et s'eteignent vers
     // le bas pour ne jamais gener la lecture.
     val strength = if (dark) 0.55f else 0.75f
-    val halos = listOf(
-        Brand.Primary.copy(alpha = strength),
-        Brand.Accent.copy(alpha = strength * 0.75f),
-        Brand.Playful.copy(alpha = strength * 0.7f),
-    )
 
     val drift = rememberInfiniteTransition(label = "halos")
-    val phase by drift.animateFloat(
+    // Volontairement une State et pas un `by` : la valeur ne doit **jamais**
+    // etre lue pendant la composition. Elle n'est lue que dans les blocs
+    // `graphicsLayer` des halos, ou elle ne coute qu'un deplacement d'image
+    // deja peinte.
+    val phase = drift.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -327,40 +333,98 @@ fun ScreenBackground(
         label = "derive",
     )
 
-    Box(modifier = modifier) {
-        Canvas(modifier = Modifier.matchParentSize()) {
-            drawRect(base)
+    // Le voile du bas ne bouge pas : il est calcule une fois pour toutes.
+    val veil = remember(base) {
+        Brush.verticalGradient(0.18f to Color.Transparent, 0.62f to base)
+    }
 
-            fun halo(color: Color, x: Float, y: Float, radius: Float) {
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(color, Color.Transparent),
-                        center = Offset(x, y),
-                        radius = radius,
-                    ),
-                    radius = radius,
-                    center = Offset(x, y),
-                )
-            }
+    BoxWithConstraints(
+        modifier = modifier
+            .background(base)
+            // Les halos debordent volontiers de l'ecran : sans ca, ils
+            // agrandiraient la zone a repeindre.
+            .clipToBounds(),
+    ) {
+        val w = maxWidth
+        val h = maxHeight
 
-            val w = size.width
-            val h = size.height
-            halo(halos[0], w * (0.05f + 0.18f * phase), -h * 0.02f, w * 0.95f)
-            halo(halos[1], w * (1.05f - 0.18f * phase), h * (0.10f + 0.06f * phase), w * 0.80f)
-            halo(halos[2], w * (0.30f + 0.30f * phase), h * 0.30f, w * 0.65f)
+        Halo(
+            color = Brand.Primary.copy(alpha = strength),
+            diameter = w * 1.9f,
+            centerX = w * 0.05f,
+            centerY = -h * 0.02f,
+            driftX = w * 0.18f,
+            driftY = 0.dp,
+            phase = phase,
+        )
+        Halo(
+            color = Brand.Accent.copy(alpha = strength * 0.75f),
+            diameter = w * 1.6f,
+            centerX = w * 1.05f,
+            centerY = h * 0.10f,
+            driftX = -w * 0.18f,
+            driftY = h * 0.06f,
+            phase = phase,
+        )
+        Halo(
+            color = Brand.Playful.copy(alpha = strength * 0.7f),
+            diameter = w * 1.3f,
+            centerX = w * 0.30f,
+            centerY = h * 0.30f,
+            driftX = w * 0.30f,
+            driftY = 0.dp,
+            phase = phase,
+        )
 
-            // Le bas de l'ecran revient au calme : les couleurs restent en haut,
-            // la ou le regard arrive, et laissent les cartes tranquilles.
-            drawRect(
-                brush = Brush.verticalGradient(
-                    colors = listOf(Color.Transparent, base),
-                    startY = h * 0.18f,
-                    endY = h * 0.62f,
-                )
-            )
-        }
+        // Le bas de l'ecran revient au calme : les couleurs restent en haut,
+        // la ou le regard arrive, et laissent les cartes tranquilles.
+        Box(modifier = Modifier.matchParentSize().background(veil))
+
         content()
     }
+}
+
+/**
+ * Une tache de couleur du fond, et la raison pour laquelle elle est un
+ * composant a part.
+ *
+ * Les trois halos etaient dessines ensemble dans un `Canvas` plein ecran, avec
+ * leur position calculee a partir de la valeur animee. Consequence : quatre
+ * degrades plein ecran recalcules **a chaque image**, en permanence, sur tous
+ * les ecrans de l'application. Rien ne saccadait a cause de l'element qu'on
+ * regardait — c'est le fond qui mangeait le temps de tout le monde.
+ *
+ * Ici chaque halo est peint une fois dans sa propre couche, et l'animation ne
+ * fait que la **deplacer** : le telephone sait faire ca sans rien repeindre.
+ */
+@Composable
+private fun Halo(
+    color: Color,
+    diameter: Dp,
+    centerX: Dp,
+    centerY: Dp,
+    driftX: Dp,
+    driftY: Dp,
+    phase: androidx.compose.runtime.State<Float>,
+) {
+    val brush = remember(color) { Brush.radialGradient(listOf(color, Color.Transparent)) }
+    val density = LocalDensity.current
+    val driftXPx = remember(driftX, density) { with(density) { driftX.toPx() } }
+    val driftYPx = remember(driftY, density) { with(density) { driftY.toPx() } }
+
+    Box(
+        modifier = Modifier
+            .offset(x = centerX - diameter / 2, y = centerY - diameter / 2)
+            .size(diameter)
+            .graphicsLayer {
+                // La lecture a lieu ici, dans le bloc de la couche : ni
+                // recomposition, ni remesure, ni repeinture — juste un
+                // glissement.
+                translationX = driftXPx * phase.value
+                translationY = driftYPx * phase.value
+            }
+            .background(brush),
+    )
 }
 
 /**

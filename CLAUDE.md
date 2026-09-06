@@ -85,6 +85,13 @@ téléphone (Samsung S25, Android 15).
   lit. Cette encre se choisit avec `readableOnAll`, sur **toutes** les couleurs
   du dégradé et au contraste réel (WCAG) : le vert part d'un vert moyen où le
   blanc passe encore, et finit clair où il disparaît.
+- **Animations saccadées** : une valeur animée lue **pendant la composition**
+  coûte une recomposition — et si elle nourrit une taille (l'épaisseur d'un
+  `border`, par exemple), une remesure — à chaque image. L'anneau d'aujourd'hui
+  dans le calendrier saccadait pour ça. Il est maintenant dessiné à la main dans
+  un `drawWithContent`, où la lecture n'invalide que le dessin. Deuxième piège du
+  même endroit : `rememberInfiniteTransition` était appelé dans les trente-cinq
+  cases alors qu'une seule s'anime — trente-quatre horloges tournaient pour rien.
 - **Dégradés et petites surfaces** : un dégradé sur une pastille de deux
   centimètres ne se lit pas comme une matière mais comme une autre couleur — le
   coin clair d'un vert moyen faisait passer une semaine correcte pour un 10/10.

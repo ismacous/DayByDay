@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -37,14 +37,20 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -451,16 +457,37 @@ private fun DayCell(
 
     // Aujourd'hui porte un anneau qui bat lentement : c'est le seul repere
     // qu'on cherche vraiment dans une grille de trente-cinq cases.
-    val beat = rememberInfiniteTransition(label = "aujourdhui")
-    val ring by beat.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2200, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "anneau",
-    )
+    //
+    // Deux precautions, et l'anneau saccadait sans elles.
+    //
+    // (1) L'animation n'existe que pour la case du jour. Elle etait creee dans
+    //     les trente-cinq cases : trente-quatre horloges tournaient pour rien,
+    //     et reveillaient la composition a chaque image.
+    // (2) La valeur animee n'est **jamais lue pendant la composition**. Une
+    //     epaisseur de bordure qui change, c'est une mesure refaite a chaque
+    //     image — donc la case entiere recomposee et remesuree soixante ou cent
+    //     vingt fois par seconde, pour un trait. Ici l'anneau est dessine a la
+    //     main et la valeur n'est lue que dans le dessin : rien n'est recompose,
+    //     rien n'est remesure, il ne reste qu'un trait a repeindre.
+    val ring: State<Float>? = if (isToday) {
+        val beat = rememberInfiniteTransition(label = "aujourdhui")
+        beat.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                // Une rampe lineaire qui repart en arriere donne un battement
+                // mecanique, en dents de scie. Adoucie aux deux bouts, elle
+                // respire.
+                animation = tween(1900, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "anneau",
+        )
+    } else {
+        null
+    }
+    val ringColor = MaterialTheme.colorScheme.primary
+    val cornerRadius = 14.dp
 
     Box(
         modifier = modifier
@@ -486,14 +513,22 @@ private fun DayCell(
                 .clip(shape)
                 .background(fill)
                 .then(
-                    if (isToday) {
-                        Modifier.border(
-                            BorderStroke(
-                                (1.5f + 1.5f * ring).dp,
-                                MaterialTheme.colorScheme.primary,
-                            ),
-                            shape,
-                        )
+                    if (ring != null) {
+                        Modifier.drawWithContent {
+                            drawContent()
+                            // La lecture de `ring` a lieu ici, dans le dessin.
+                            // C'est tout l'interet : la case n'est pas
+                            // recomposee, seulement repeinte.
+                            val stroke = (1.5f + 1.5f * ring.value).dp.toPx()
+                            val radius = cornerRadius.toPx() - stroke / 2f
+                            drawRoundRect(
+                                color = ringColor,
+                                topLeft = Offset(stroke / 2f, stroke / 2f),
+                                size = Size(size.width - stroke, size.height - stroke),
+                                cornerRadius = CornerRadius(radius, radius),
+                                style = Stroke(width = stroke),
+                            )
+                        }
                     } else {
                         Modifier
                     }

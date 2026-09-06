@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -94,6 +95,7 @@ import com.ismael.daybyday.data.FoodLevel
 import com.ismael.daybyday.data.MediaItem
 import com.ismael.daybyday.data.MediaKind
 import com.ismael.daybyday.data.Memory
+import com.ismael.daybyday.data.MoneyCategory
 import com.ismael.daybyday.data.MoneyEntry
 import com.ismael.daybyday.data.Prayer
 import com.ismael.daybyday.data.RichText
@@ -113,6 +115,25 @@ import java.time.LocalDate
 import java.util.Locale
 
 private const val SAVE_DEBOUNCE_MS = 400L
+
+/**
+ * Les deux etiquettes qui disent comment la nuit s'est passee. Elles
+ * s'excluent : c'est un choix, pas deux faits, et l'ecran l'impose maintenant
+ * — auparavant rien n'empechait de cocher « bien dormi » et « mal dormi ».
+ */
+private val SLEEP_QUALITY = listOf("sleep_good", "sleep_bad")
+
+/** Les gens qu'on a pu voir. « Personne aujourd'hui » vit a part, et les efface. */
+private val SEEN = listOf("girlfriend", "friends", "family")
+
+/**
+ * Les reperes des deux barres de mesure. Ce ne sont **pas** des objectifs :
+ * l'application ne demande rien et ne felicite de rien. Ils servent seulement a
+ * situer un chiffre — un nombre de pas seul ne dit pas s'il est grand.
+ */
+private const val STEPS_REFERENCE = 6000
+
+private const val SCREEN_REFERENCE = 6
 
 /** Les pas et le temps d'ecran sont relus a ce rythme sur la journee en cours. */
 private const val MEASURE_REFRESH_MS = 60_000L
@@ -363,6 +384,105 @@ fun DayScreen(
         )
     }
 
+    // Les reperes rapides sont des etiquettes en base, mais l'ecran ne les
+    // manipule plus en vrac : il va chercher celle dont il a besoin par son
+    // `slug`, qui est stable, et lui donne la forme qui convient a la question.
+    fun tagOf(slug: String) = allTags.firstOrNull { it.slug == slug }
+
+    fun tagOn(slug: String): Boolean {
+        val id = tagOf(slug)?.id ?: return false
+        return id in selectedTagIds
+    }
+
+    fun setTag(slug: String, on: Boolean) {
+        val tag = tagOf(slug) ?: return
+        if ((tag.id in selectedTagIds) == on) return
+        scope.launch { repository.toggleTag(date, tag, on) }
+    }
+
+    /** Le libelle d'une etiquette, pris dans le catalogue plutot que recopie ici. */
+    fun segmentOf(slug: String): Segment {
+        val tag = tagOf(slug)
+        return Segment(tag?.emoji.orEmpty(), tag?.name ?: slug)
+    }
+
+    val tagChips: @Composable (TagCategory, Color) -> Unit = { family, tint ->
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            allTags.filter { it.group == family }.forEach { tag ->
+                val selected = tag.id in selectedTagIds
+                CardChip(
+                    label = tag.display,
+                    selected = selected,
+                    tint = tint,
+                    onClick = {
+                        scope.launch { repository.toggleTag(date, tag, !selected) }
+                    },
+                )
+            }
+        }
+    }
+
+    /**
+     * L'etat d'une carte, en quelques mots, montre sous son titre.
+     *
+     * C'est ce qui rend une carte repliee encore utile : on voit sans ouvrir.
+     * Rien a dire vaut `null` — une ligne « aucune donnee » sous chaque titre
+     * ferait douze lignes qui ne disent rien.
+     */
+    fun summaryFor(card: DayCard): String? = when (card) {
+        DayCard.MOOD -> DayColor.fromKey(colorKey)?.label
+        DayCard.JOURNAL -> title.trim().ifBlank {
+            note.trim().replace('\n', ' ').take(40).ifBlank { null }
+        }
+        DayCard.SLEEP -> {
+            val hours = durationMinutes(sleepStart, sleepEnd)?.let { formatDuration(it) }
+            val quality = SLEEP_QUALITY.firstOrNull { tagOn(it) }?.let { tagOf(it)?.name }
+            listOfNotNull(hours, quality?.lowercase(Locale.FRANCE)).joinToString(" · ")
+                .ifBlank { null }
+        }
+        DayCard.ACTIVITY -> listOfNotNull(
+            stepsValue?.let { "${formatSteps(it)} pas" },
+            SportLevel.fromKey(sportLevel)?.label?.lowercase(Locale.FRANCE),
+        ).joinToString(" · ").ifBlank { null }
+        DayCard.FOOD -> listOfNotNull(
+            FoodLevel.fromKey(foodLevel)?.label,
+            waterGlasses?.let { "$it verre(s)" },
+        ).joinToString(" · ").ifBlank { null }
+        DayCard.HEALTH -> {
+            val expected = treatments.filter { it.active }.sumOf { it.times.size }
+            listOfNotNull(
+                weightText.takeIf { it.isNotBlank() }?.let { "$it kg" },
+                if (expected > 0) "${dosesTaken.size} prise(s) sur $expected" else null,
+            ).joinToString(" · ").ifBlank { null }
+        }
+        DayCard.SOCIAL -> when {
+            tagOn("alone") -> "Personne aujourd'hui"
+            else -> SEEN.filter { tagOn(it) }.mapNotNull { tagOf(it)?.name }
+                .joinToString(", ").ifBlank { null }
+        }
+        DayCard.WORK -> allTags
+            .count { it.group == TagCategory.WORK && it.id in selectedTagIds }
+            .takeIf { it > 0 }
+            ?.let { "$it avancée(s)" }
+        DayCard.OUTSIDE -> listOfNotNull(
+            when (wentOut) {
+                true -> "Sorti"
+                false -> "Resté à la maison"
+                null -> null
+            },
+            screenValue?.let { formatScreenTime(it) },
+        ).joinToString(" · ").ifBlank { null }
+        DayCard.MONEY -> dayMoney.takeIf { it.isNotEmpty() }
+            ?.let { formatSignedMoney(it.sumOf { entry -> entry.amountCents }) }
+        DayCard.PRAYER -> prayerMask?.let { mask ->
+            "${Prayer.entries.count { mask and it.bit != 0 }} sur ${Prayer.entries.size}"
+        }
+        DayCard.MEDIA -> mediaItems.size.takeIf { it > 0 }?.let { "$it fichier(s)" }
+    }
+
     ScreenBackground(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -442,6 +562,7 @@ fun DayScreen(
                 DayCardShell(
                     card = card,
                     collapsed = card in collapsedCards,
+                    summary = summaryFor(card),
                     // Une seule carte porte la couleur : celle de l'humeur, qui
                     // est la raison d'etre de la page. Les autres restent
                     // blanches autour — c'est ce contraste qui donne la
@@ -470,6 +591,8 @@ fun DayScreen(
                         layoutTick += 1
                     },
                 ) {
+                    val tint = cardStyle(card).tint
+
                     when (card) {
                         DayCard.MOOD -> {
                             Row(
@@ -495,11 +618,11 @@ fun DayScreen(
                                     )
                                 }
                             }
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(12.dp))
                             Text(
                                 text = DayColor.fromKey(colorKey)?.label ?: "Aucune couleur pour l'instant",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = cardInk(),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
                             )
                             if (parts.isNotEmpty()) {
                                 Text(
@@ -509,24 +632,23 @@ fun DayScreen(
                                         "Calculée à partir de tes moments."
                                     },
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = cardInkSoft(),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
 
                             HorizontalDivider(
                                 modifier = Modifier.padding(vertical = 16.dp),
-                                color = cardInkFaint(),
+                                color = MaterialTheme.colorScheme.outlineVariant,
                             )
 
                             Text(
                                 "Moment par moment",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = cardInk(),
                             )
                             Text(
                                 "Ton humeur bouge dans la journée : la couleur du jour se calcule à partir d'ici.",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = cardInkSoft(),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Spacer(Modifier.height(12.dp))
                             DayPart.entries.forEach { part ->
@@ -550,6 +672,7 @@ fun DayScreen(
                                 startMinutes = sleepStart,
                                 endMinutes = sleepEnd,
                                 fromDevice = sleepFromDevice,
+                                tint = tint,
                                 onPickStart = {
                                     showClock(context, sleepStart ?: 23 * 60) { minutes ->
                                         sleepStart = minutes
@@ -568,71 +691,104 @@ fun DayScreen(
                                     sleepFromDevice = false
                                 },
                             )
+                            Spacer(Modifier.height(18.dp))
+                            // Bien dormi et mal dormi ne peuvent pas etre vrais
+                            // ensemble : c'est un choix, donc un selecteur. Les
+                            // deux etaient auparavant deux pastilles voisines,
+                            // et rien n'empechait de cocher les deux.
+                            CardSection("Comment tu as dormi", tint) {
+                                SegmentedChoice(
+                                    options = SLEEP_QUALITY.map { segmentOf(it) },
+                                    selectedIndex = SLEEP_QUALITY.indexOfFirst { tagOn(it) }
+                                        .takeIf { it >= 0 },
+                                    tint = tint,
+                                    onSelect = { chosen ->
+                                        SLEEP_QUALITY.forEachIndexed { index, option ->
+                                            setTag(option, index == chosen)
+                                        }
+                                    },
+                                )
+                                Spacer(Modifier.height(10.dp))
+                                CardChip(
+                                    label = "🌙 Couché tard",
+                                    selected = tagOn("sleep_late"),
+                                    tint = tint,
+                                    onClick = { setTag("sleep_late", !tagOn("sleep_late")) },
+                                )
+                            }
                         }
                         DayCard.ACTIVITY -> {
-                            MeasureRow(
+                            MetricRow(
                                 emoji = "👟",
                                 label = if (date == LocalDate.now()) "Pas aujourd'hui" else "Pas ce jour-là",
-                                value = stepsValue?.let { "${formatSteps(it)} pas" },
-                                hint = when {
-                                    !healthAvailable ->
-                                        "Health Connect n'est pas installé sur ce téléphone."
+                                value = stepsValue?.let { formatSteps(it) },
+                                caption = when {
+                                    stepsValue != null -> "Une journée ordinaire tourne autour de $STEPS_REFERENCE pas."
+                                    !healthAvailable -> "Health Connect n'est pas installé sur ce téléphone."
                                     !stepsGranted -> "Appuie pour autoriser Health Connect."
                                     else -> "Autorisé, mais aucun pas enregistré pour l'instant."
                                 },
-                                onClick = { openSystemScreen(context, HealthConnectSource.settingsIntent()) },
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                "Une vraie séance ?",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                SportLevel.entries.forEach { level ->
-                                    ChoiceChip(
-                                        label = "${level.emoji} ${level.label}",
-                                        selected = sportLevel == level.key,
-                                        onClick = {
-                                            sportLevel = if (sportLevel == level.key) null else level.key
-                                        },
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.height(14.dp))
-                            OutlinedTextField(
-                                value = weightText,
-                                onValueChange = { input ->
-                                    weightText = input.filter { it.isDigit() || it == ',' || it == '.' }.take(6)
+                                progress = stepsValue?.let { it / STEPS_REFERENCE.toFloat() },
+                                tint = tint,
+                                onClick = {
+                                    openSystemScreen(context, HealthConnectSource.settingsIntent())
                                 },
-                                label = { Text("Poids du jour (optionnel)") },
-                                suffix = { Text("kg") },
-                                singleLine = true,
-                                shape = RoundedCornerShape(16.dp),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                modifier = Modifier.fillMaxWidth(),
                             )
+                            Spacer(Modifier.height(18.dp))
+                            CardSection("Tu as bougé ?", tint) {
+                                SegmentedChoice(
+                                    options = SportLevel.entries.map { Segment(it.emoji, it.label) },
+                                    selectedIndex = SportLevel.entries
+                                        .indexOfFirst { it.key == sportLevel }
+                                        .takeIf { it >= 0 },
+                                    tint = tint,
+                                    onSelect = { chosen ->
+                                        sportLevel = chosen?.let { SportLevel.entries[it].key }
+                                    },
+                                )
+                            }
+                            Spacer(Modifier.height(18.dp))
+                            CardSection("Ce que tu as fait", tint) {
+                                tagChips(TagCategory.ACTIVITY, tint)
+                            }
                         }
                         DayCard.FOOD -> {
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                FoodLevel.entries.forEach { level ->
-                                    ChoiceChip(
-                                        label = "${level.emoji} ${level.label}",
-                                        selected = foodLevel == level.key,
-                                        onClick = {
-                                            foodLevel = if (foodLevel == level.key) null else level.key
-                                        },
-                                    )
-                                }
+                            CardSection("Comment tu as mangé", tint) {
+                                SegmentedChoice(
+                                    options = FoodLevel.entries.map { Segment(it.emoji, it.label) },
+                                    selectedIndex = FoodLevel.entries
+                                        .indexOfFirst { it.key == foodLevel }
+                                        .takeIf { it >= 0 },
+                                    tint = tint,
+                                    onSelect = { chosen ->
+                                        foodLevel = chosen?.let { FoodLevel.entries[it].key }
+                                    },
+                                )
                             }
-                            Spacer(Modifier.height(14.dp))
+                            Spacer(Modifier.height(18.dp))
+                            // Huit verres, pas un compteur a fleches : on les
+                            // compte d'un coup d'oeil et on les remplit d'un
+                            // seul doigt.
+                            CardSection("Ce que tu as bu", tint) {
+                                WaterGlasses(
+                                    count = waterGlasses,
+                                    tint = tint,
+                                    onChange = { waterGlasses = it },
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = waterGlasses?.let {
+                                        "$it verre(s) · environ ${formatLitres(it)}"
+                                    } ?: "Touche un verre pour compter.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Spacer(Modifier.height(18.dp))
+                            CardSection("Ce qu'il y a eu", tint) {
+                                tagChips(TagCategory.FOOD, tint)
+                            }
+                            Spacer(Modifier.height(18.dp))
                             OutlinedTextField(
                                 value = mealsNote,
                                 onValueChange = { mealsNote = it.take(500) },
@@ -642,127 +798,186 @@ fun DayScreen(
                                     .fillMaxWidth()
                                     .heightIn(min = 90.dp),
                             )
-                            Spacer(Modifier.height(14.dp))
-                            WaterRow(
-                                glasses = waterGlasses,
-                                onChange = { waterGlasses = it },
-                            )
                         }
                         DayCard.HEALTH -> {
-                            TreatmentsCardBody(
-                                treatments = treatments,
-                                taken = dosesTaken,
-                                onToggle = { treatment, time, checked ->
-                                    scope.launch {
-                                        repository.setDoseTaken(date, treatment.id, time, checked)
-                                    }
-                                },
-                                onEdit = { editingTreatment = it },
-                                onAdd = { creatingTreatment = true },
-                            )
+                            // Le poids a quitte l'activite physique : c'est une
+                            // mesure du corps, pas une facon d'avoir bouge. Il
+                            // n'avait rien a faire entre une seance de sport et
+                            // une paire de baskets.
+                            CardSection("Ton poids", tint) {
+                                OutlinedTextField(
+                                    value = weightText,
+                                    onValueChange = { input ->
+                                        weightText = input
+                                            .filter { it.isDigit() || it == ',' || it == '.' }
+                                            .take(6)
+                                    },
+                                    label = { Text("Poids du jour (optionnel)") },
+                                    suffix = { Text("kg") },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(16.dp),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                            Spacer(Modifier.height(18.dp))
+                            CardSection("Tes traitements", tint) {
+                                TreatmentsCardBody(
+                                    treatments = treatments,
+                                    taken = dosesTaken,
+                                    tint = tint,
+                                    onToggle = { treatment, time, checked ->
+                                        scope.launch {
+                                            repository.setDoseTaken(date, treatment.id, time, checked)
+                                        }
+                                    },
+                                    onEdit = { editingTreatment = it },
+                                    onAdd = { creatingTreatment = true },
+                                )
+                            }
+                            Spacer(Modifier.height(18.dp))
+                            CardSection("Ce qu'il s'est passé", tint) {
+                                tagChips(TagCategory.HEALTH, tint)
+                            }
                         }
                         DayCard.PRAYER -> {
                             PrayerCardBody(
                                 mask = prayerMask,
+                                tint = tint,
                                 onToggle = { prayer, done ->
                                     prayerMask = currentEntry(epochDay).withPrayer(prayer, done)
                                 },
                             )
                         }
-                        DayCard.SOCIAL, DayCard.WORK -> {
-                            // Ces deux cartes ne sont faites que de leurs
-                            // reperes : le bloc commun ci-dessous les affiche.
-                        }
-                        DayCard.OUTSIDE -> {
-                            Text(
-                                "Tu es sorti aujourd'hui ?",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                ChoiceChip(
-                                    label = "🚪 Oui, je suis sorti",
-                                    selected = wentOut == true,
-                                    onClick = { wentOut = if (wentOut == true) null else true },
+                        DayCard.SOCIAL -> {
+                            // « Personne aujourd'hui » ne peut pas cohabiter
+                            // avec « ma copine » : choisir l'un efface l'autre.
+                            // Rien ne l'empechait avant, et une journee pouvait
+                            // dire les deux a la fois.
+                            CardSection("Qui tu as vu", tint) {
+                                MultiTiles(
+                                    options = SEEN.map { segmentOf(it) },
+                                    selected = SEEN.indices
+                                        .filter { tagOn(SEEN[it]) }
+                                        .toSet(),
+                                    tint = tint,
+                                    onToggle = { index ->
+                                        val slug = SEEN[index]
+                                        val turningOn = !tagOn(slug)
+                                        setTag(slug, turningOn)
+                                        if (turningOn) setTag("alone", false)
+                                    },
                                 )
-                                ChoiceChip(
-                                    label = "🛋️ Resté à la maison",
-                                    selected = wentOut == false,
-                                    onClick = { wentOut = if (wentOut == false) null else false },
+                                Spacer(Modifier.height(10.dp))
+                                CheckRow(
+                                    label = "🙈 Personne aujourd'hui",
+                                    checked = tagOn("alone"),
+                                    tint = tint,
+                                    onClick = {
+                                        val turningOn = !tagOn("alone")
+                                        setTag("alone", turningOn)
+                                        if (turningOn) SEEN.forEach { setTag(it, false) }
+                                    },
                                 )
                             }
-                            Spacer(Modifier.height(14.dp))
-                            MeasureRow(
+                        }
+                        DayCard.WORK -> {
+                            // Une liste de cases cochees se lit comme une liste
+                            // de choses faites. Les memes items en pastilles se
+                            // lisaient comme un classement.
+                            CardSection("Ce que tu as avancé", tint) {
+                                val workTags = allTags.filter { it.group == TagCategory.WORK }
+                                workTags.forEachIndexed { index, tag ->
+                                    if (index > 0) Spacer(Modifier.height(8.dp))
+                                    val selected = tag.id in selectedTagIds
+                                    CheckRow(
+                                        label = tag.display,
+                                        checked = selected,
+                                        tint = tint,
+                                        onClick = {
+                                            scope.launch {
+                                                repository.toggleTag(date, tag, !selected)
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        DayCard.OUTSIDE -> {
+                            CardSection("Tu es sorti ?", tint) {
+                                SegmentedChoice(
+                                    options = listOf(
+                                        Segment("🚪", "Sorti"),
+                                        Segment("🛋️", "Resté à la maison"),
+                                    ),
+                                    selectedIndex = when (wentOut) {
+                                        true -> 0
+                                        false -> 1
+                                        null -> null
+                                    },
+                                    tint = tint,
+                                    onSelect = { chosen ->
+                                        wentOut = when (chosen) {
+                                            0 -> true
+                                            1 -> false
+                                            else -> null
+                                        }
+                                    },
+                                )
+                            }
+                            Spacer(Modifier.height(18.dp))
+                            MetricRow(
                                 emoji = "📱",
                                 label = "Temps sur le téléphone",
                                 value = screenValue?.let { formatScreenTime(it) },
-                                hint = if (screenGranted) {
-                                    "Autorisé, mais rien de mesuré pour l'instant."
-                                } else {
-                                    "Appuie pour autoriser l'accès aux données d'utilisation."
+                                caption = when {
+                                    screenValue != null ->
+                                        "Sur une échelle de $SCREEN_REFERENCE h."
+                                    screenGranted -> "Autorisé, mais rien de mesuré pour l'instant."
+                                    else -> "Appuie pour autoriser l'accès aux données d'utilisation."
                                 },
+                                progress = screenValue?.let { it / (SCREEN_REFERENCE * 60f) },
+                                tint = tint,
                                 onClick = {
                                     openSystemScreen(context, ScreenTimeSource.settingsIntent(context))
                                 },
                             )
+                            Spacer(Modifier.height(18.dp))
+                            CardSection("Sur quoi", tint) {
+                                tagChips(TagCategory.SCREENS, tint)
+                            }
                         }
                         DayCard.MONEY -> {
-                            if (dayMoney.isEmpty()) {
-                                Text(
-                                    "Rien noté ce jour-là. Ce que tu ajoutes ici remonte tout de suite dans l'onglet Argent.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            } else {
+                            // Le bilan d'abord, les lignes ensuite. Une liste
+                            // sans total oblige a additionner de tete ; c'est
+                            // pourtant le total qu'on vient chercher.
+                            MoneyDayHeader(entries = dayMoney, tint = tint)
+                            if (dayMoney.isNotEmpty()) {
+                                Spacer(Modifier.height(14.dp))
                                 dayMoney.forEach { entry ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { editingMoney = entry }
-                                            .padding(vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Text(entry.category?.emoji ?: if (entry.isIncome) "➕" else "➖")
-                                        Spacer(Modifier.width(10.dp))
-                                        Text(
-                                            text = entry.displayLabel,
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                        Text(
-                                            text = formatSignedMoney(entry.amountCents),
-                                            style = MaterialTheme.typography.titleMedium,
-                                            color = if (entry.isIncome) DayColor.GREEN.color else DayColor.RED.color,
-                                        )
-                                    }
-                                }
-                                val total = dayMoney.sumOf { it.amountCents }
-                                HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                ) {
-                                    Text("Bilan du jour", style = MaterialTheme.typography.labelLarge)
-                                    Text(
-                                        text = formatSignedMoney(total),
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (total < 0) DayColor.RED.color else DayColor.GREEN.color,
+                                    MoneyDayRow(
+                                        entry = entry,
+                                        tint = tint,
+                                        onClick = { editingMoney = entry },
                                     )
+                                    Spacer(Modifier.height(8.dp))
                                 }
                             }
-                            Spacer(Modifier.height(12.dp))
-                            OutlinedButton(
+                            Spacer(Modifier.height(6.dp))
+                            Button(
                                 onClick = { addingMoney = true },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = tint,
+                                    contentColor = readableOn(tint),
+                                ),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("add-day-money"),
                             ) {
-                                Text("Ajouter une dépense ou une rentrée")
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Ajouter un mouvement")
                             }
                         }
                         DayCard.MEDIA -> {
@@ -794,10 +1009,14 @@ fun DayScreen(
                             Spacer(Modifier.height(8.dp))
                             Button(
                                 onClick = { addMediaTo(null) },
-                                shape = RoundedCornerShape(14.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = tint,
+                                    contentColor = readableOn(tint),
+                                ),
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
-                                Icon(Icons.Default.Add, contentDescription = null)
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
                                 Text("Ajouter une photo ou une vidéo")
                             }
@@ -805,42 +1024,18 @@ fun DayScreen(
                     }
 
                     // Les medias rattaches a cette carte, et de quoi en ajouter.
+                    // Les reperes rapides, eux, ne sont plus ajoutes ici en bloc :
+                    // chaque carte place les siens sous la question qu'ils
+                    // precisent, dans la forme qui convient — pastilles, cases a
+                    // cocher ou selecteur.
                     if (card.canHoldMedia) {
                         val cardMedia = mediaItems.filter { it.cardKey == card.key }
-                        Spacer(Modifier.height(14.dp))
+                        Spacer(Modifier.height(16.dp))
                         CardMediaRow(
                             items = cardMedia,
                             onOpen = { item -> viewerIndex = mediaItems.indexOf(item) },
                             onAdd = { addMediaTo(card) },
                         )
-                    }
-
-                    // Les reperes rapides de cette carte, sous la question
-                    // qu'ils precisent plutot que dans une liste a part.
-                    val cardTags = card.tagCategory?.let { family ->
-                        allTags.filter { it.group == family }
-                    }.orEmpty()
-                    if (cardTags.isNotEmpty()) {
-                        if (card != DayCard.SOCIAL && card != DayCard.WORK) {
-                            Spacer(Modifier.height(14.dp))
-                        }
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            cardTags.forEach { tag ->
-                                val selected = tag.id in selectedTagIds
-                                ChoiceChip(
-                                    label = tag.display,
-                                    selected = selected,
-                                    onClick = {
-                                        scope.launch {
-                                            repository.toggleTag(date, tag, !selected)
-                                        }
-                                    },
-                                )
-                            }
-                        }
                     }
                 }
 
@@ -931,6 +1126,119 @@ fun DayScreen(
 }
 
 /**
+ * Le bilan du jour, en tete de la carte de l'argent.
+ *
+ * La liste des mouvements venait avant, et le total apres — il fallait donc
+ * additionner de tete pour savoir ou l'on en etait, alors que c'est justement
+ * ce qu'on vient chercher. Le total passe devant, les lignes le detaillent.
+ *
+ * Les corrections de solde ne sont comptees ni dans les rentrees ni dans les
+ * depenses : sans cela, remettre le total juste apres une depense la compterait
+ * une seconde fois, a l'envers.
+ */
+@Composable
+private fun MoneyDayHeader(entries: List<MoneyEntry>, tint: Color) {
+    val real = entries.filterNot { it.category == MoneyCategory.ADJUSTMENT }
+    val income = real.filter { it.amountCents > 0 }.sumOf { it.amountCents }
+    val spent = real.filter { it.amountCents < 0 }.sumOf { it.amountCents }
+    val total = income + spent
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(tint.copy(alpha = 0.09f))
+            .padding(16.dp),
+    ) {
+        Text(
+            text = if (entries.isEmpty()) "Rien noté ce jour-là" else "Bilan du jour",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = formatSignedMoney(total),
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = when {
+                total < 0 -> DayColor.RED.color
+                total > 0 -> tint
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+        if (entries.isEmpty()) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Ce que tu ajoutes ici remonte tout de suite dans l'onglet Argent.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                MoneySide("Rentrées", income, tint)
+                MoneySide("Dépenses", spent, DayColor.RED.color)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MoneySide(label: String, cents: Long, color: Color) {
+    Column {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = formatMoney(kotlin.math.abs(cents)),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = if (cents == 0L) MaterialTheme.colorScheme.onSurfaceVariant else color,
+        )
+    }
+}
+
+/** Une ligne de mouvement : son signe, son libelle, son montant. */
+@Composable
+private fun MoneyDayRow(entry: MoneyEntry, tint: Color, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(tint.copy(alpha = 0.13f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(entry.category?.emoji ?: if (entry.isIncome) "➕" else "➖")
+        }
+        Spacer(Modifier.width(11.dp))
+        Text(
+            text = entry.displayLabel,
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = formatSignedMoney(entry.amountCents),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = if (entry.isIncome) tint else DayColor.RED.color,
+        )
+    }
+}
+
+/**
  * Les photos rattachees a une carte, et le bouton pour en ajouter. Discret
  * quand il n'y en a aucune : une ligne de texte, pas un cadre vide.
  */
@@ -984,44 +1292,6 @@ private fun CardMediaRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-    }
-}
-
-/** Donnee relevee automatiquement par le telephone, en lecture seule. */
-@Composable
-private fun MeasureRow(
-    emoji: String,
-    label: String,
-    value: String?,
-    hint: String,
-    onClick: (() -> Unit)? = null,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(emoji, style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.bodyMedium)
-            if (value == null) {
-                Text(
-                    hint,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        Text(
-            text = value ?: "—",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
     }
 }
 
@@ -1175,6 +1445,14 @@ private fun ColorChoice(
             .brandShadow(elevation = 10.dp, shape = shape, color = dayColor.color)
             .clip(shape)
             .background(Brush.linearGradient(dayColor.gradient))
+            // Le liseré blanc, et la raison d'etre de la carte d'humeur.
+            // La couleur du jour descend maintenant jusque derriere ces
+            // tuiles : sans ce contour, une tuile verte sur une journee verte
+            // se fondrait dans le fond, exactement le defaut qu'on avait
+            // corrige en raccourcissant le degrade. Le contour separe la tuile
+            // de tout ce qui peut passer dessous — c'est ce qui permet au
+            // degrade d'etre long.
+            .border(BorderStroke(3.dp, Color.White.copy(alpha = 0.9f)), shape)
             .drawWithContent {
                 // La lumiere du coin haut-gauche : c'est elle qui donne
                 // l'epaisseur. Sans elle, la tuile est un timbre.

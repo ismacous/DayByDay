@@ -175,6 +175,7 @@ fun CalendarScreen(
             }
 
             Spacer(Modifier.height(24.dp))
+            BottomBarSpace()
         }
     }
 }

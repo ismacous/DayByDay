@@ -8,6 +8,8 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -16,20 +18,18 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -100,22 +100,7 @@ fun AppNavigation(
     // place prise par l'en-tete et par la barre restait en dehors, et laissait
     // deux bandes plates et opaques en haut et en bas de l'ecran — d'autant plus
     // larges que la barre avait grandi.
-    Scaffold(
-        containerColor = Color.Transparent,
-        bottomBar = {
-            if (showTabs) {
-                FloatingNavBar(
-                    items = tabs,
-                    currentRoute = currentRoute,
-                    onSelect = { route -> navController.switchTab(route) },
-                    onToday = {
-                        navController.navigate("day/${LocalDate.now().toEpochDay()}")
-                    },
-                )
-            }
-        },
-    ) { scaffoldPadding ->
-        ScreenBackground(modifier = Modifier.fillMaxSize()) {
+    ScreenBackground(modifier = Modifier.fillMaxSize()) {
 
         // L'en-tete se retire quand on descend et revient quand on remonte.
         // Il est branche sur le defilement par `nestedScroll` plutot que sur
@@ -140,13 +125,21 @@ fun AppNavigation(
         // page, pas au milieu de la precedente.
         LaunchedEffect(currentRoute) { headerOffset = 0f }
 
+        // Le contenu n'est **pas** repousse au-dessus de la barre du bas : il
+        // passe dessous. La barre est une pastille qui flotte, avec du vide de
+        // chaque cote et au-dessus ; lui reserver un bandeau plein revenait a
+        // poser un rectangle opaque en travers de la page, et c'est exactement
+        // ce qu'on voyait. Ce sont les ecrans qui reservent la place, en bas de
+        // leur contenu, par un [BottomBarSpace] : ainsi la derniere carte se
+        // lit entierement, mais tout le reste continue de defiler derriere la
+        // barre et derriere la bille.
+        //
+        // C'est aussi pourquoi il n'y a plus de `Scaffold` ici : son role etait
+        // justement de retirer au contenu la place de la barre.
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .padding(
-                    bottom = if (showTabs) scaffoldPadding.calculateBottomPadding() else 0.dp
-                ),
+                .statusBarsPadding(),
         ) {
             Box(modifier = Modifier.fillMaxSize().nestedScroll(hideOnScroll)) {
                 // Les ecrans ne se remplacent plus d'un coup : celui qui arrive
@@ -270,6 +263,17 @@ fun AppNavigation(
                 )
             }
         }
+
+        // La barre du bas, posee **par-dessus** le contenu et non a cote : elle
+        // flotte, et la page continue derriere elle.
+        if (showTabs) {
+            FloatingNavBar(
+                items = tabs,
+                currentRoute = currentRoute,
+                onSelect = { route -> navController.switchTab(route) },
+                onToday = { navController.navigate("day/${LocalDate.now().toEpochDay()}") },
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
         }
     }
 }
@@ -283,6 +287,26 @@ fun AppNavigation(
  * exactement ce qu'on cherche a eviter ici.
  */
 val TAB_HEADER_HEIGHT = 86.dp
+
+/**
+ * La place que la barre du bas occupe, reservee **par le contenu** et non par
+ * la mise en page.
+ *
+ * La barre flotte au-dessus des ecrans : rien ne lui est retire, tout passe
+ * dessous. Sans ce vide en bas de chaque page, la derniere carte finirait
+ * cachee sous la barre. C'est la meme idee que le [TAB_HEADER_HEIGHT] en haut,
+ * a l'envers.
+ */
+@Composable
+fun BottomBarSpace() {
+    Spacer(
+        modifier = Modifier
+            .navigationBarsPadding()
+            .height(BOTTOM_BAR_SPACE),
+    )
+}
+
+private val BOTTOM_BAR_SPACE = 104.dp
 
 /**
  * L'en-tete des quatre onglets. Il ne change que de mots.

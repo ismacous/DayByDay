@@ -831,6 +831,7 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
             }
 
             Spacer(Modifier.height(48.dp))
+            BottomBarSpace()
         }
         }
     }

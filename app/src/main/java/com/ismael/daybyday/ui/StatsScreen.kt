@@ -262,6 +262,7 @@ fun StatsScreen(onOpenWeek: () -> Unit = {}) {
             }
 
             Spacer(Modifier.height(32.dp))
+            BottomBarSpace()
         }
     }
 }

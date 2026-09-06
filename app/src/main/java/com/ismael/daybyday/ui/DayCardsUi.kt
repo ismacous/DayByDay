@@ -2,12 +2,7 @@ package com.ismael.daybyday.ui
 
 import android.app.TimePickerDialog
 import android.content.Context
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,16 +17,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -47,12 +41,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.ismael.daybyday.data.DayCard
-import com.ismael.daybyday.data.DayColor
 import com.ismael.daybyday.data.DayEntry
 import com.ismael.daybyday.data.DoseTaken
 import com.ismael.daybyday.data.DoseTime
@@ -61,61 +55,130 @@ import com.ismael.daybyday.data.Treatment
 import java.util.Locale
 
 /**
- * L'enveloppe d'une carte de l'ecran d'une journee : son titre, et le geste
- * qui la replie. Le contenu n'est pas compose quand la carte est repliee, donc
- * une carte fermee ne coute rien.
+ * L'enveloppe d'une carte de l'ecran d'une journee.
+ *
+ * Ce qu'elle porte, et pourquoi :
+ *
+ * - **Un signe et une teinte** ([cardStyle]). Douze cartes blanches
+ *   rigoureusement identiques obligent a lire chaque titre pour savoir ou l'on
+ *   est. Une couleur et une icone se reconnaissent avant la lecture.
+ * - **Un halo dans le coin** ([cardGlow]). Il est dessine, pas anime : douze
+ *   halos qui derivent feraient douze animations pour un effet qu'on ne regarde
+ *   pas. Il donne a la carte un volume et une lumiere, sans rien couter.
+ * - **Une ligne de resume** sous le titre. Une carte repliee doit encore
+ *   renseigner — « 9 h · bien dormi », « 3 sur 5 », « −14,90 € » — sinon la
+ *   replier revient a l'effacer.
+ *
+ * Le contenu n'est pas compose quand la carte est repliee : une carte fermee ne
+ * coute rien.
  */
 @Composable
 fun DayCardShell(
     card: DayCard,
     collapsed: Boolean,
     onToggleCollapse: () -> Unit,
+    /** L'etat de la carte, en quelques mots. Rien a dire : `null`. */
+    summary: String? = null,
     /**
      * Le degrade de la carte, quand elle doit se detacher des autres. Une
      * seule carte par ecran le porte : celle de l'humeur, qui est la raison
-     * d'etre de la page. Les autres restent blanches autour d'elle — c'est ce
-     * contraste qui donne une hierarchie, pas la taille des titres.
+     * d'etre de la page.
      *
-     * La couleur ne remplit **pas** la carte : elle tient un bandeau en haut et
-     * se fond dans le blanc avant le contenu. C'est la lecon d'une version ou
-     * la carte entiere prenait la couleur du jour — les quatre tuiles de choix
-     * et les quatre moments portent eux aussi ces couleurs, et une tuile verte
-     * sur un fond vert disparait. La couleur doit dire de quelle journee il
-     * s'agit, pas avaler ce qu'on vient y regler.
+     * La couleur ne remplit pas la carte d'un bloc et ne s'arrete pas non plus
+     * net sous le titre : elle **descend jusqu'au trait** qui precede « Moment
+     * par moment », en s'effacant tout du long. Les deux versions precedentes
+     * disaient chacune pourquoi : une carte entierement coloree faisait
+     * disparaitre les tuiles de la meme couleur, et un simple bandeau coupait
+     * trop brutalement. Un fondu long dit la couleur du jour sans jamais
+     * concurrencer ce qu'on vient regler dessus.
      */
     accent: List<Color>? = null,
     /**
-     * L'encre du bandeau, quand elle est imposee. Sert au degrade de
+     * L'encre de l'en-tete, quand elle est imposee. Sert au degrade de
      * l'application, qui se porte en blanc partout ailleurs : le calcul
-     * automatique choisirait du sombre, et le bandeau ne ressemblerait plus aux
+     * automatique choisirait du sombre, et l'en-tete ne ressemblerait plus aux
      * autres surfaces fortes.
      */
     accentInk: Color? = null,
     content: @Composable () -> Unit,
 ) {
-    // L'encre du bandeau se choisit sur **tout** le degrade, pas sur sa
+    val style = cardStyle(card)
+    // L'encre de l'en-tete se choisit sur **tout** le degrade, pas sur sa
     // premiere couleur : le vert des bonnes journees part d'un vert moyen et
     // finit clair, et une encre choisie sur le depart s'efface a l'arrivee.
     val onAccent = accent?.let { accentInk ?: readableOnAll(it) }
     val surface = MaterialTheme.colorScheme.surface
+    val shape = MaterialTheme.shapes.large
+    val density = LocalDensity.current
+    val bandPx = remember(density) { with(density) { MOOD_BAND.toPx() } }
+    val moodBrush = remember(accent, surface, bandPx) {
+        accent?.let {
+            Brush.verticalGradient(
+                // Le titre garde la couleur pleine ; tout le reste du chemin
+                // n'est plus qu'un long effacement vers le blanc de la carte.
+                0f to it.first(),
+                0.22f to it.last(),
+                1f to surface,
+                startY = 0f,
+                endY = bandPx,
+            )
+        }
+    }
 
-    SoftCard(padding = 0.dp) {
-        val header = @Composable {
-            Row(
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .brandShadow(elevation = 10.dp, shape = shape, color = style.tint)
+            .clip(shape)
+            .background(surface)
+            .then(if (moodBrush != null) Modifier.background(moodBrush) else Modifier.cardGlow(style)),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggleCollapse)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable(onClick = onToggleCollapse)
-                    .padding(horizontal = 18.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        onAccent?.copy(alpha = 0.20f) ?: style.tint.copy(alpha = 0.13f)
+                    ),
+                contentAlignment = Alignment.Center,
             ) {
+                Text(style.emoji, fontSize = 19.sp)
+            }
+            Spacer(Modifier.width(13.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    card.title,
+                    text = card.title,
                     style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
                     color = onAccent ?: MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
                 )
-                Spacer(Modifier.width(8.dp))
-                Spacer(Modifier.weight(1f))
+                if (!summary.isNullOrBlank()) {
+                    Text(
+                        text = summary,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = onAccent?.copy(alpha = 0.88f) ?: style.tint,
+                        maxLines = 1,
+                    )
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .background(
+                        onAccent?.copy(alpha = 0.18f) ?: style.tint.copy(alpha = 0.10f)
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
                 Icon(
                     imageVector = if (collapsed) {
                         Icons.Default.KeyboardArrowDown
@@ -123,42 +186,31 @@ fun DayCardShell(
                         Icons.Default.KeyboardArrowUp
                     },
                     contentDescription = if (collapsed) "Déplier" else "Replier",
-                    tint = onAccent ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = onAccent ?: style.tint,
+                    modifier = Modifier.size(19.dp),
                 )
             }
         }
 
-        if (accent == null) {
-            header()
-        } else {
-            // Le bandeau : la couleur du jour en haut, qui se fond dans la
-            // carte avant d'atteindre le contenu. Le degre du fondu compte —
-            // trop court et la couleur fait un trait, trop long et elle mange
-            // les tuiles.
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            0f to accent.first(),
-                            0.55f to accent.last(),
-                            1f to surface,
-                        )
-                    ),
-            ) {
-                header()
-            }
-        }
-
         if (!collapsed) {
-            Column(modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 18.dp)) {
+            Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
                 content()
             }
         } else {
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(4.dp))
         }
     }
 }
+
+/**
+ * Jusqu'ou descend la couleur du jour sur la carte de l'humeur.
+ *
+ * Mesuree depuis le haut de la carte, en points et non en fraction de sa
+ * hauteur : la carte grandit avec son contenu, et une fraction ferait remonter
+ * ou descendre la fin du fondu selon qu'un moment est rempli ou non. La valeur
+ * amene le blanc juste au trait qui precede « Moment par moment ».
+ */
+private val MOOD_BAND = 210.dp
 
 /**
  * Le sommeil de la nuit qui a mene a cette journee. Rien n'est impose : sans
@@ -169,6 +221,7 @@ fun SleepCardBody(
     startMinutes: Int?,
     endMinutes: Int?,
     fromDevice: Boolean,
+    tint: Color,
     onPickStart: () -> Unit,
     onPickEnd: () -> Unit,
     onClear: () -> Unit,
@@ -180,12 +233,14 @@ fun SleepCardBody(
         TimeButton(
             label = "Couché à",
             minutes = startMinutes,
+            tint = tint,
             onClick = onPickStart,
             modifier = Modifier.weight(1f),
         )
         TimeButton(
             label = "Levé à",
             minutes = endMinutes,
+            tint = tint,
             onClick = onPickEnd,
             modifier = Modifier.weight(1f),
         )
@@ -202,13 +257,19 @@ fun SleepCardBody(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     } else {
+        // La nuit dessinee : un axe de dix-huit heures a dix-huit heures, ou une
+        // nuit ordinaire tombe d'un seul tenant. Le chiffre dit combien, la
+        // barre dit **quand** — et c'est le quand qui se compare d'un jour a
+        // l'autre.
+        SleepBar(startMinutes = startMinutes!!, endMinutes = endMinutes!!, tint = tint)
+        Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = formatDuration(duration),
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    color = sleepColor(duration),
+                    color = tint,
                 )
                 Text(
                     text = if (fromDevice) {
@@ -229,13 +290,14 @@ fun SleepCardBody(
 private fun TimeButton(
     label: String,
     minutes: Int?,
+    tint: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
+            .clip(RoundedCornerShape(16.dp))
+            .background(tint.copy(alpha = 0.09f))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
@@ -253,151 +315,39 @@ private fun TimeButton(
 }
 
 /**
- * Les cinq prieres de la journee.
+ * Les cinq prieres de la journee, en perles.
  *
- * Une ligne par priere, dans l'ordre du jour, avec une case a cocher franche —
- * on doit pouvoir la toucher sans viser. La ligne du dessous compte, sans
- * commenter : cinq sur cinq n'est pas felicite, deux sur cinq n'est pas
- * reproche. L'application constate, elle ne note pas.
+ * Cinq grandes lignes a cocher tenaient la moitie de l'ecran pour cinq
+ * oui-ou-non, et se lisaient une par une. Une rangee de perles dit la meme
+ * chose en une ligne, dans l'ordre du jour, et se lit sans lire.
+ *
+ * La ligne du dessous compte, sans commenter : cinq sur cinq n'est pas felicite,
+ * deux sur cinq n'est pas reproche, et rien n'est vert ni rouge. L'application
+ * constate, elle ne note pas.
  *
  * `null` et zero ne veulent pas dire la meme chose : une journee ou rien n'a
  * ete touche est une journee dont on ne sait rien, et le texte le dit.
  */
 @Composable
-fun PrayerCardBody(mask: Int?, onToggle: (Prayer, Boolean) -> Unit) {
+fun PrayerCardBody(mask: Int?, tint: Color, onToggle: (Prayer, Boolean) -> Unit) {
     val done = mask ?: 0
     val count = Prayer.entries.count { done and it.bit != 0 }
 
-    Prayer.entries.forEachIndexed { index, prayer ->
-        if (index > 0) Spacer(Modifier.height(8.dp))
-        val checked = done and prayer.bit != 0
-        PrayerRow(
-            prayer = prayer,
-            checked = checked,
-            onClick = { onToggle(prayer, !checked) },
-        )
-    }
+    PrayerBeads(mask = mask, tint = tint, onToggle = onToggle)
 
-    Spacer(Modifier.height(12.dp))
+    Spacer(Modifier.height(14.dp))
+    TrackBar(progress = count / Prayer.entries.size.toFloat(), tint = tint)
+    Spacer(Modifier.height(8.dp))
     Text(
         text = when {
             mask == null -> "Rien de coché pour l'instant."
             count == 0 -> "Aucune prière cochée."
             count == Prayer.entries.size -> "Les cinq prières."
-            else -> "$count prière(s) sur ${Prayer.entries.size}."
+            else -> "$count sur ${Prayer.entries.size}."
         },
         style = MaterialTheme.typography.bodyMedium,
-        color = if (count == Prayer.entries.size) {
-            DayColor.GREEN.color
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        },
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-}
-
-@Composable
-private fun PrayerRow(prayer: Prayer, checked: Boolean, onClick: () -> Unit) {
-    // La couleur glisse d'un etat a l'autre, et la coche arrive au ressort :
-    // cocher quelque chose doit se sentir sous le doigt, pas seulement se voir.
-    val background by animateColorAsState(
-        targetValue = if (checked) {
-            DayColor.GREEN.color.copy(alpha = 0.16f)
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-        },
-        animationSpec = tween(Motion.NORMAL),
-        label = "fond",
-    )
-    val boxColor by animateColorAsState(
-        targetValue = if (checked) DayColor.GREEN.color else Color.Transparent,
-        animationSpec = tween(Motion.NORMAL),
-        label = "case",
-    )
-    val markScale by animateFloatAsState(
-        targetValue = if (checked) 1f else 0f,
-        animationSpec = Motion.softSpring(),
-        label = "coche",
-    )
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(background)
-            .clickable(onClickLabel = prayer.label, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(24.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(boxColor)
-                .border(
-                    BorderStroke(
-                        2.dp,
-                        if (checked) Color.Transparent else MaterialTheme.colorScheme.outline,
-                    ),
-                    RoundedCornerShape(8.dp),
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                Icons.Default.Check,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier
-                    .size(17.dp)
-                    .graphicsLayer {
-                        // Lue dans la couche, pas dans la composition : la
-                        // coche rebondit sans rien faire remesurer.
-                        scaleX = markScale
-                        scaleY = markScale
-                        alpha = markScale
-                    },
-            )
-        }
-        Spacer(Modifier.width(14.dp))
-        Text(
-            text = prayer.label,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = if (checked) FontWeight.SemiBold else FontWeight.Normal,
-        )
-    }
-}
-
-/** Les verres d'eau de la journee, comptes un par un. */
-@Composable
-fun WaterRow(glasses: Int?, onChange: (Int?) -> Unit) {
-    val count = glasses ?: 0
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text("💧 Eau", style = MaterialTheme.typography.bodyLarge)
-            Text(
-                text = if (glasses == null) {
-                    "Pas encore compté."
-                } else {
-                    "$count verre(s) · environ ${formatLitres(count)}"
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        IconButton(
-            onClick = { onChange((count - 1).takeIf { it > 0 }) },
-            enabled = count > 0,
-        ) {
-            Text("−", style = MaterialTheme.typography.titleLarge)
-        }
-        Text(
-            text = count.toString(),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
-        IconButton(onClick = { onChange((count + 1).coerceAtMost(30)) }) {
-            Text("+", style = MaterialTheme.typography.titleLarge)
-        }
-    }
 }
 
 /**
@@ -410,6 +360,7 @@ fun WaterRow(glasses: Int?, onChange: (Int?) -> Unit) {
 fun TreatmentsCardBody(
     treatments: List<Treatment>,
     taken: List<DoseTaken>,
+    tint: Color,
     onToggle: (Treatment, DoseTime, Boolean) -> Unit,
     onEdit: (Treatment) -> Unit,
     onAdd: () -> Unit,
@@ -450,6 +401,7 @@ fun TreatmentsCardBody(
                     DoseChip(
                         time = time,
                         checked = checked,
+                        tint = tint,
                         onClick = { onToggle(treatment, time, !checked) },
                     )
                 }
@@ -467,7 +419,7 @@ fun TreatmentsCardBody(
             },
             style = MaterialTheme.typography.bodyMedium,
             color = if (doneCount >= expected && expected > 0) {
-                DayColor.GREEN.color
+                tint
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant
             },
@@ -475,47 +427,25 @@ fun TreatmentsCardBody(
     }
 
     Spacer(Modifier.height(12.dp))
-    OutlinedButton(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
-        Icon(Icons.Default.Add, contentDescription = null)
+    OutlinedButton(
+        onClick = onAdd,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(6.dp))
         Text("Ajouter un traitement")
     }
 }
 
 @Composable
-private fun DoseChip(time: DoseTime, checked: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(
-                if (checked) {
-                    DayColor.GREEN.color.copy(alpha = 0.2f)
-                } else {
-                    MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
-                }
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (checked) {
-            Icon(
-                Icons.Default.Check,
-                contentDescription = null,
-                tint = DayColor.GREEN.color,
-                modifier = Modifier.size(16.dp),
-            )
-            Spacer(Modifier.width(6.dp))
-        } else {
-            Text(time.emoji)
-            Spacer(Modifier.width(6.dp))
-        }
-        Text(
-            text = time.label,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = if (checked) FontWeight.SemiBold else FontWeight.Normal,
-        )
-    }
+private fun DoseChip(time: DoseTime, checked: Boolean, tint: Color, onClick: () -> Unit) {
+    CardChip(
+        label = "${time.emoji} ${time.label}",
+        selected = checked,
+        tint = tint,
+        onClick = onClick,
+    )
 }
 
 /** Creation ou modification d'un traitement. */
@@ -624,7 +554,7 @@ fun formatDuration(minutes: Int): String {
     return if (rest == 0) "${hours} h" else "${hours} h ${String.format(Locale.FRANCE, "%02d", rest)}"
 }
 
-private fun formatLitres(glasses: Int): String =
+fun formatLitres(glasses: Int): String =
     String.format(Locale.FRANCE, "%.2f L", glasses * 0.25)
 
 /**
@@ -636,12 +566,4 @@ private fun sleepComment(minutes: Int): String = when {
     minutes < 7 * 60 -> "Nuit courte."
     minutes <= 9 * 60 -> "Nuit dans la moyenne."
     else -> "Nuit longue."
-}
-
-@Composable
-private fun sleepColor(minutes: Int): androidx.compose.ui.graphics.Color = when {
-    minutes < 5 * 60 -> DayColor.RED.color
-    minutes < 7 * 60 -> DayColor.ORANGE.color
-    minutes <= 9 * 60 -> DayColor.GREEN.color
-    else -> MaterialTheme.colorScheme.onSurface
 }

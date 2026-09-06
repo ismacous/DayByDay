@@ -19,9 +19,13 @@ enum class DayCard(
     val essential: Boolean = false,
     val description: String = "",
     /**
-     * Famille d'etiquettes montree dans cette carte. Les reperes rapides ne
-     * vivent plus dans une liste a part : chacun s'affiche la ou il a du sens,
-     * sous la question qu'il precise.
+     * Famille d'etiquettes dont cette carte est responsable.
+     *
+     * Elle ne dit plus **comment** les reperes s'affichent — chaque carte leur
+     * donne maintenant la forme de sa question : un selecteur pour le sommeil,
+     * des cases a cocher pour les demarches, des pastilles pour le reste. Elle
+     * dit seulement qu'aucune famille ne se retrouve sans carte, donc sans
+     * moyen d'etre decochee. C'est ce qu'un test verifie.
      */
     val tagCategory: TagCategory? = null,
     /**
@@ -51,37 +55,37 @@ enum class DayCard(
     ACTIVITY(
         key = "activite",
         title = "Activité physique",
-        description = "Pas, séance de sport, poids du jour.",
-        tagCategory = TagCategory.ACTIVITY,
+        description = "Pas, séance de sport, ce que tu as fait.",
         canHoldMedia = true,
+        tagCategory = TagCategory.ACTIVITY,
     ),
     FOOD(
         key = "alimentation",
         title = "Alimentation",
         description = "Comment tu as mangé, ce que tu as mangé, l'eau bue.",
-        tagCategory = TagCategory.FOOD,
         canHoldMedia = true,
+        tagCategory = TagCategory.FOOD,
     ),
     HEALTH(
         key = "sante",
         title = "Santé & traitements",
-        description = "Cocher les médicaments pris, matin, midi, soir, nuit.",
-        tagCategory = TagCategory.HEALTH,
+        description = "Ton poids, tes traitements, ce qu'il s'est passé.",
         canHoldMedia = true,
+        tagCategory = TagCategory.HEALTH,
     ),
     SOCIAL(
         key = "social",
         title = "Qui tu as vu",
         description = "Les gens qui ont compté dans la journée.",
-        tagCategory = TagCategory.SOCIAL,
         canHoldMedia = true,
+        tagCategory = TagCategory.SOCIAL,
     ),
     WORK(
         key = "travail",
         title = "Travail & démarches",
         description = "Recherche d'emploi, paperasse, entretiens.",
-        tagCategory = TagCategory.WORK,
         canHoldMedia = true,
+        tagCategory = TagCategory.WORK,
     ),
     OUTSIDE(
         key = "dehors",
@@ -93,7 +97,6 @@ enum class DayCard(
         key = "argent",
         title = "Argent du jour",
         description = "Les rentrées et dépenses de cette journée.",
-        tagCategory = TagCategory.MONEY,
         canHoldMedia = true,
     ),
     PRAYER(

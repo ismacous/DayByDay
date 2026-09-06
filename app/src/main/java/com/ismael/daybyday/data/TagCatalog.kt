@@ -48,9 +48,10 @@ object TagCatalog {
         Builtin("admin", "📄", "Démarches, paperasse", TagCategory.WORK),
         Builtin("interview", "🤝", "Entretien", TagCategory.WORK),
 
-        // Argent
-        Builtin("big_spending", "💸", "Grosse dépense", TagCategory.MONEY),
-        Builtin("saved_money", "🐷", "Journée sans dépense", TagCategory.MONEY),
+        // Rien pour l'argent : le detail des mouvements du jour dit deja
+        // « grosse depense » et « journee sans depense », et le dire deux fois
+        // laissait les deux se contredire. Une etiquette n'a de sens que
+        // lorsqu'aucune donnee ne porte deja l'information.
 
         // Ecrans
         Builtin("social_media", "📱", "Réseaux sociaux", TagCategory.SCREENS, listOf("Écrans +++")),

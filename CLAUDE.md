@@ -88,6 +88,13 @@ téléphone (Samsung S25, Android 15).
   Les écrans gardent leur appel à `ScreenBackground` : à l'intérieur d'un fond,
   il ne fait plus qu'une boîte (`LocalInsideBackground`) — repeindre deux fois
   coûterait double et foncerait les halos.
+- **Rien ne réserve la place de la barre du bas** : il n'y a plus de `Scaffold`,
+  justement parce que son rôle était de retirer au contenu la hauteur de la
+  barre — ce qui laissait un bandeau vide en travers de la page, sous lequel les
+  cartes étaient coupées net. La barre flotte par-dessus, le contenu défile
+  dessous, et ce sont les écrans d'onglet qui finissent par un `BottomBarSpace()`
+  pour que leur dernière carte reste lisible. Le même principe qu'en haut avec
+  `TAB_HEADER_HEIGHT`, à l'envers.
 - **En-tête qui s'efface** : il flotte au-dessus des écrans et recule quand on
   descend, via un `NestedScrollConnection` posé autour du `NavHost`. Aucun écran
   n'a rien à déclarer : listes et colonnes annoncent toutes leur défilement de
@@ -95,18 +102,35 @@ téléphone (Samsung S25, Android 15).
   `Spacer(TAB_HEADER_HEIGHT)` en tête de leur contenu, et cette hauteur est la
   **même pour les quatre** — une hauteur variable ferait sauter le contenu au
   changement d'onglet.
-- **Carte de l'humeur** : la couleur du jour tient un **bandeau en haut** et se
-  fond dans le blanc avant le contenu. Elle a rempli toute la carte pendant une
-  version, et c'était une faute : les quatre tuiles de choix et les quatre
-  moments portent eux aussi ces couleurs, donc une tuile verte sur un fond vert
-  disparaissait. La couleur dit de quelle journée il s'agit ; elle n'avale pas ce
-  qu'on vient y régler.
+- **Carte de l'humeur** : la couleur du jour descend en fondu depuis le haut de
+  la carte jusqu'au trait qui précède « Moment par moment » (`MOOD_BAND`, mesuré
+  en **points** et non en fraction de hauteur : la carte grandit avec son
+  contenu). Trois versions ont été nécessaires. Toute la carte colorée : les
+  quatre tuiles de choix portent ces mêmes couleurs, donc une tuile verte sur un
+  fond vert disparaissait. Un simple bandeau sous le titre : la coupure était
+  trop brutale. Le fondu long marche parce que **les tuiles ont un liseré
+  blanc** — c'est lui qui les sépare de ce qui passe dessous, et sans lui le
+  premier défaut reviendrait.
 - **Barre du bas** : une bille saute en arc jusqu'à l'onglet choisi, et une
   encoche la suit dans le bord haut de la barre. La forme de la barre change à
   chaque image : elle est donc posée dans un `graphicsLayer` (voir « animations
   saccadées »). Le creux est une **différence de chemins**, pas un cercle posé
   par-dessus. Une conséquence connue : Android ne sait pas projeter d'ombre
   depuis un contour non convexe, donc la barre n'en a pas.
+- **Cartes de « Ma journée »** (`ui/CardKit.kt`) : chaque carte a une **teinte**
+  et un **signe** (`cardStyle`), un halo dessiné dans son coin (`cardGlow`, un
+  `drawBehind` immobile : douze halos animés feraient douze animations pour un
+  effet qu'on ne regarde pas), et une **ligne de résumé** sous son titre — une
+  carte repliée doit encore renseigner, sinon la replier revient à l'effacer.
+  Six teintes seulement, réparties pour que deux cartes voisines n'aient jamais
+  la même : c'est la répétition d'une petite palette qui fait un système, pas
+  douze couleurs différentes. Règle de forme : **une question, une réponse, une
+  forme**. Un choix parmi trois est un `SegmentedChoice`, pas trois pastilles
+  (rien n'empêchait de cocher « bien dormi » *et* « mal dormi ») ; huit verres
+  d'eau sont huit verres, pas un compteur à flèches ; cinq prières sont cinq
+  perles ; des démarches sont des cases à cocher. Les étiquettes ne s'affichent
+  plus en bloc au bas de chaque carte : chacune vit sous la question qu'elle
+  précise, dans la forme qui lui convient.
 - **Prières** : cinq oui-ou-non par journée, rangés en **masque de bits** dans
   une seule colonne (`DayEntry.prayerMask`, migration 11→12). Les `bit` de
   `Prayer` ne doivent jamais changer : c'est eux qui sont écrits. La colonne

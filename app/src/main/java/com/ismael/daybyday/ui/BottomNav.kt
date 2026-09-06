@@ -217,12 +217,14 @@ private val BAR_HEIGHT = 62.dp
  *
  * Elle etait a vingt et un points, et c'etait trop : une bille plus large qu'un
  * pouce ne designe plus un onglet, elle occupe la barre. Un reperage doit se
- * voir sans se substituer a ce qu'il repere.
+ * voir sans se substituer a ce qu'il repere. Maintenant que la page defile
+ * **derriere** la barre, elle passe devant du texte : une raison de plus pour
+ * qu'elle reste petite.
  */
-private val BALL_RADIUS = 13.dp
+private val BALL_RADIUS = 11.dp
 
 /** Ce que la bille laisse depasser au-dessus du bord de la barre. */
-private val BALL_OVERHANG = 14.dp
+private val BALL_OVERHANG = 12.dp
 
 /** Hauteur du sommet de l'arc pendant le saut. */
 private val BALL_ARC = 20.dp

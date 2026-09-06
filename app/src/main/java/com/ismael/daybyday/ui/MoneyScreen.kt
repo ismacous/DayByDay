@@ -272,6 +272,7 @@ fun MoneyScreen(onDayClick: (LocalDate) -> Unit) {
             }
 
             item { Spacer(Modifier.height(32.dp)) }
+            item { BottomBarSpace() }
         }
         }
     }

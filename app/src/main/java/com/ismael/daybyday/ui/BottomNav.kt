@@ -120,7 +120,7 @@ fun FloatingNavBar(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 14.dp, bottom = 8.dp, top = BALL_OVERHANG),
+            .padding(start = 14.dp, end = 14.dp, top = BALL_OVERHANG, bottom = 8.dp),
     ) {
         fun ballCenterX(): Float =
             if (toX.isNaN()) Float.NaN else fromX + (toX - fromX) * jump.value

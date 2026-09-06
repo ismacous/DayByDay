@@ -25,6 +25,16 @@ class DayByDayApp : Application() {
     val prefs: Prefs by lazy { Prefs(this) }
     val lock: LockController by lazy { LockController(prefs) }
 
+    /**
+     * Le bonjour du demarrage a-t-il deja ete joue ?
+     *
+     * Porte par l'application et non par l'ecran : une rotation du telephone ou
+     * un retour a l'accueil recreent l'activite, et l'animation repartirait a
+     * chaque fois. Une animation d'accueil se voit une fois par ouverture, pas
+     * a chaque aller-retour.
+     */
+    var helloPlayed: Boolean = false
+
     /** Portee de coroutine liee au process, pour les sauvegardes de fin d'ecran. */
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 

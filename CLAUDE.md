@@ -22,6 +22,13 @@ téléphone (Samsung S25, Android 15).
    le code. Ne jamais l'ajouter, ni ajouter une dépendance qui en aurait besoin.
    Les pas et le temps d'écran sont lus **localement** (Health Connect et
    statistiques d'usage), jamais via un service en ligne.
+   Le manifeste contient `<uses-permission android:name="…INTERNET"
+   tools:node="remove"/>` : la permission est **retirée** si une bibliothèque la
+   réclame dans son propre manifeste. La règle n'est donc plus tenue par la
+   vigilance mais par la compilation.
+   En revanche, **intégrer des fichiers** (polices, images, animations) est
+   permis : ils sont téléchargés au moment d'écrire le code, vérifiés, et
+   embarqués dans l'APK — rien n'est récupéré à l'exécution.
 2. **La couleur du jour reste subjective.** Elle vient des quatre moments
    (matin, après-midi, soir, nuit) ou d'un choix manuel — jamais du sport, des
    pas, des repas ou de l'argent. Ces données sont comparées à la couleur dans

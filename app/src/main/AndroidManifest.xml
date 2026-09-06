@@ -4,7 +4,16 @@
 
     <!-- Aucune permission INTERNET : l'application ne peut techniquement pas
          envoyer tes donnees sur un reseau. Tout reste dans le stockage prive
-         de l'app sur le telephone. -->
+         de l'app sur le telephone.
+
+         La ligne ci-dessous n'ajoute rien : elle **retire** la permission si
+         une bibliotheque la reclame dans son propre manifeste. Sans elle, la
+         garantie ne tiendrait qu'a la vigilance ; avec elle, c'est la
+         compilation qui la fait respecter, meme le jour ou une dependance
+         ajoutee sans y penser voudrait acceder au reseau. -->
+    <uses-permission
+        android:name="android.permission.INTERNET"
+        tools:node="remove" />
 
     <!-- Uniquement pour le rappel quotidien local. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

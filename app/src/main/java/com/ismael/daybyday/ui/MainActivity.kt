@@ -49,6 +49,7 @@ class MainActivity : FragmentActivity() {
                 val app = dayByDayApp
                 // null tant qu'on ne sait pas encore si la base est vide.
                 var offerRestore by remember { mutableStateOf<Boolean?>(null) }
+                var helloDone by remember { mutableStateOf(app.helloPlayed) }
                 LaunchedEffect(Unit) {
                     offerRestore = !app.prefs.firstRunRestoreChecked &&
                         app.repository.allDays().isEmpty()
@@ -72,6 +73,14 @@ class MainActivity : FragmentActivity() {
 
                         offerRestore == true -> WelcomeRestoreScreen(
                             onFinished = { offerRestore = false },
+                        )
+
+                        !helloDone -> HelloBurstScreen(
+                            firstName = app.prefs.firstName,
+                            onDone = {
+                                app.helloPlayed = true
+                                helloDone = true
+                            },
                         )
 
                         else -> AppNavigation(

@@ -13,9 +13,17 @@ import java.time.ZonedDateTime
 import java.util.concurrent.TimeUnit
 
 /**
- * Planifie les deux taches quotidiennes locales : le rappel du soir et la
- * sauvegarde automatique. Tout passe par WorkManager, donc ca survit aux
- * redemarrages du telephone sans permission supplementaire.
+ * Ce qui se declenche tout seul, et par quel moyen.
+ *
+ * Deux mecaniques, et le choix entre les deux tient a une seule question :
+ * **est-ce que l'heure compte ?**
+ *
+ * - Le rappel du soir et le bilan du lundi ont un rendez-vous avec quelqu'un.
+ *   Ils passent par une **alarme** ([ReminderAlarm]), qui vise un instant.
+ * - La sauvegarde automatique n'a rendez-vous avec personne : elle doit juste
+ *   avoir eu lieu. Elle reste une tache periodique WorkManager, ou seule
+ *   compte la regle apprise a ses depens — ne pas remettre le compte a rebours
+ *   a zero a chaque ouverture de l'application, sinon elle n'arrive jamais.
  */
 object DailyScheduler {
 
@@ -26,29 +34,12 @@ object DailyScheduler {
     const val TEST_WEEKLY_WORK = "daybyday-bilan-test"
 
     /**
-     * Millisecondes jusqu'au prochain [dayOfWeek] a [hour]:[minute].
+     * Millisecondes jusqu'a la prochaine occurrence de [hour]:[minute].
      *
-     * Si c'est deja passe aujourd'hui, ou si aujourd'hui n'est pas le bon jour,
-     * on vise la semaine suivante.
+     * Ne sert plus qu'a la sauvegarde automatique, la seule des trois taches
+     * dont l'heure n'a pas d'importance : personne ne regarde une sauvegarde
+     * partir.
      */
-    fun weeklyDelayMillis(
-        dayOfWeek: java.time.DayOfWeek,
-        hour: Int,
-        minute: Int,
-        now: ZonedDateTime = ZonedDateTime.now(),
-    ): Long {
-        var target = now.withHour(hour.coerceIn(0, 23))
-            .withMinute(minute.coerceIn(0, 59))
-            .withSecond(0)
-            .withNano(0)
-            .with(java.time.temporal.TemporalAdjusters.nextOrSame(dayOfWeek))
-        if (!target.isAfter(now)) {
-            target = target.plusWeeks(1)
-        }
-        return Duration.between(now, target).toMillis()
-    }
-
-    /** Millisecondes jusqu'a la prochaine occurrence de [hour]:[minute]. */
     fun initialDelayMillis(hour: Int, minute: Int, now: ZonedDateTime = ZonedDateTime.now()): Long {
         var target = now.withHour(hour.coerceIn(0, 23))
             .withMinute(minute.coerceIn(0, 59))
@@ -61,39 +52,26 @@ object DailyScheduler {
     /**
      * Programme le rappel du soir.
      *
-     * Le piege, et la raison du bug du rappel qui ne sonnait jamais : cette
-     * fonction est appelee au demarrage de l'application, donc a chaque fois
-     * qu'Ismael l'ouvre. Elle reprogrammait alors la tache **en repartant de
-     * zero**, et le compte a rebours vers 21 h recommencait. Ouvrir
-     * l'application a 20 h repoussait le rappel au lendemain 21 h ; l'ouvrir
-     * tous les jours le repoussait indefiniment.
+     * Il ne passe plus par WorkManager, et c'est la troisieme et derniere
+     * correction de ce bug. Les deux precedentes traitaient des symptomes :
+     * la premiere version reprogrammait la tache a chaque ouverture, donc le
+     * compte a rebours vers 21 h repartait de zero et le rappel n'arrivait
+     * jamais ; la deuxieme ne reprogrammait plus que si l'heure changeait, et
+     * le rappel arrivait... quand Android le decidait.
      *
-     * On ne reprogramme donc que si l'heure ou l'activation ont change depuis la
-     * derniere fois. Sinon on laisse la tache deja en place vivre sa vie
-     * ([ExistingPeriodicWorkPolicy.KEEP] la garde si elle existe, et la recree si
-     * elle a disparu — apres une mise a jour, par exemple).
+     * La cause etait plus profonde : **une tache periodique n'a pas d'heure.**
+     * « Une fois par jour » veut dire « une fois quelque part dans chaque
+     * tranche de vingt-quatre heures », et le systeme la place ou ca l'arrange
+     * — voire jamais, sur un Samsung qui endort les applications.
+     *
+     * C'est donc une alarme ([ReminderAlarm]), qui vise un instant absolu. On
+     * annule au passage l'ancienne tache periodique : sans ca, les telephones
+     * deja a jour recevraient les deux.
      */
     fun scheduleReminder(context: Context, prefs: Prefs) {
-        val manager = WorkManager.getInstance(context.applicationContext)
-        if (!prefs.reminderEnabled) {
-            manager.cancelUniqueWork(REMINDER_WORK)
-            prefs.scheduledReminder = null
-            return
-        }
-        val signature = "${prefs.reminderHour}:${prefs.reminderMinute}"
-        val changed = prefs.scheduledReminder != signature
-        val request = PeriodicWorkRequestBuilder<ReminderWorker>(1, TimeUnit.DAYS)
-            .setInitialDelay(
-                initialDelayMillis(prefs.reminderHour, prefs.reminderMinute),
-                TimeUnit.MILLISECONDS,
-            )
-            .build()
-        manager.enqueueUniquePeriodicWork(
-            REMINDER_WORK,
-            if (changed) ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE else ExistingPeriodicWorkPolicy.KEEP,
-            request,
-        )
-        prefs.scheduledReminder = signature
+        WorkManager.getInstance(context.applicationContext).cancelUniqueWork(REMINDER_WORK)
+        prefs.scheduledReminder = null
+        ReminderAlarm.armEvening(context, prefs)
     }
 
     /**
@@ -134,36 +112,11 @@ object DailyScheduler {
         prefs.scheduledBackup = signature
     }
 
-    /**
-     * Le bilan du lundi matin. Meme regle que le rappel du soir : on ne
-     * reprogramme que si l'heure a change, sinon ouvrir l'application le
-     * repousserait indefiniment.
-     */
+    /** Le bilan du lundi matin. Meme mecanique que le rappel du soir. */
     fun scheduleWeeklyReview(context: Context, prefs: Prefs) {
-        val manager = WorkManager.getInstance(context.applicationContext)
-        if (!prefs.weeklyReviewEnabled) {
-            manager.cancelUniqueWork(WEEKLY_WORK)
-            prefs.scheduledWeeklyReview = null
-            return
-        }
-        val signature = "${prefs.weeklyReviewHour}:${prefs.weeklyReviewMinute}"
-        val changed = prefs.scheduledWeeklyReview != signature
-        val request = PeriodicWorkRequestBuilder<WeeklyReviewWorker>(7, TimeUnit.DAYS)
-            .setInitialDelay(
-                weeklyDelayMillis(
-                    java.time.DayOfWeek.MONDAY,
-                    prefs.weeklyReviewHour,
-                    prefs.weeklyReviewMinute,
-                ),
-                TimeUnit.MILLISECONDS,
-            )
-            .build()
-        manager.enqueueUniquePeriodicWork(
-            WEEKLY_WORK,
-            if (changed) ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE else ExistingPeriodicWorkPolicy.KEEP,
-            request,
-        )
-        prefs.scheduledWeeklyReview = signature
+        WorkManager.getInstance(context.applicationContext).cancelUniqueWork(WEEKLY_WORK)
+        prefs.scheduledWeeklyReview = null
+        ReminderAlarm.armWeekly(context, prefs)
     }
 
     /** Envoie le bilan de la semaine tout de suite, pour voir ce qu'il donne. */

@@ -75,15 +75,31 @@ téléphone (Samsung S25, Android 15).
 
 - **Clavier** : sur l'écran d'une journée, `imePadding()` doit rester **avant**
   `verticalScroll()`, sinon le texte passe sous le clavier.
-- **Rappel du soir** : `DailyScheduler.rescheduleAll` est appelé dans
-  `DayByDayApp.onCreate()`, donc **à chaque ouverture**. Avec
-  `CANCEL_AND_REENQUEUE`, le compte à rebours repartait de zéro chaque fois et
-  le rappel de 21 h n'arrivait jamais. On ne reprogramme donc que si l'heure a
-  changé (`Prefs.scheduledReminder`), sinon `KEEP` — qui garde la tâche en place
-  et la recrée seulement si elle a disparu. Même règle pour la sauvegarde
-  automatique. Reste la cause qui n'est pas dans le code : Samsung endort les
-  applications, d'où la ligne « Mise en veille par Android » et le rappel
-  d'essai dans les Réglages.
+- **Rappel du soir : une alarme, pas une tâche périodique.** Trois versions ont
+  été nécessaires, et les deux premières traitaient des symptômes. (1)
+  `rescheduleAll` est appelé à chaque ouverture ; avec `CANCEL_AND_REENQUEUE` le
+  compte à rebours repartait de zéro, donc ouvrir l'app à 20 h repoussait le
+  rappel à demain. (2) On ne reprogrammait plus que si l'heure changeait — et le
+  rappel arrivait quand Android le décidait, c'est-à-dire souvent jamais.
+  La cause réelle : **une tâche périodique n'a pas d'heure, elle a une période.**
+  « Une fois par jour » veut dire « une fois quelque part dans chaque tranche de
+  24 h », et le système la place où ça l'arrange — ou nulle part, sur un Samsung
+  qui endort les applications. Le rappel et le bilan du lundi passent donc par
+  `ReminderAlarm` (`setExactAndAllowWhileIdle`, permission `USE_EXACT_ALARM`),
+  qui vise un **instant absolu** : reprogrammer devient sans effet, ce qui rend
+  le bug (1) impossible par construction. `ReminderReceiver` **réarme** après
+  chaque sonnerie plutôt que d'utiliser une répétition automatique — une
+  répétition dérive (elle ajoute 24 h à l'heure où elle a tourné, pas à l'heure
+  prévue) et finirait au milieu de la nuit — et il réarme aussi au démarrage du
+  téléphone, après une mise à jour et au changement d'heure, trois moments où
+  Android efface les alarmes. La notification part **du receveur**, pas d'une
+  tâche : l'alarme a déjà réveillé le processus, et chaque intermédiaire de plus
+  est un endroit de plus où Samsung peut couper. La sauvegarde automatique, elle,
+  reste sur WorkManager : personne ne regarde une sauvegarde partir. Les règles
+  d'heure sont testées dans `ReminderAlarmTest`. Reste la cause qui n'est pas
+  dans le code : Samsung endort les applications, d'où la ligne « Mise en veille
+  par Android », le rappel d'essai, et la ligne « Prochain rappel » des Réglages
+  — qui sépare « rien n'est programmé » de « c'est programmé mais étouffé ».
 - **Titre des onglets** : il vit **au-dessus** du `NavHost` (`TabHeader` dans
   `AppNavigation`), pas dans chaque écran. Avant, passer du bilan à l'argent
   détruisait « Mon bilan » pour reconstruire « Mon argent » et tout l'en-tête

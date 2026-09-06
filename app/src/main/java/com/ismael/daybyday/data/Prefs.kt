@@ -209,6 +209,21 @@ class Prefs(context: Context) {
         set(value) = prefs.edit().putLong(KEY_LAST_WEEKLY, value).apply()
 
     /** Quand le dernier rappel a ete envoye. Zero tant qu'il n'y en a pas eu. */
+    /**
+     * L'instant du prochain rappel arme, ou 0. Sert aux Reglages a dire
+     * « prochain rappel : ce soir a 21 h » — la seule facon de distinguer
+     * « rien n'est programme » de « c'est programme mais le telephone l'a
+     * etouffe ».
+     */
+    var nextReminderAt: Long
+        get() = prefs.getLong(KEY_NEXT_REMINDER, 0L)
+        set(value) = prefs.edit().putLong(KEY_NEXT_REMINDER, value).apply()
+
+    /** Idem pour le bilan du lundi. */
+    var nextWeeklyReviewAt: Long
+        get() = prefs.getLong(KEY_NEXT_WEEKLY, 0L)
+        set(value) = prefs.edit().putLong(KEY_NEXT_WEEKLY, value).apply()
+
     var lastReminderAt: Long
         get() = prefs.getLong(KEY_LAST_REMINDER, 0L)
         set(value) = prefs.edit().putLong(KEY_LAST_REMINDER, value).apply()
@@ -273,6 +288,8 @@ class Prefs(context: Context) {
         const val KEY_SCHEDULED_REMINDER = "reminder_scheduled_for"
         const val KEY_SCHEDULED_BACKUP = "backup_scheduled_for"
         const val KEY_LAST_REMINDER = "reminder_last_at"
+        const val KEY_NEXT_REMINDER = "reminder_next_at"
+        const val KEY_NEXT_WEEKLY = "weekly_review_next_at"
         const val KEY_WEEKLY_ENABLED = "weekly_review_enabled"
         const val KEY_WEEKLY_HOUR = "weekly_review_hour"
         const val KEY_WEEKLY_MINUTE = "weekly_review_minute"

@@ -103,6 +103,7 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
     var reminderMinute by remember { mutableIntStateOf(prefs.reminderMinute) }
 
     var lastReminder by remember { mutableLongStateOf(prefs.lastReminderAt) }
+    var nextReminder by remember { mutableLongStateOf(prefs.nextReminderAt) }
 
     var weeklyEnabled by remember { mutableStateOf(prefs.weeklyReviewEnabled) }
     var weeklyHour by remember { mutableIntStateOf(prefs.weeklyReviewHour) }
@@ -150,6 +151,7 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
         notificationsGranted = notificationsAllowed(context)
         batteryUnrestricted = isBatteryUnrestricted(context)
         lastReminder = prefs.lastReminderAt
+        nextReminder = prefs.nextReminderAt
     }
 
     // Les autorisations se changent dans les reglages d'Android, hors de
@@ -433,6 +435,7 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
                             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                         }
                         DailyScheduler.scheduleReminder(context, prefs)
+                        nextReminder = prefs.nextReminderAt
                     },
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -448,6 +451,7 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
                             prefs.reminderHour = hour
                             prefs.reminderMinute = minute
                             DailyScheduler.scheduleReminder(context, prefs)
+                            nextReminder = prefs.nextReminderAt
                         }
                     }) {
                         Text(formatTime(reminderHour, reminderMinute))
@@ -455,6 +459,21 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
                 }
 
                 Spacer(Modifier.height(4.dp))
+                // Les deux lignes ensemble disent tout. « Prochain » vient de
+                // l'alarme reellement posee : s'il est vide, rien n'est
+                // programme. S'il est rempli mais que « dernier » date d'hier,
+                // c'est le telephone qui a etouffe la notification — et c'est
+                // la ligne « Mise en veille par Android » plus bas qu'il faut
+                // regarder.
+                Text(
+                    text = if (nextReminder == 0L) {
+                        "Aucun rappel programmé."
+                    } else {
+                        "Prochain rappel : ${formatDateTime(nextReminder)}"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Text(
                     text = if (lastReminder == 0L) {
                         "Aucun rappel envoyé pour l'instant."

@@ -18,6 +18,21 @@
     <!-- Uniquement pour le rappel quotidien local. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Le rappel du soir est une **alarme a heure fixe**, pas une tache de
+         fond : une tache periodique n'a pas d'heure, elle a une periode, et
+         Android la place ou ca l'arrange. Ces deux permissions ne donnent
+         acces a rien : elles autorisent seulement a viser une heure precise.
+         `USE_EXACT_ALARM` couvre Android 13 et plus sans rien demander a
+         l'utilisateur ; `SCHEDULE_EXACT_ALARM` sert aux versions d'avant. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
+
+    <!-- Un redemarrage efface les alarmes : sans ca, le rappel disparaitrait
+         silencieusement au premier reboot. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- Lecture locale des pas (via Health Connect) et du temps d'ecran.
          Les deux restent sur le telephone : aucune sortie reseau possible. -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
@@ -63,6 +78,22 @@
                 <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
             </intent-filter>
         </activity-alias>
+
+        <!-- Recoit les alarmes, et les rearme : au reveil du telephone, apres
+             une mise a jour, et quand l'heure du systeme change. Non exporte :
+             les alarmes viennent d'un intent explicite vers cette classe, et
+             les trois autres actions sont des diffusions protegees que seul le
+             systeme peut envoyer. -->
+        <receiver
+            android:name=".work.ReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

@@ -69,6 +69,7 @@ class MigrationTest {
                 AppDatabase.MIGRATION_9_10,
                 AppDatabase.MIGRATION_10_11,
                 AppDatabase.MIGRATION_11_12,
+                AppDatabase.MIGRATION_12_13,
             )
             .build()
 
@@ -111,6 +112,14 @@ class MigrationTest {
                 assertEquals(null, day?.steps)
                 assertEquals(null, day?.screenMinutes)
                 assertEquals(true, day?.colorManual)
+                // Les prieres : une journee d'avant n'est pas une journee sans
+                // priere, c'est une journee dont on ne sait rien.
+                assertEquals(null, day?.prayerMask)
+                // Le grignotage est un texte : « rien » se dit par une chaine
+                // vide. Les candidatures sont un nombre : « rien » se dit par
+                // null, parce que zero candidature est une reponse.
+                assertEquals("", day?.snackNote)
+                assertEquals(null, day?.jobApplications)
             }
         } finally {
             database.close()

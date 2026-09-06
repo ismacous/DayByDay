@@ -55,7 +55,7 @@ enum class DayCard(
     ACTIVITY(
         key = "activite",
         title = "Activité physique",
-        description = "Pas, séance de sport, ce que tu as fait.",
+        description = "Pas, sorties, séance de sport, ce que tu as fait.",
         canHoldMedia = true,
         tagCategory = TagCategory.ACTIVITY,
     ),
@@ -68,10 +68,21 @@ enum class DayCard(
     ),
     HEALTH(
         key = "sante",
-        title = "Santé & traitements",
-        description = "Ton poids, tes traitements, ce qu'il s'est passé.",
+        title = "Santé",
+        description = "Ton poids, et ce que ton corps a dit de la journée.",
         canHoldMedia = true,
         tagCategory = TagCategory.HEALTH,
+    ),
+    // Les traitements ont quitte la carte Sante : ils ne concernent pas toutes
+    // les periodes de la vie. En carte a part, ils se masquent d'un geste dans
+    // « Organiser ma journee » quand il n'y a rien a prendre, et reviennent
+    // entiers le jour ou il y a de nouveau quelque chose.
+    TREATMENT(
+        key = "traitements",
+        title = "Traitements",
+        description = "Les médicaments à cocher, et les rendez-vous médicaux.",
+        canHoldMedia = true,
+        tagCategory = TagCategory.MEDICAL,
     ),
     SOCIAL(
         key = "social",
@@ -82,15 +93,19 @@ enum class DayCard(
     ),
     WORK(
         key = "travail",
-        title = "Travail & démarches",
-        description = "Recherche d'emploi, paperasse, entretiens.",
+        title = "Travail & recherche",
+        description = "Candidatures envoyées, entretiens, démarches, freelance.",
         canHoldMedia = true,
         tagCategory = TagCategory.WORK,
     ),
+    // La cle reste « dehors » : c'est elle qui est enregistree dans la
+    // disposition choisie. Le titre, lui, a change — sortir ou non est parti
+    // dans l'activite physique, ou il a un sens, et il ne reste ici que les
+    // ecrans.
     OUTSIDE(
         key = "dehors",
-        title = "Dehors & écrans",
-        description = "Être sorti ou non, temps passé sur le téléphone.",
+        title = "Écrans",
+        description = "Temps passé sur le téléphone, et sur quoi.",
         tagCategory = TagCategory.SCREENS,
     ),
     MONEY(

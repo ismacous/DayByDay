@@ -44,7 +44,12 @@ téléphone (Samsung S25, Android 15).
    vérifie qu'elle survit.
 5. **Les étiquettes sont un catalogue fixe** (`data/TagCatalog.kt`), synchronisé
    au démarrage via un `slug` stable. Renommer une étiquette est sûr ; changer
-   son slug casserait le lien avec les journées déjà marquées.
+   son slug casserait le lien avec les journées déjà marquées. Une étiquette
+   n'a de sens que si **aucune donnée ne porte déjà l'information** : « grosse
+   dépense » doublait le détail des mouvements, « recherche d'emploi » ne
+   distinguait pas un jour à une candidature d'un jour à six (c'est un nombre,
+   `jobApplications`), et « cuisine maison » ne disait rien de plus que
+   « bien mangé ».
 6. **Incrémenter `versionCode` et `versionName`** à chaque version livrée.
 
 ## Architecture
@@ -131,6 +136,33 @@ téléphone (Samsung S25, Android 15).
   perles ; des démarches sont des cases à cocher. Les étiquettes ne s'affichent
   plus en bloc au bas de chaque carte : chacune vit sous la question qu'elle
   précise, dans la forme qui lui convient.
+- **Une donnée, un endroit** : sortir ou rester chez soi vivait dans « Dehors &
+  écrans », coincé entre un temps d'écran et une étiquette « Dehors » perdue au
+  milieu du ménage et des courses. C'est maintenant une question de la carte
+  **Activité physique**, et « Écrans » ne parle plus que d'écrans. Même règle
+  pour le poids (parti dans Santé) et les traitements (leur propre carte, qu'on
+  masque les mois où l'on ne prend rien).
+- **Le fond d'une carte** (`CardWeek` / `MoreButton`) : « voir la semaine »
+  n'ajoute pas du détail sur aujourd'hui — ça n'aurait fait que rallonger la
+  carte. Il répond à l'autre question, celle que la carte ne peut pas poser :
+  « et les jours d'avant ? ». Sept barres (`MiniBars`), nourries par **une
+  seule** requête (`observeDaysBetween` sur sept jours) partagée par toutes les
+  cartes. Les barres du poids partent du plus bas de la semaine et non de zéro :
+  autour de quatre-vingts kilos, partir de zéro donne sept barres identiques.
+- **Motion design** (`ui/Celebration.kt`) : cocher la cinquième prière déclenche
+  une vraie animation — confettis, disque qui surgit au ressort, onde. Quatre
+  règles : elle se déclenche **au passage** (`before != ALL_DONE && after ==
+  ALL_DONE`), jamais à l'affichage, sinon rouvrir la journée la rejouerait ;
+  moins de deux secondes ; un appui n'importe où la coupe ; et une **seule**
+  valeur animée mène les quarante confettis, lue uniquement dans `drawBehind` et
+  `graphicsLayer` — rien n'est recomposé pendant qu'elle joue.
+- **Une boucle d'animation doit être invisible à ses deux bouts.** Le reflet des
+  tuiles d'humeur sautait : son dégradé avait un axe **oblique**, et hors de
+  l'intervalle un dégradé se prolonge par sa couleur de bord — le coin bas-droit
+  de la tuile tombait encore dans la partie claire à l'arrivée. L'axe est
+  maintenant horizontal (donc la sortie ne dépend que de `x`), l'obliquité vient
+  d'une `rotate` du dessin, et le trajet (`SHINE_FROM` / `SHINE_TO`) est calculé
+  pour que la bande ait quitté la tuile **rotation comprise**.
 - **Prières** : cinq oui-ou-non par journée, rangés en **masque de bits** dans
   une seule colonne (`DayEntry.prayerMask`, migration 11→12). Les `bit` de
   `Prayer` ne doivent jamais changer : c'est eux qui sont écrits. La colonne

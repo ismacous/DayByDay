@@ -25,6 +25,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -101,11 +103,12 @@ fun cardStyle(card: DayCard): DayCardStyle = when (card) {
     DayCard.SLEEP -> DayCardStyle("🌙", Violet, VioletGlow)
     DayCard.ACTIVITY -> DayCardStyle("👟", Mint, MintGlow)
     DayCard.FOOD -> DayCardStyle("🍽️", Amber, AmberGlow)
-    DayCard.HEALTH -> DayCardStyle("💊", Rose, RoseGlow)
-    DayCard.SOCIAL -> DayCardStyle("👥", Sky, SkyGlow)
+    DayCard.HEALTH -> DayCardStyle("💗", Rose, RoseGlow)
+    DayCard.TREATMENT -> DayCardStyle("💊", Sky, SkyGlow)
+    DayCard.SOCIAL -> DayCardStyle("👥", Mint, MintGlow)
     DayCard.WORK -> DayCardStyle("💼", Indigo, IndigoGlow)
     DayCard.OUTSIDE -> DayCardStyle("🚪", Violet, VioletGlow)
-    DayCard.MONEY -> DayCardStyle("💶", Mint, MintGlow)
+    DayCard.MONEY -> DayCardStyle("💶", Sky, SkyGlow)
     DayCard.PRAYER -> DayCardStyle("🕌", Amber, AmberGlow)
     DayCard.MEDIA -> DayCardStyle("📷", Rose, RoseGlow)
 }
@@ -684,3 +687,203 @@ fun PrayerBeads(
         }
     }
 }
+
+/**
+ * Un nombre qu'on fait monter : les candidatures envoyees dans la journee.
+ *
+ * Une case a cocher aurait dit « j'ai cherché du travail », ce qui ne veut rien
+ * dire. Un nombre se cumule sur la semaine, se compare a celle d'avant, et
+ * c'est **ca** qu'on veut voir quand on cherche.
+ *
+ * Zero et « pas rempli » ne sont pas la meme chose : descendre sous zero rend
+ * la journee a l'etat non renseigne.
+ */
+@Composable
+fun Counter(
+    value: Int?,
+    tint: Color,
+    label: String,
+    caption: String,
+    onChange: (Int?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(tint.copy(alpha = 0.09f))
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = caption,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        CounterButton(sign = "−", tint = tint, enabled = value != null) {
+            onChange(value?.let { if (it <= 0) null else it - 1 })
+        }
+        Box(
+            modifier = Modifier.width(48.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = value?.toString() ?: "—",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = if (value == null) MaterialTheme.colorScheme.onSurfaceVariant else tint,
+            )
+        }
+        CounterButton(sign = "+", tint = tint, enabled = true) {
+            onChange((value ?: 0) + 1)
+        }
+    }
+}
+
+@Composable
+private fun CounterButton(sign: String, tint: Color, enabled: Boolean, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.86f else 1f,
+        animationSpec = Motion.softSpring(),
+        label = "pression",
+    )
+    Box(
+        modifier = Modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                alpha = if (enabled) 1f else 0.35f
+            }
+            .size(38.dp)
+            .clip(CircleShape)
+            .background(tint.copy(alpha = 0.16f))
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                enabled = enabled,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(sign, style = MaterialTheme.typography.titleLarge, color = tint)
+    }
+}
+
+/**
+ * La semaine en sept barres.
+ *
+ * C'est le contenu du « voir la semaine » de chaque carte, et sa raison
+ * d'etre : une valeur du jour toute seule ne dit pas si elle est haute. Sept
+ * jours cote a cote le disent sans un mot, et sans jamais parler d'objectif.
+ *
+ * Le dernier jour est celui qu'on regarde : il est plein, les autres attenues.
+ */
+@Composable
+fun MiniBars(
+    values: List<Float?>,
+    labels: List<String>,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    captions: List<String?> = emptyList(),
+) {
+    val top = values.filterNotNull().maxOrNull()?.takeIf { it > 0f } ?: 1f
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        values.forEachIndexed { index, value ->
+            val last = index == values.lastIndex
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                captions.getOrNull(index)?.let { caption ->
+                    Text(
+                        text = caption,
+                        fontSize = 9.sp,
+                        lineHeight = 11.sp,
+                        color = if (last) tint else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (last) FontWeight.SemiBold else FontWeight.Normal,
+                        maxLines = 1,
+                    )
+                    Spacer(Modifier.height(3.dp))
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(BAR_HEIGHT)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(tint.copy(alpha = 0.10f)),
+                    contentAlignment = Alignment.BottomCenter,
+                ) {
+                    val share = value?.let { (it / top).coerceIn(0f, 1f) } ?: 0f
+                    if (share > 0f) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(BAR_HEIGHT * share.coerceAtLeast(0.06f))
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    if (last) tint else tint.copy(alpha = 0.45f)
+                                ),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = labels.getOrElse(index) { "" },
+                    fontSize = 10.sp,
+                    color = if (last) tint else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = if (last) FontWeight.SemiBold else FontWeight.Normal,
+                )
+            }
+        }
+    }
+}
+
+private val BAR_HEIGHT = 54.dp
+
+/**
+ * Le bouton qui ouvre le fond d'une carte.
+ *
+ * La carte montre la journee ; ce qu'il y a derriere montre la **semaine**.
+ * C'est la seule chose qui justifiait un deuxieme niveau : un detail de plus
+ * sur aujourd'hui aurait simplement rallonge la carte, alors que la semaine
+ * repond a une autre question — « et hier, c'etait comment ? ».
+ */
+@Composable
+fun MoreButton(expanded: Boolean, tint: Color, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .clip(CircleShape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = if (expanded) "Masquer la semaine" else "Voir la semaine",
+            style = MaterialTheme.typography.labelLarge,
+            color = tint,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.width(6.dp))
+        Icon(
+            imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(18.dp),
+        )
+    }
+}
+

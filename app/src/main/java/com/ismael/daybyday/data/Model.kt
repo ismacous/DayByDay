@@ -133,6 +133,7 @@ enum class TagCategory(val key: String, val label: String) {
     WORK("travail", "Travail & démarches"),
     SCREENS("ecrans", "Écrans"),
     HEALTH("sante", "Santé"),
+    MEDICAL("traitements", "Traitements"),
     MONEY("argent", "Argent"),
     OTHER("autre", "Autre");
 
@@ -182,6 +183,14 @@ data class DayEntry(
     /** Ce qui a ete mange, en texte libre. */
     val mealsNote: String = "",
     /**
+     * Ce qui a ete grignote, en texte libre.
+     *
+     * Separe de [mealsNote] a dessein : « ce que tu as mange » raconte des
+     * repas, le grignotage est autre chose et c'est justement ce qu'on veut
+     * pouvoir regarder a part.
+     */
+    val snackNote: String = "",
+    /**
      * Mise en forme du journal, au format compact de [RichText]. Le texte lui
      * meme reste brut dans [note] : la recherche et l'export continuent de le
      * lire sans rien savoir de la decoration.
@@ -194,6 +203,15 @@ data class DayEntry(
      * dont on ne sait rien.
      */
     val prayerMask: Int? = null,
+    /**
+     * Candidatures envoyees dans la journee.
+     *
+     * Un nombre et non un oui-ou-non : chercher du travail, ce n'est pas une
+     * case a cocher, c'est une quantite qu'on veut voir monter sur la semaine.
+     * `null` tant que rien n'a ete saisi — zero candidature est une reponse,
+     * « je n'ai pas rempli » n'en est pas une.
+     */
+    val jobApplications: Int? = null,
 ) {
     val color: DayColor? get() = DayColor.fromKey(colorKey)
 
@@ -253,8 +271,8 @@ data class DayEntry(
         get() = colorKey == null && title.isBlank() && note.isBlank() &&
             sportLevel == null && foodLevel == null && wentOut == null && weightKg == null &&
             sleepStartMinutes == null && sleepEndMinutes == null &&
-            waterGlasses == null && mealsNote.isBlank() &&
-            (prayerMask ?: 0) == 0 &&
+            waterGlasses == null && mealsNote.isBlank() && snackNote.isBlank() &&
+            (prayerMask ?: 0) == 0 && jobApplications == null &&
             filledParts.isEmpty()
 
     companion object {

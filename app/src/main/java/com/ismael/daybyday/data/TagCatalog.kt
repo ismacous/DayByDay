@@ -20,48 +20,59 @@ object TagCatalog {
     )
 
     val tags: List<Builtin> = listOf(
-        // Sommeil
+        // Sommeil. « Bien » et « mal » s'excluent : la carte les montre en
+        // selecteur, pas en pastilles.
         Builtin("sleep_good", "😴", "Bien dormi", TagCategory.SLEEP),
         Builtin("sleep_bad", "🥱", "Mal dormi", TagCategory.SLEEP),
         Builtin("sleep_late", "🌙", "Couché tard", TagCategory.SLEEP),
 
-        // Social
-        Builtin("girlfriend", "💬", "Ma copine", TagCategory.SOCIAL, listOf("Copine")),
+        // Social. Pas de « personne aujourd'hui » : ne rien cocher le dit
+        // deja, et une case pour dire qu'il ne s'est rien passe est une case
+        // de trop.
+        Builtin(
+            "girlfriend", "💬", "Ma moitié", TagCategory.SOCIAL,
+            listOf("Copine", "Ma copine"),
+        ),
         Builtin("friends", "👥", "Ami·es", TagCategory.SOCIAL),
         Builtin("family", "🏠", "Famille", TagCategory.SOCIAL),
-        Builtin("alone", "🙈", "Personne aujourd'hui", TagCategory.SOCIAL),
 
-        // Activite
+        // Activite. « Dehors » n'y est plus : sortir ou rester chez soi est
+        // devenu une question a part entiere dans la carte, avec deux
+        // reponses, au lieu d'une pastille perdue entre le menage et les
+        // courses. Les deux autres sont raccourcies a un seul mot : trois
+        // pastilles d'un mot forment une rangee, trois pastilles a rallonge
+        // font un paragraphe.
         Builtin("walk", "🚶", "Marche", TagCategory.ACTIVITY),
-        Builtin("outside", "🌳", "Dehors", TagCategory.ACTIVITY, listOf("Dehors / nature")),
-        Builtin("chores", "🧹", "Ménage, rangement", TagCategory.ACTIVITY),
-        Builtin("errands", "🛒", "Courses, sorties utiles", TagCategory.ACTIVITY),
+        Builtin("chores", "🧹", "Ménage", TagCategory.ACTIVITY, listOf("Ménage, rangement")),
+        Builtin("errands", "🛒", "Courses", TagCategory.ACTIVITY, listOf("Courses, sorties utiles")),
 
-        // Alimentation
-        Builtin("home_cooking", "🍳", "Cuisine maison", TagCategory.FOOD),
-        Builtin("fast_food", "🍟", "Fast-food", TagCategory.FOOD),
+        // Alimentation. Une seule reste, et elle ne s'affiche plus en
+        // pastille : « compliquée / correcte / bien mangé » disent deja
+        // comment la journee s'est passee a table, et le grignotage merite sa
+        // propre place avec de quoi ecrire ce que c'etait.
         Builtin("snacking", "🍫", "Grignotage", TagCategory.FOOD),
-        Builtin("alcohol", "🍺", "Alcool", TagCategory.FOOD),
 
-        // Travail & demarches
-        Builtin("job_search", "💼", "Recherche d'emploi", TagCategory.WORK, listOf("Travail")),
-        Builtin("admin", "📄", "Démarches, paperasse", TagCategory.WORK),
+        // Travail. « Recherche d'emploi » n'est plus une case a cocher mais un
+        // nombre de candidatures : chercher du travail est une quantite, pas
+        // un oui-ou-non.
         Builtin("interview", "🤝", "Entretien", TagCategory.WORK),
-
-        // Rien pour l'argent : le detail des mouvements du jour dit deja
-        // « grosse depense » et « journee sans depense », et le dire deux fois
-        // laissait les deux se contredire. Une etiquette n'a de sens que
-        // lorsqu'aucune donnee ne porte deja l'information.
+        Builtin("admin", "📄", "Démarches, paperasse", TagCategory.WORK),
+        Builtin("freelance", "🎨", "Boulot freelance", TagCategory.WORK),
+        Builtin("temp_work", "📦", "Intérim, manutention", TagCategory.WORK),
 
         // Ecrans
         Builtin("social_media", "📱", "Réseaux sociaux", TagCategory.SCREENS, listOf("Écrans +++")),
         Builtin("series", "📺", "Séries, films", TagCategory.SCREENS),
         Builtin("games", "🎮", "Jeux vidéo", TagCategory.SCREENS),
 
-        // Sante
-        Builtin("appointment", "🩺", "Rendez-vous médical", TagCategory.HEALTH),
-        Builtin("anxiety", "🧠", "Grosse angoisse", TagCategory.HEALTH),
+        // Sante. « Grosse angoisse » est partie : elle n'a jamais servi.
+        // « J'ai pleuré » reste, mais la carte l'affiche en ligne a cocher et
+        // non en pastille — ce n'est pas une etiquette qu'on colle a sa
+        // journee, c'est quelque chose qui est arrive.
         Builtin("cried", "😢", "J'ai pleuré", TagCategory.HEALTH),
+
+        // Traitements, qui ont maintenant leur propre carte.
+        Builtin("appointment", "🩺", "Rendez-vous médical", TagCategory.MEDICAL),
     )
 
     /**

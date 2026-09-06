@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Version du schema. Affichee dans les reglages, a propos, pour savoir ce que
  * fait tourner le telephone en cas de probleme.
  */
-const val DATABASE_VERSION = 12
+const val DATABASE_VERSION = 13
 
 @Database(
     entities = [
@@ -282,6 +282,23 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Le grignotage en texte libre, et les candidatures du jour.
+         *
+         * `snackNote` est NOT NULL avec une valeur par defaut : c'est un texte,
+         * et « pas de texte » se dit avec une chaine vide. `jobApplications`
+         * accepte `null` au contraire, parce que zero candidature et « je n'ai
+         * pas rempli » ne veulent pas dire la meme chose.
+         */
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE day_entries ADD COLUMN snackNote TEXT NOT NULL DEFAULT ''"
+                )
+                db.execSQL("ALTER TABLE day_entries ADD COLUMN jobApplications INTEGER")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -303,6 +320,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_9_10,
                     MIGRATION_10_11,
                     MIGRATION_11_12,
+                    MIGRATION_12_13,
                 )
                 .build()
                 .also { instance = it }

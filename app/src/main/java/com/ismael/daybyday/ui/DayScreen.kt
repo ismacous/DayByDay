@@ -8,9 +8,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -93,10 +91,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.airbnb.lottie.compose.LottieAnimation
-import com.airbnb.lottie.compose.LottieCompositionSpec
-import com.airbnb.lottie.compose.rememberLottieComposition
-import com.ismael.daybyday.R
 import com.ismael.daybyday.data.Badge
 import com.ismael.daybyday.data.DayCard
 import com.ismael.daybyday.data.DayColor
@@ -226,6 +220,7 @@ fun DayScreen(
     var waterGlasses by remember { mutableStateOf<Int?>(null) }
     var mealsNote by remember { mutableStateOf("") }
     var snackNote by remember { mutableStateOf("") }
+    var medicalWith by remember { mutableStateOf("") }
     var medicalNote by remember { mutableStateOf("") }
     var prayerMask by remember { mutableStateOf<Int?>(null) }
     var jobApplications by remember { mutableStateOf<Int?>(null) }
@@ -293,6 +288,7 @@ fun DayScreen(
         waterGlasses = waterGlasses,
         mealsNote = mealsNote.trim(),
         snackNote = snackNote.trim(),
+        medicalWith = medicalWith.trim(),
         medicalNote = medicalNote.trim(),
         jobApplications = jobApplications,
         partMorning = parts[DayPart.MORNING],
@@ -332,6 +328,7 @@ fun DayScreen(
         waterGlasses = entry?.waterGlasses
         mealsNote = entry?.mealsNote.orEmpty()
         snackNote = entry?.snackNote.orEmpty()
+        medicalWith = entry?.medicalWith.orEmpty()
         medicalNote = entry?.medicalNote.orEmpty()
         prayerMask = entry?.prayerMask
         jobApplications = entry?.jobApplications
@@ -430,6 +427,7 @@ fun DayScreen(
         waterGlasses,
         mealsNote,
         snackNote,
+        medicalWith,
         medicalNote,
         jobApplications,
     ) {
@@ -591,7 +589,10 @@ fun DayScreen(
         ).joinToString(" · ").ifBlank { null }
         DayCard.TREATMENT -> {
             val expected = treatments.filter { it.active }.sumOf { it.times.size }
-            if (expected > 0) "${dosesTaken.size} prise(s) sur $expected" else null
+            listOfNotNull(
+                medicalWith.takeIf { it.isNotBlank() },
+                if (expected > 0) "${dosesTaken.size} prise(s) sur $expected" else null,
+            ).joinToString(" · ").ifBlank { null }
         }
         DayCard.SOCIAL -> SEEN.filter { tagOn(it) }.mapNotNull { tagOf(it)?.name }
             .joinToString(", ").ifBlank { null }
@@ -1106,9 +1107,19 @@ fun DayScreen(
                                 if (appointment) {
                                     Spacer(Modifier.height(10.dp))
                                     OutlinedTextField(
+                                        value = medicalWith,
+                                        onValueChange = { medicalWith = it.take(120) },
+                                        label = { Text("Chez qui ?") },
+                                        placeholder = { Text("Dentiste, Dr Martin…") },
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(16.dp),
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                    Spacer(Modifier.height(10.dp))
+                                    OutlinedTextField(
                                         value = medicalNote,
                                         onValueChange = { medicalNote = it.take(300) },
-                                        label = { Text("Chez qui, pour quoi ?") },
+                                        label = { Text("Pour quoi ?") },
                                         shape = RoundedCornerShape(16.dp),
                                         modifier = Modifier.fillMaxWidth(),
                                     )
@@ -1875,64 +1886,6 @@ private fun ColorChoice(
     ) {
         MoodEmoji(dayColor = dayColor, selected = selected, modifier = Modifier.fillMaxSize())
     }
-}
-
-/**
- * Le visage d'une humeur.
- *
- * Ce sont les emoji animes de Google (Noto), embarques dans l'APK en
- * `res/raw` : du vecteur pur, sans image ni adresse a l'interieur — rien n'est
- * telecharge a l'execution, la regle numero un tient.
- *
- * Deux etats seulement, et c'est ce qui les rend lisibles :
- *
- * - **Choisi** : le visage joue son animation en entier, une fois, puis reste
- *   dans sa pose. C'est exactement ce qu'on attend d'une reaction — elle
- *   repond au doigt, elle ne boucle pas. Quatre visages qui s'agitent en
- *   permanence feraient une vitrine, pas un choix.
- * - **Pas choisi** : la premiere image, attenuee. Le visage est la, il attend.
- *
- * La progression est passee en **lambda** a `LottieAnimation` : elle est lue au
- * moment du dessin et non pendant la composition, donc l'animation ne provoque
- * aucune recomposition de la carte.
- */
-@Composable
-private fun MoodEmoji(dayColor: DayColor, selected: Boolean, modifier: Modifier = Modifier) {
-    val composition by rememberLottieComposition(
-        LottieCompositionSpec.RawRes(moodEmojiRes(dayColor))
-    )
-    val progress = remember { Animatable(0f) }
-
-    LaunchedEffect(selected, composition) {
-        if (selected && composition != null) {
-            progress.snapTo(0f)
-            progress.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(
-                    durationMillis = (composition?.duration ?: 1200f).toInt(),
-                    easing = LinearEasing,
-                ),
-            )
-        } else {
-            progress.snapTo(0f)
-        }
-    }
-
-    LottieAnimation(
-        composition = composition,
-        progress = { progress.value },
-        modifier = modifier
-            .padding(9.dp)
-            .graphicsLayer { alpha = if (selected) 1f else 0.55f },
-    )
-}
-
-/** Le visage de chaque couleur de journee. */
-private fun moodEmojiRes(dayColor: DayColor): Int = when (dayColor) {
-    DayColor.GREEN -> R.raw.mood_green
-    DayColor.ORANGE -> R.raw.mood_orange
-    DayColor.RED -> R.raw.mood_red
-    DayColor.BLACK -> R.raw.mood_black
 }
 
 /**

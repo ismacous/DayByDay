@@ -213,12 +213,15 @@ data class DayEntry(
      */
     val jobApplications: Int? = null,
     /**
-     * Le rendez-vous medical du jour : chez qui, pour quoi.
+     * Le rendez-vous medical du jour, en **deux** champs : chez qui, et pour
+     * quoi.
      *
-     * Cocher « rendez-vous médical » disait qu'il y en avait eu un, ce qui ne
-     * sert a rien six mois plus tard quand on cherche lequel. Le texte, lui,
-     * se retrouve par la recherche.
+     * Separes a dessein. Cocher « rendez-vous médical » disait qu'il y en avait
+     * eu un, ce qui ne sert a rien six mois plus tard ; un seul champ melangé
+     * obligerait a se souvenir de la formulation. Deux champs, et « dentiste »
+     * retrouve tous les dentistes, « douleur au genou » tous les genoux.
      */
+    val medicalWith: String = "",
     val medicalNote: String = "",
 ) {
     val color: DayColor? get() = DayColor.fromKey(colorKey)
@@ -280,7 +283,7 @@ data class DayEntry(
             sportLevel == null && foodLevel == null && wentOut == null && weightKg == null &&
             sleepStartMinutes == null && sleepEndMinutes == null &&
             waterGlasses == null && mealsNote.isBlank() && snackNote.isBlank() &&
-            medicalNote.isBlank() &&
+            medicalWith.isBlank() && medicalNote.isBlank() &&
             (prayerMask ?: 0) == 0 && jobApplications == null &&
             filledParts.isEmpty()
 

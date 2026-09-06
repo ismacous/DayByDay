@@ -1,6 +1,8 @@
 package com.ismael.daybyday.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -31,6 +33,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -47,7 +50,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.rememberLottieComposition
+import com.ismael.daybyday.R
 import com.ismael.daybyday.data.DayCard
+import com.ismael.daybyday.data.DayColor
 import com.ismael.daybyday.data.Prayer
 import java.util.Locale
 
@@ -887,3 +895,60 @@ fun MoreButton(expanded: Boolean, tint: Color, onClick: () -> Unit, modifier: Mo
     }
 }
 
+/**
+ * Le visage d'une humeur.
+ *
+ * Ce sont les emoji animes de Google (Noto), embarques dans l'APK en
+ * `res/raw` : du vecteur pur, sans image ni adresse a l'interieur — rien n'est
+ * telecharge a l'execution, la regle numero un tient.
+ *
+ * Deux etats seulement, et c'est ce qui les rend lisibles :
+ *
+ * - **Choisi** : le visage joue son animation en entier, une fois, puis reste
+ *   dans sa pose. C'est exactement ce qu'on attend d'une reaction — elle
+ *   repond au doigt, elle ne boucle pas. Quatre visages qui s'agitent en
+ *   permanence feraient une vitrine, pas un choix.
+ * - **Pas choisi** : la premiere image, attenuee. Le visage est la, il attend.
+ *
+ * La progression est passee en **lambda** a `LottieAnimation` : elle est lue au
+ * moment du dessin et non pendant la composition, donc l'animation ne provoque
+ * aucune recomposition de la carte.
+ */
+@Composable
+fun MoodEmoji(dayColor: DayColor, selected: Boolean, modifier: Modifier = Modifier) {
+    val composition by rememberLottieComposition(
+        LottieCompositionSpec.RawRes(moodEmojiRes(dayColor))
+    )
+    val progress = remember { Animatable(0f) }
+
+    LaunchedEffect(selected, composition) {
+        if (selected && composition != null) {
+            progress.snapTo(0f)
+            progress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = (composition?.duration ?: 1200f).toInt(),
+                    easing = LinearEasing,
+                ),
+            )
+        } else {
+            progress.snapTo(0f)
+        }
+    }
+
+    LottieAnimation(
+        composition = composition,
+        progress = { progress.value },
+        modifier = modifier
+            .padding(9.dp)
+            .graphicsLayer { alpha = if (selected) 1f else 0.55f },
+    )
+}
+
+/** Le visage de chaque couleur de journee. */
+private fun moodEmojiRes(dayColor: DayColor): Int = when (dayColor) {
+    DayColor.GREEN -> R.raw.mood_green
+    DayColor.ORANGE -> R.raw.mood_orange
+    DayColor.RED -> R.raw.mood_red
+    DayColor.BLACK -> R.raw.mood_black
+}

@@ -244,9 +244,15 @@ private fun TodayCard(
                         .testTag("today-${dayColor.name}"),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (selected) {
-                        Text("✓", color = readableOn(dayColor.color), fontWeight = FontWeight.Bold)
-                    }
+                    // Le meme visage anime que sur l'ecran d'une journee, et
+                    // pour la meme raison : c'est le meme geste. Une coche ici
+                    // et un visage la-bas donneraient l'impression de deux
+                    // applications.
+                    MoodEmoji(
+                        dayColor = dayColor,
+                        selected = selected,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
             }
         }

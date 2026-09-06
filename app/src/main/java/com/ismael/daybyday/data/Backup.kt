@@ -111,6 +111,7 @@ object Backup {
                     .put("noteSpans", day.noteSpans)
                     .put("prayerMask", day.prayerMask ?: JSONObject.NULL)
                     .put("snackNote", day.snackNote)
+                    .put("medicalWith", day.medicalWith)
                     .put("medicalNote", day.medicalNote)
                     .put("jobApplications", day.jobApplications ?: JSONObject.NULL)
             )
@@ -350,6 +351,7 @@ object Backup {
                         // revient alors sans, ce qui est exactement ce qu'elle
                         // etait.
                         snackNote = item.optString("snackNote", ""),
+                        medicalWith = item.optString("medicalWith", ""),
                         medicalNote = item.optString("medicalNote", ""),
                         jobApplications = item.optIntOrNull("jobApplications"),
                     )

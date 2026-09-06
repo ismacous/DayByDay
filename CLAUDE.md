@@ -158,9 +158,15 @@ téléphone (Samsung S25, Android 15).
 - **Badges** (`data/Badge.kt`, `ui/Celebration.kt`) : une médaille apparaît quand
   quelque chose est fait — les cinq prières, 6 000 pas, une vraie séance, être
   sorti, huit verres, une candidature, la journée écrite. Le fond est un fichier
-  Lottie embarqué, la médaille est **dessinée** (couronne en dégradé balayé qui
-  tourne, disque à lumière décentrée, reflet qui traverse) : un badge tout fait
-  ressemble à un badge tout fait, celui-ci reprend les couleurs de sa carte.
+  Lottie embarqué ; la médaille est **dessinée**, et c'est tout l'enjeu — un
+  badge de jeu pris tel quel ressemble à un badge de jeu, pas à cette
+  application. C'est un hexagone à **six facettes**, chacune éclairée selon son
+  orientation par rapport à la lumière (en haut à gauche, comme partout
+  ailleurs) : c'est ce calcul, et pas un contour de couleur, qui donne le
+  relief. Ruban derrière, plaque intérieure vernie, reflet qui traverse, et un
+  **tour sur elle-même** à l'arrivée — une pièce qui tourne montre qu'elle a une
+  face et une épaisseur. L'emoji, lui, ne tourne pas : il resterait à l'envers
+  la moitié du tour.
   Deux règles pour en ajouter un : il récompense un **geste**, et il reste
   atteignable un mauvais jour. Et **jamais de série ni de score cumulé** — une
   série brisée punirait exactement les journées qu'il ne faut pas punir.
@@ -183,6 +189,24 @@ téléphone (Samsung S25, Android 15).
   maintenant horizontal (donc la sortie ne dépend que de `x`), l'obliquité vient
   d'une `rotate` du dessin, et le trajet (`SHINE_FROM` / `SHINE_TO`) est calculé
   pour que la bande ait quitté la tuile **rotation comprise**.
+- **Deux polices sur une ligne s'alignent sur la ligne d'écriture**, pas sur le
+  bas de leur boîte. `MorphingTitle` fait « Mon » en sans-serif et « bilan » en
+  serif italique dans deux `Text` séparés : la serif descend plus bas, donc
+  `Alignment.Bottom` faisait flotter le second mot. `Modifier.alignByBaseline()`
+  sur chacun règle ça. `ScreenTitle` n'avait pas le défaut : les deux mots y
+  vivent dans un seul texte, et c'est le paragraphe qui s'en occupait.
+- **Organiser ma journée** (`ui/OrganizeCardsScreen.kt`) : chaque rangée est la
+  carte **en petit** — même teinte, même signe, même halo. On ne choisit pas une
+  ligne de texte, on choisit une carte. On déplace en **maintenant puis tirant**
+  (`detectDragGesturesAfterLongPress`), ce qui ne se bat pas avec le défilement.
+  Deux choses à ne pas défaire : (1) les hauteurs de rangée sont **fixes**, et
+  c'est ce qui permet de calculer un cran (`ROW_HEIGHT + ROW_GAP`) sans mesurer
+  quoi que ce soit pendant le geste ; (2) `shift` **rend un booléen** et la
+  boucle s'arrête dessus — sans ça, tirer au-delà de la première carte boucle à
+  l'infini, la condition restant vraie alors que plus rien ne bouge. Les cartes
+  rangées vivent dans la **même** `LazyColumn` sous un séparateur, avec la même
+  clé : retirer une carte la fait donc *glisser* jusque là (`animateItem`), ce
+  qui montre que rien n'est effacé.
 - **Prières** : cinq oui-ou-non par journée, rangés en **masque de bits** dans
   une seule colonne (`DayEntry.prayerMask`, migration 11→12). Les `bit` de
   `Prayer` ne doivent jamais changer : c'est eux qui sont écrits. La colonne

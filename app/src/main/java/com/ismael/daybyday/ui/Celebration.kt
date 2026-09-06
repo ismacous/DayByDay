@@ -1,6 +1,7 @@
 package com.ismael.daybyday.ui
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -24,11 +25,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -38,9 +43,9 @@ import com.airbnb.lottie.compose.LottieCompositionSpec
 import com.airbnb.lottie.compose.rememberLottieComposition
 import com.ismael.daybyday.R
 import com.ismael.daybyday.data.Badge
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.sin
 
 /**
@@ -77,6 +82,8 @@ fun Celebration(badge: Badge, onDone: () -> Unit) {
     val time = remember { Animatable(0f) }
     val pop = remember { Animatable(0f) }
     val fade = remember { Animatable(0f) }
+    // Le tour sur elle-meme, une seule fois, pendant l'arrivee.
+    val spin = remember { Animatable(0f) }
 
     val confetti by rememberLottieComposition(
         LottieCompositionSpec.RawRes(R.raw.celebration_confetti)
@@ -94,6 +101,7 @@ fun Celebration(badge: Badge, onDone: () -> Unit) {
                 animationSpec = spring(dampingRatio = 0.44f, stiffness = Spring.StiffnessLow),
             )
         }
+        launch { spin.animateTo(1f, tween(720, easing = FastOutSlowInEasing)) }
         time.animateTo(1f, tween(HOLD_MS, easing = LinearEasing))
         launch { pop.animateTo(0.86f, tween(240)) }
         fade.animateTo(0f, tween(260))
@@ -132,13 +140,13 @@ fun Celebration(badge: Badge, onDone: () -> Unit) {
                     val grow = pop.value
                     scaleX = grow
                     scaleY = grow
-                    // Elle arrive de travers et se redresse : une medaille
-                    // posee bien droite d'emblee n'a pas ete gagnee.
-                    rotationZ = (1f - grow.coerceIn(0f, 1f)) * -22f
+                    // Pas d'inclinaison ici : la piece fait deja un tour sur
+                    // elle-meme. Deux rotations en meme temps ne se lisent
+                    // plus comme un geste, mais comme un desordre.
                     alpha = grow.coerceIn(0f, 1f)
                 },
         ) {
-            Medal(palette = palette, emoji = badge.emoji, time = time)
+            Medal(palette = palette, emoji = badge.emoji, time = time, spin = spin)
             Spacer(Modifier.height(22.dp))
             Text(
                 text = badge.title,
@@ -161,104 +169,259 @@ fun Celebration(badge: Badge, onDone: () -> Unit) {
 /**
  * La medaille.
  *
- * Elle est dessinee, et c'est le point : un badge de jeu video pris tel quel
- * ressemble a un badge de jeu video. Celle-ci est faite des couleurs de
- * l'application, et sa lumiere suit la meme regle que partout ailleurs — une
- * source en haut a gauche, une ombre teintee, jamais de gris.
+ * Elle est **dessinee**, pas importee, et c'est tout l'enjeu : un badge de jeu
+ * pris tel quel ressemble a un badge de jeu, pas a cette application. Celle-ci
+ * est faite des couleurs des cartes, et sa lumiere suit la meme regle que
+ * partout ailleurs — une source en haut a gauche, jamais de gris.
  *
- * Quatre couches donnent la profondeur, de l'exterieur vers l'interieur :
- * l'ombre portee, la couronne en degrade balaye qui **tourne**, le disque
- * central avec sa lumiere decentree, et le reflet qui traverse.
+ * Six couches, de l'arriere vers l'avant, et chacune fait une seule chose :
+ *
+ * 1. **Le ruban**, deux pans avec leur encoche, poses derriere l'hexagone.
+ * 2. **La couronne facettee.** C'est elle qui donne le relief : chacune des six
+ *    faces est eclairee selon son orientation par rapport a la lumiere, comme
+ *    une vraie piece biseautee. Un simple contour de couleur serait plat.
+ * 3. **La plaque interieure**, plus sombre, avec sa lumiere decentree.
+ * 4. **Le vernis** : la moitie haute de la plaque, un peu plus claire.
+ * 5. **L'emoji** au centre, a la place de l'etoile.
+ * 6. **Le reflet** qui traverse une fois.
+ *
+ * Et un tour sur elle-meme a l'arrivee. Ce n'est pas decoratif : une piece qui
+ * tourne montre qu'elle a une face et une epaisseur, ce qu'une image posee a
+ * plat ne montre jamais.
  */
 @Composable
 private fun Medal(
     palette: List<Color>,
     emoji: String,
     time: Animatable<Float, *>,
+    spin: Animatable<Float, *>,
 ) {
-    val ring = remember(palette) {
-        // Un degrade balaye, avec la premiere couleur repetee a la fin : sans
-        // ca, la couronne aurait une couture visible a midi.
-        Brush.sweepGradient(
-            palette + palette.reversed().drop(1) + palette.first()
-        )
-    }
+    val bright = palette.first()
+    val deep = palette.last()
+    val density = LocalDensity.current
 
     Box(
-        modifier = Modifier.size(148.dp),
-        contentAlignment = Alignment.Center,
+        modifier = Modifier.size(width = MEDAL_WIDTH, height = MEDAL_HEIGHT),
+        contentAlignment = Alignment.TopCenter,
     ) {
-        // La couronne, qui tourne lentement sur elle-meme.
         Box(
             modifier = Modifier
-                .size(148.dp)
-                .graphicsLayer { rotationZ = time.value * 90f }
+                .fillMaxSize()
+                .graphicsLayer {
+                    // Le tour sur elle-meme. `cameraDistance` eloigne l'oeil :
+                    // sans ca, la perspective est si forte a mi-tour que la
+                    // medaille se deforme au lieu de tourner.
+                    rotationY = spin.value * 360f
+                    cameraDistance = 14f * density.density
+                }
                 .drawBehind {
-                    drawCircle(brush = ring)
-                },
-        )
-        // Le disque central : un degrade radial dont le centre est decale en
-        // haut a gauche, la ou est la lumiere de toute l'application.
-        Box(
-            modifier = Modifier
-                .size(114.dp)
-                .drawBehind {
-                    val light = Offset(size.width * 0.32f, size.height * 0.26f)
-                    drawCircle(
+                    val side = size.width
+                    val centerX = size.width / 2f
+                    val centerY = side / 2f
+                    val radius = side / 2f
+
+                    drawRibbon(centerX = centerX, top = centerY, radius = radius, deep = deep)
+
+                    val outer = hexagon(centerX, centerY, radius)
+                    val inner = hexagon(centerX, centerY, radius * 0.74f)
+
+                    drawFacets(outer = outer, inner = inner, bright = bright, deep = deep)
+
+                    // La plaque : plus sombre que la couronne, sinon le
+                    // contenu se noie dedans.
+                    val plate = Path().apply {
+                        moveTo(inner[0].x, inner[0].y)
+                        inner.drop(1).forEach { lineTo(it.x, it.y) }
+                        close()
+                    }
+                    drawPath(
+                        path = plate,
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                palette.first().copy(alpha = 0.95f),
-                                palette.last(),
+                                deep.darken(0.18f),
+                                deep.darken(0.42f),
                             ),
-                            center = light,
-                            radius = size.minDimension * 0.85f,
-                        )
-                    )
-                    // Le liere clair du bord haut : c'est lui qui donne
-                    // l'epaisseur, comme sur une vraie piece.
-                    drawCircle(
-                        brush = Brush.verticalGradient(
-                            listOf(Color.White.copy(alpha = 0.45f), Color.Transparent),
+                            center = Offset(centerX - radius * 0.22f, centerY - radius * 0.28f),
+                            radius = radius * 1.5f,
                         ),
-                        radius = size.minDimension / 2f,
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3f),
                     )
-                }
-                .drawWithContent {
-                    drawContent()
-                    // Le reflet qui traverse une fois, en biais.
-                    val pass = (time.value * 2.2f - 0.25f).coerceIn(0f, 1f)
-                    if (pass > 0f && pass < 1f) {
-                        val x = size.width * (pass * 2.4f - 0.7f)
-                        drawCircle(
-                            brush = Brush.horizontalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color.White.copy(alpha = 0.30f),
-                                    Color.Transparent,
-                                ),
-                                startX = x - size.width * 0.28f,
-                                endX = x + size.width * 0.28f,
+                    // Le vernis : la moitie haute de la plaque, a peine plus
+                    // claire. C'est ce qui fait la difference entre une surface
+                    // peinte et une surface vitrifiee.
+                    clipPath(plate) {
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                listOf(Color.White.copy(alpha = 0.16f), Color.Transparent),
                             ),
-                            radius = size.minDimension / 2f,
+                            topLeft = Offset(0f, centerY - radius),
+                            size = androidx.compose.ui.geometry.Size(size.width, radius),
                         )
+                        // Le reflet qui traverse, une seule fois.
+                        val pass = (time.value * 2.4f - 0.2f).coerceIn(0f, 1f)
+                        if (pass > 0f && pass < 1f) {
+                            val x = size.width * (pass * 2.2f - 0.6f)
+                            drawRect(
+                                brush = Brush.horizontalGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        Color.White.copy(alpha = 0.34f),
+                                        Color.Transparent,
+                                    ),
+                                    startX = x - side * 0.26f,
+                                    endX = x + side * 0.26f,
+                                ),
+                                topLeft = Offset(0f, centerY - radius),
+                                size = androidx.compose.ui.geometry.Size(size.width, side),
+                            )
+                        }
                     }
+                },
+        )
+        Box(
+            modifier = Modifier
+                .size(MEDAL_WIDTH)
+                .graphicsLayer {
+                    // L'emoji ne tourne pas avec la piece : il resterait a
+                    // l'envers la moitie du tour. Il grandit a l'arrivee, puis
+                    // respire.
+                    val arrival = spin.value.coerceIn(0f, 1f)
+                    val breathe = 1f + 0.04f * sin(time.value * 3f * PI.toFloat())
+                    scaleX = arrival * breathe
+                    scaleY = arrival * breathe
                 },
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = emoji,
-                fontSize = 48.sp,
-                modifier = Modifier.graphicsLayer {
-                    // Un souffle lent : la medaille respire au lieu de se figer.
-                    val breathe = 1f + 0.035f * sin(time.value * 3f * PI.toFloat())
-                    scaleX = breathe
-                    scaleY = breathe
-                },
-            )
+            Text(text = emoji, fontSize = 46.sp)
         }
     }
 }
+
+/**
+ * Les six sommets d'un hexagone pointe en haut et en bas.
+ *
+ * Pointe en haut et en bas plutot que a plat : c'est la forme d'un ecusson, et
+ * elle tient debout. Un hexagone a plat ressemble a une alveole.
+ */
+private fun hexagon(centerX: Float, centerY: Float, radius: Float): List<Offset> =
+    (0 until 6).map { index ->
+        val angle = (-90f + index * 60f) * PI.toFloat() / 180f
+        Offset(centerX + radius * cos(angle), centerY + radius * sin(angle))
+    }
+
+/**
+ * La couronne, face par face.
+ *
+ * Chaque face du biseau est eclairee selon son orientation : celles qui
+ * regardent vers le haut a gauche prennent la lumiere, celles qui regardent en
+ * bas a droite tombent dans l'ombre. C'est ce calcul — et pas un contour de
+ * couleur — qui fait qu'une piece a du relief.
+ */
+private fun DrawScope.drawFacets(
+    outer: List<Offset>,
+    inner: List<Offset>,
+    bright: Color,
+    deep: Color,
+) {
+    // La lumiere vient d'en haut a gauche, comme partout dans l'application.
+    val light = Offset(-0.6f, -0.8f)
+    repeat(6) { index ->
+        val next = (index + 1) % 6
+        val face = Path().apply {
+            moveTo(outer[index].x, outer[index].y)
+            lineTo(outer[next].x, outer[next].y)
+            lineTo(inner[next].x, inner[next].y)
+            lineTo(inner[index].x, inner[index].y)
+            close()
+        }
+        // La normale de la face, prise au milieu de son arete exterieure.
+        val mid = Offset(
+            (outer[index].x + outer[next].x) / 2f,
+            (outer[index].y + outer[next].y) / 2f,
+        )
+        val center = Offset(
+            outer.sumOf { it.x.toDouble() }.toFloat() / 6f,
+            outer.sumOf { it.y.toDouble() }.toFloat() / 6f,
+        )
+        val normal = Offset(mid.x - center.x, mid.y - center.y)
+        val length = kotlin.math.hypot(normal.x, normal.y).coerceAtLeast(0.001f)
+        val lit = ((normal.x / length) * light.x + (normal.y / length) * light.y)
+            .coerceIn(-1f, 1f)
+        drawPath(
+            path = face,
+            color = if (lit > 0f) {
+                bright.lighten(lit * 0.55f)
+            } else {
+                bright.darken(-lit * 0.4f)
+            },
+        )
+    }
+    val outline = Path().apply {
+        moveTo(outer[0].x, outer[0].y)
+        outer.drop(1).forEach { lineTo(it.x, it.y) }
+        close()
+    }
+    drawPath(
+        path = outline,
+        color = deep.darken(0.35f).copy(alpha = 0.55f),
+        style = Stroke(width = 2f),
+    )
+}
+
+/**
+ * Le ruban : deux pans avec leur encoche, derriere la piece.
+ *
+ * Il ne sert a rien et c'est exactement pour ca qu'il compte — c'est lui qui
+ * fait qu'on lit « medaille » et pas « pastille ».
+ */
+private fun DrawScope.drawRibbon(centerX: Float, top: Float, radius: Float, deep: Color) {
+    val width = radius * 0.42f
+    val start = top + radius * 0.25f
+    val end = top + radius * 1.55f
+    val notch = radius * 0.22f
+    listOf(-1f, 1f).forEach { side ->
+        val near = centerX + side * radius * 0.06f
+        val far = centerX + side * (radius * 0.06f + width)
+        val tail = Path().apply {
+            moveTo(near, start)
+            lineTo(far, start)
+            lineTo(far, end)
+            lineTo((near + far) / 2f, end - notch)
+            lineTo(near, end)
+            close()
+        }
+        drawPath(
+            path = tail,
+            brush = Brush.verticalGradient(
+                colors = if (side < 0f) {
+                    listOf(deep.darken(0.1f), deep.darken(0.35f))
+                } else {
+                    listOf(deep.darken(0.28f), deep.darken(0.5f))
+                },
+                startY = start,
+                endY = end,
+            ),
+        )
+    }
+}
+
+private fun Color.lighten(amount: Float): Color = Color(
+    red = red + (1f - red) * amount,
+    green = green + (1f - green) * amount,
+    blue = blue + (1f - blue) * amount,
+    alpha = alpha,
+)
+
+private fun Color.darken(amount: Float): Color = Color(
+    red = red * (1f - amount),
+    green = green * (1f - amount),
+    blue = blue * (1f - amount),
+    alpha = alpha,
+)
+
+private val MEDAL_WIDTH = 150.dp
+
+/** De la place sous la piece pour le ruban. */
+private val MEDAL_HEIGHT = 208.dp
 
 /**
  * Les couleurs d'un badge.

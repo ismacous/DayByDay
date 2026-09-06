@@ -184,8 +184,14 @@ fun MorphingTitle(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
+            // Les deux mots s'alignent sur leur **ligne d'ecriture**, pas sur
+            // le bas de leur boite. Ce sont deux polices differentes : la
+            // serif descend plus bas que la sans-serif, donc aligner les bas
+            // faisait flotter « journée » sous « Ma ». Le titre en un seul
+            // texte ([ScreenTitle]) n'avait pas ce defaut, parce que c'est le
+            // paragraphe qui s'en occupait.
             Row(verticalAlignment = Alignment.Bottom) {
-                MorphingWord(word = text) { value ->
+                MorphingWord(word = text, modifier = Modifier.alignByBaseline()) { value ->
                     Text(
                         text = value,
                         style = MaterialTheme.typography.displaySmall,
@@ -194,7 +200,7 @@ fun MorphingTitle(
                     )
                 }
                 Spacer(Modifier.width(9.dp))
-                MorphingWord(word = accent) { value ->
+                MorphingWord(word = accent, modifier = Modifier.alignByBaseline()) { value ->
                     Text(
                         text = value,
                         style = MaterialTheme.typography.displaySmall.accentSerif(),
@@ -227,9 +233,14 @@ fun MorphingTitle(
  * rien quand la cible est la meme.
  */
 @Composable
-private fun MorphingWord(word: String, content: @Composable (String) -> Unit) {
+private fun MorphingWord(
+    word: String,
+    modifier: Modifier = Modifier,
+    content: @Composable (String) -> Unit,
+) {
     AnimatedContent(
         targetState = word,
+        modifier = modifier,
         transitionSpec = {
             (
                 fadeIn(tween(Motion.NORMAL)) +

@@ -57,10 +57,11 @@ object DaySearch {
         val needle = fold(filter.text.trim())
 
         return days.filter { entry ->
-            if (needle.isNotEmpty() &&
-                !fold(entry.title).contains(needle) &&
-                !fold(entry.note).contains(needle)
-            ) {
+            // Le texte cherche partout ou l'on ecrit, pas seulement dans le
+            // journal : « dentiste » doit retrouver le rendez-vous, et
+            // « chocolat » le grignotage. C'est ce qui rend ces champs utiles
+            // six mois plus tard.
+            if (needle.isNotEmpty() && SEARCHABLE.none { fold(it(entry)).contains(needle) }) {
                 return@filter false
             }
             if (filter.colors.isNotEmpty() && entry.color !in filter.colors) return@filter false
@@ -68,6 +69,8 @@ object DaySearch {
             if (filter.wentOut && entry.wentOut != true) return@filter false
             if (filter.ateWell && entry.foodLevel != FoodLevel.GOOD.key) return@filter false
             if (filter.withPhoto && (mediaCounts[entry.epochDay] ?: 0) == 0) return@filter false
+            // « Avec du texte » veut dire du **journal** : les champs des
+            // cartes ne sont pas une journee ecrite.
             if (filter.withText && entry.title.isBlank() && entry.note.isBlank()) return@filter false
             if (filter.tagIds.isNotEmpty()) {
                 val onDay = tagsByDay[entry.epochDay].orEmpty()
@@ -76,6 +79,16 @@ object DaySearch {
             true
         }.sortedByDescending { it.epochDay }
     }
+
+    /** Tous les champs libres d'une journee, dans l'ordre ou on les ecrit. */
+    private val SEARCHABLE: List<(DayEntry) -> String> = listOf(
+        { it.title },
+        { it.note },
+        { it.mealsNote },
+        { it.snackNote },
+        { it.medicalWith },
+        { it.medicalNote },
+    )
 
     /**
      * Met un texte a plat pour la comparaison : sans majuscules et **sans

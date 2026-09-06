@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Version du schema. Affichee dans les reglages, a propos, pour savoir ce que
  * fait tourner le telephone en cas de probleme.
  */
-const val DATABASE_VERSION = 14
+const val DATABASE_VERSION = 15
 
 @Database(
     entities = [
@@ -311,6 +311,19 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Chez qui, a cote du pour quoi. Un seul champ obligeait a se souvenir
+         * de la formulation : deux champs, et « dentiste » retrouve tous les
+         * dentistes.
+         */
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE day_entries ADD COLUMN medicalWith TEXT NOT NULL DEFAULT ''"
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -334,6 +347,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_11_12,
                     MIGRATION_12_13,
                     MIGRATION_13_14,
+                    MIGRATION_14_15,
                 )
                 .build()
                 .also { instance = it }

@@ -188,6 +188,7 @@ fun AppNavigation(
                                 monthIndex = month.toIndex()
                                 navController.popBackStack()
                             },
+                            onDayClick = { date -> navController.navigate("day/${date.toEpochDay()}") },
                             onBack = { navController.popBackStack() },
                         )
                     }

@@ -1227,6 +1227,72 @@ private fun ColorChoice(
     }
 }
 
+/**
+ * Le meme jour, il y a un an — ou deux, ou cinq.
+ *
+ * Une seule regle de conception ici, et c'est celle qui fait la difference
+ * entre un plaisir et une nuisance : **la carte n'existe que s'il y a quelque
+ * chose**. Pas de « rien noté il y a un an », pas de cadre vide. Quand elle
+ * apparait, c'est qu'il y a une couleur, un mot ou une photo, et un appui
+ * emmene directement sur cette journee-la.
+ *
+ * Elle reste volontairement basse de ton : une ligne, une pastille de couleur,
+ * une vignette. Ce n'est pas ce qu'on est venu faire — c'est un cadeau au
+ * passage.
+ */
+@Composable
+private fun MemoryCard(memory: Memory, onOpen: () -> Unit) {
+    val entry = memory.entry
+    val preview = entry.title.ifBlank { entry.note }.trim().replace('\n', ' ')
+
+    SoftCard(onClick = onOpen, onClickLabel = "Ouvrir cette journée", padding = 12.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            memory.photo?.let { photo ->
+                MediaThumb(
+                    item = photo,
+                    onClick = onOpen,
+                    modifier = Modifier.size(56.dp),
+                )
+                Spacer(Modifier.width(12.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    entry.color?.let { dayColor ->
+                        ColorDot(color = dayColor.color, size = 9.dp)
+                        Spacer(Modifier.width(7.dp))
+                    }
+                    Text(
+                        text = if (memory.yearsAgo == 1) "Il y a un an" else "Il y a ${memory.yearsAgo} ans",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = if (preview.isBlank()) {
+                        // Il y a forcement quelque chose, sinon la carte
+                        // n'existerait pas : ici, ce sont les photos.
+                        Dates.dayLong(memory.date)
+                    } else {
+                        preview
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
 @Composable
 fun MediaThumb(
     item: MediaItem,

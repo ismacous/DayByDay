@@ -210,18 +210,25 @@ fun FloatingNavBar(
 data class NavItem(val route: String, val label: String, val icon: ImageVector)
 
 /** Hauteur de la barre elle-meme, sans ce qui depasse au-dessus. */
-private val BAR_HEIGHT = 64.dp
+private val BAR_HEIGHT = 62.dp
 
-private val BALL_RADIUS = 21.dp
+/**
+ * Le rayon de la bille.
+ *
+ * Elle etait a vingt et un points, et c'etait trop : une bille plus large qu'un
+ * pouce ne designe plus un onglet, elle occupe la barre. Un reperage doit se
+ * voir sans se substituer a ce qu'il repere.
+ */
+private val BALL_RADIUS = 13.dp
 
 /** Ce que la bille laisse depasser au-dessus du bord de la barre. */
-private val BALL_OVERHANG = 22.dp
+private val BALL_OVERHANG = 14.dp
 
 /** Hauteur du sommet de l'arc pendant le saut. */
-private val BALL_ARC = 26.dp
+private val BALL_ARC = 20.dp
 
 /** L'air entre la bille et le bord de l'encoche. */
-private val NOTCH_MARGIN = 5.dp
+private val NOTCH_MARGIN = 4.dp
 
 /**
  * La barre : un rectangle a bouts ronds, moins un disque mordu dans son bord

@@ -108,7 +108,9 @@ fun CalendarScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
-            Spacer(Modifier.height(4.dp))
+            // La place de l'en-tete, qui flotte au-dessus : le contenu passe
+            // dessous quand on descend, et le titre s'efface en meme temps.
+            Spacer(Modifier.height(TAB_HEADER_HEIGHT))
 
             Appear(index = 0) {
             TodayCard(

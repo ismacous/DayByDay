@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    La version d'une seule couleur, pour les icones themees d'Android 13. Meme
-    grille, sans les couleurs : c'est la forme qui doit rester reconnaissable.
+    La version d'une seule couleur, pour les icones themees d'Android 13. Ni
+    lumiere ni ombre ici : Android n'en garde que la silhouette, donc seule la
+    forme doit rester reconnaissable.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -11,14 +12,5 @@
 
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M36.5,29.5 h7 a7,7 0 0 1 7,7 v7 a7,7 0 0 1 -7,7 h-7 a7,7 0 0 1 -7,-7 v-7 a7,7 0 0 1 7,-7 z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M64.5,29.5 h7 a7,7 0 0 1 7,7 v7 a7,7 0 0 1 -7,7 h-7 a7,7 0 0 1 -7,-7 v-7 a7,7 0 0 1 7,-7 z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M36.5,57.5 h7 a7,7 0 0 1 7,7 v7 a7,7 0 0 1 -7,7 h-7 a7,7 0 0 1 -7,-7 v-7 a7,7 0 0 1 7,-7 z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M64.5,57.5 h7 a7,7 0 0 1 7,7 v7 a7,7 0 0 1 -7,7 h-7 a7,7 0 0 1 -7,-7 v-7 a7,7 0 0 1 7,-7 z" />
+        android:pathData="M33,25 h42 a15,15 0 0 1 15,15 v28 a15,15 0 0 1 -15,15 h-42 a15,15 0 0 1 -15,-15 v-28 a15,15 0 0 1 15,-15 z" />
 </vector>

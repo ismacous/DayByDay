@@ -268,7 +268,7 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(TAB_HEADER_HEIGHT))
 
             // La carte forte de l'ecran, et elle ne dit qu'une chose : rien ne
             // sort du telephone. C'est la promesse de l'application, elle merite

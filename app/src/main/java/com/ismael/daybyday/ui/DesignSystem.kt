@@ -40,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -398,11 +399,25 @@ fun SoftChip(
  * Les halos restent pales : le contenu doit rester la chose la plus lisible de
  * l'ecran, et les quatre couleurs des journees les seules taches franches.
  */
+/**
+ * Vrai quand on est deja a l'interieur d'un fond. Sert a ce que le fond global
+ * de l'application, pose une fois derriere la navigation, ne soit pas repeint
+ * une deuxieme fois par chaque ecran : les ecrans gardent leur appel, il ne
+ * fait plus rien qu'une boite. Deux fonds superposes, ce serait deux fois le
+ * meme travail a chaque image, et des halos deux fois plus fonces.
+ */
+private val LocalInsideBackground = compositionLocalOf { false }
+
 @Composable
 fun ScreenBackground(
     modifier: Modifier = Modifier,
     content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit,
 ) {
+    if (LocalInsideBackground.current) {
+        Box(modifier = modifier, content = content)
+        return
+    }
+
     val base = MaterialTheme.colorScheme.background
     val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     // Sur fond clair, il faut de la matiere pour que ca se voie : a 20 % de
@@ -473,7 +488,9 @@ fun ScreenBackground(
         // la ou le regard arrive, et laissent les cartes tranquilles.
         Box(modifier = Modifier.matchParentSize().background(veil))
 
-        content()
+        CompositionLocalProvider(LocalInsideBackground provides true) {
+            content()
+        }
     }
 }
 

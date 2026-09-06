@@ -367,7 +367,6 @@ fun DayScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
                 // imePadding avant verticalScroll : la zone visible se reduit
                 // quand le clavier s'ouvre, donc le curseur reste au-dessus.
                 .imePadding()

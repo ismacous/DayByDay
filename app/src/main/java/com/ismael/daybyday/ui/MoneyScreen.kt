@@ -129,7 +129,7 @@ fun MoneyScreen(onDayClick: (LocalDate) -> Unit) {
                 .padding(bottom = innerPadding.calculateBottomPadding())
                 .padding(horizontal = 16.dp),
         ) {
-            item { Spacer(Modifier.height(4.dp)) }
+            item { Spacer(Modifier.height(TAB_HEADER_HEIGHT)) }
 
             item {
                 // Le point chaud de l'ecran : ce qu'il reste, en grand, sur la

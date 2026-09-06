@@ -80,7 +80,6 @@ fun WeekReviewScreen(onBack: () -> Unit, onDayClick: (LocalDate) -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {

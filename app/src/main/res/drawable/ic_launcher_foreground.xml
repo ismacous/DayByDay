@@ -1,33 +1,70 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Quatre cases : un mois en miniature.
+    Une seule tuile : une journee.
 
-    Trois portent les couleurs des journees — le vert, l'orange, le corail — et
-    la quatrieme est blanche : la journee pas encore notee, c'est-a-dire
-    exactement ce que l'application vient demander. Le quatrieme etat, la
-    journee tres noire, est l'indigo profond du fond : la palette est complete
-    sans ajouter une case sombre qui ferait un trou dans l'icone.
+    Les quatre carres disaient « un mois » ; celui-ci dit « aujourd'hui », et se
+    lit a la taille ou une icone se lit vraiment, c'est-a-dire tres petite. Un
+    seul objet, pose de trois quarts sur le degrade de l'application.
 
-    Tout tient dans le cercle de securite des icones adaptatives (72 dp sur
-    108) : les coins de la grille sont a 34,6 du centre, sous les 36 permis,
-    donc rien n'est rogne, quelle que soit la forme du masque du telephone.
+    Tout le travail est dans la lumiere. Android ne sait pas flouter dans un
+    dessin vectoriel : l'ombre portee est donc **peinte**, en deux couches de
+    plus en plus larges et de plus en plus pales sous la tuile. De loin, ca fait
+    une ombre douce ; de pres, personne ne regarde une icone de pres.
+
+    La lumiere vient du haut a gauche, comme partout ailleurs dans
+    l'application : un reflet clair en haut, un repli plus sombre en bas, et un
+    filet blanc sur l'arete superieure — c'est ce filet, plus que le reste, qui
+    donne l'impression d'une matiere et non d'un aplat.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
+    <!-- L'ombre, deuxieme couche : la plus large et la plus pale. -->
     <path
-        android:fillColor="#15C48E"
-        android:pathData="M36.5,29.5 h7 a7,7 0 0 1 7,7 v7 a7,7 0 0 1 -7,7 h-7 a7,7 0 0 1 -7,-7 v-7 a7,7 0 0 1 7,-7 z" />
+        android:fillColor="#14000000"
+        android:pathData="M32,34 h44 a15,15 0 0 1 15,15 v30 a15,15 0 0 1 -15,15 h-44 a15,15 0 0 1 -15,-15 v-30 a15,15 0 0 1 15,-15 z" />
+    <!-- L'ombre, premiere couche : plus serree, plus marquee. -->
     <path
-        android:fillColor="#FFA92E"
-        android:pathData="M64.5,29.5 h7 a7,7 0 0 1 7,7 v7 a7,7 0 0 1 -7,7 h-7 a7,7 0 0 1 -7,-7 v-7 a7,7 0 0 1 7,-7 z" />
+        android:fillColor="#1F000000"
+        android:pathData="M33.5,32 h41 a14,14 0 0 1 14,14 v27 a14,14 0 0 1 -14,14 h-41 a14,14 0 0 1 -14,-14 v-27 a14,14 0 0 1 14,-14 z" />
+
+    <!-- La tuile. -->
+    <path android:pathData="M33,25 h42 a15,15 0 0 1 15,15 v28 a15,15 0 0 1 -15,15 h-42 a15,15 0 0 1 -15,-15 v-28 a15,15 0 0 1 15,-15 z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="24"
+                android:startY="25"
+                android:endX="84"
+                android:endY="83"
+                android:type="linear">
+                <item android:offset="0" android:color="#FFFFFFFF" />
+                <item android:offset="0.55" android:color="#FFF3F4FE" />
+                <item android:offset="1" android:color="#FFDCE2F8" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Le reflet du haut a gauche. -->
+    <path android:pathData="M33,25 h42 a15,15 0 0 1 15,15 v10 h-72 v-10 a15,15 0 0 1 15,-15 z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="54"
+                android:startY="25"
+                android:endX="54"
+                android:endY="52"
+                android:type="linear">
+                <item android:offset="0" android:color="#B3FFFFFF" />
+                <item android:offset="1" android:color="#00FFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Le filet de lumiere sur l'arete du haut. -->
     <path
-        android:fillColor="#FF5D6E"
-        android:pathData="M36.5,57.5 h7 a7,7 0 0 1 7,7 v7 a7,7 0 0 1 -7,7 h-7 a7,7 0 0 1 -7,-7 v-7 a7,7 0 0 1 7,-7 z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M64.5,57.5 h7 a7,7 0 0 1 7,7 v7 a7,7 0 0 1 -7,7 h-7 a7,7 0 0 1 -7,-7 v-7 a7,7 0 0 1 7,-7 z" />
+        android:fillColor="#CCFFFFFF"
+        android:pathData="M35,27.5 h38 a13,13 0 0 1 12.4,9 a13,13 0 0 0 -12.4,-6.5 h-38 a13,13 0 0 0 -12.4,6.5 a13,13 0 0 1 12.4,-9 z" />
 </vector>

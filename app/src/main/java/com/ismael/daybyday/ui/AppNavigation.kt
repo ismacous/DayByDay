@@ -25,6 +25,16 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import com.ismael.daybyday.dayByDayApp
 import androidx.compose.ui.unit.dp
@@ -85,8 +95,13 @@ fun AppNavigation(
     // calendrier au lieu d'occuper un onglet.
     val showTabs = tabs.any { it.route == currentRoute }
 
+    // Le fond anime passe **derriere tout** : derriere l'en-tete, derriere les
+    // ecrans, derriere la barre du bas. Quand chaque ecran portait le sien, la
+    // place prise par l'en-tete et par la barre restait en dehors, et laissait
+    // deux bandes plates et opaques en haut et en bas de l'ecran — d'autant plus
+    // larges que la barre avait grandi.
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         bottomBar = {
             if (showTabs) {
                 FloatingNavBar(
@@ -100,139 +115,173 @@ fun AppNavigation(
             }
         },
     ) { scaffoldPadding ->
-        // Le rembourrage du bas ne sert que sous la barre d'onglets. Les ecrans
-        // qui s'ouvrent par-dessus gerent leurs propres marges : l'appliquer
-        // ici aussi laissait une bande vide sous eux, et une deuxieme quand le
-        // clavier s'ouvrait.
-        Column(
+        ScreenBackground(modifier = Modifier.fillMaxSize()) {
+
+        // L'en-tete se retire quand on descend et revient quand on remonte.
+        // Il est branche sur le defilement par `nestedScroll` plutot que sur
+        // chaque ecran : les listes et les colonnes qui defilent annoncent
+        // toutes leur mouvement de cette facon, donc aucun ecran n'a rien a
+        // declarer. Et la valeur n'est lue que dans la couche graphique de
+        // l'en-tete : rien n'est remesure pendant qu'on fait defiler.
+        val density = LocalDensity.current
+        val headerHeightPx = with(density) { TAB_HEADER_HEIGHT.toPx() }
+        var headerOffset by remember { mutableFloatStateOf(0f) }
+        val hideOnScroll = remember(headerHeightPx) {
+            object : NestedScrollConnection {
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    headerOffset = (headerOffset + available.y).coerceIn(-headerHeightPx, 0f)
+                    // On ne consomme rien : l'ecran defile normalement, on ne
+                    // fait qu'ecouter.
+                    return Offset.Zero
+                }
+            }
+        }
+        // Changer d'onglet remet l'en-tete en place : on arrive en haut d'une
+        // page, pas au milieu de la precedente.
+        LaunchedEffect(currentRoute) { headerOffset = 0f }
+
+        Box(
             modifier = Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
                 .padding(
                     bottom = if (showTabs) scaffoldPadding.calculateBottomPadding() else 0.dp
                 ),
         ) {
-            // Le titre vit ici, **au-dessus** de la navigation, et pas dans
-            // chaque ecran : passer d'un onglet a l'autre ne le detruit donc
-            // pas. Seuls les mots qui changent sont animes, et « Mon » ne bouge
-            // pas entre le bilan et l'argent.
+            Box(modifier = Modifier.fillMaxSize().nestedScroll(hideOnScroll)) {
+                // Les ecrans ne se remplacent plus d'un coup : celui qui arrive
+                // monte en apparaissant, celui qui part s'efface. Un basculement
+                // brut donne l'impression de changer d'application ; un fondu
+                // glisse donne celle de tourner une page.
+                NavHost(
+                    navController = navController,
+                    startDestination = "calendar",
+                    enterTransition = {
+                        fadeIn(tween(Motion.NORMAL)) +
+                            slideInVertically(tween(Motion.NORMAL)) { it / 14 }
+                    },
+                    exitTransition = { fadeOut(tween(Motion.QUICK)) },
+                    popEnterTransition = { fadeIn(tween(Motion.NORMAL)) },
+                    popExitTransition = {
+                        fadeOut(tween(Motion.QUICK)) +
+                            slideOutVertically(tween(Motion.NORMAL)) { it / 14 }
+                    },
+                ) {
+
+                    composable("calendar") {
+                        CalendarScreen(
+                            month = indexToMonth(monthIndex),
+                            onMonthChange = { monthIndex = it.toIndex() },
+                            onDayClick = { date -> navController.navigate("day/${date.toEpochDay()}") },
+                            onOpenYear = { year ->
+                                yearShown = year
+                                navController.navigate("year")
+                            },
+                        )
+                    }
+
+                    composable("year") {
+                        YearScreen(
+                            year = yearShown,
+                            onYearChange = { yearShown = it },
+                            onMonthClick = { month ->
+                                monthIndex = month.toIndex()
+                                navController.popBackStack()
+                            },
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+
+                    composable("stats") {
+                        StatsScreen(onOpenWeek = { navController.navigate("week") })
+                    }
+
+                    composable("money") {
+                        MoneyScreen(
+                            onDayClick = { date -> navController.navigate("day/${date.toEpochDay()}") },
+                        )
+                    }
+
+                    composable("settings") {
+                        SettingsScreen(onOpenWeek = { navController.navigate("week") })
+                    }
+
+                    composable("week") {
+                        WeekReviewScreen(
+                            onBack = { navController.popBackStack() },
+                            onDayClick = { date -> navController.navigate("day/${date.toEpochDay()}") },
+                        )
+                    }
+
+                    composable(
+                        route = "day/{epochDay}",
+                        arguments = listOf(navArgument("epochDay") { type = NavType.LongType }),
+                    ) { entry ->
+                        val epochDay = entry.arguments?.getLong("epochDay") ?: LocalDate.now().toEpochDay()
+                        DayScreen(
+                            initialDate = LocalDate.ofEpochDay(epochDay),
+                            onBack = { navController.popBackStack() },
+                            onOrganizeCards = { navController.navigate("organize-cards") },
+                            onOpenJournal = { day ->
+                                navController.navigate("journal/${day.toEpochDay()}")
+                            },
+                        )
+                    }
+
+                    composable(
+                        route = "journal/{epochDay}",
+                        arguments = listOf(navArgument("epochDay") { type = NavType.LongType }),
+                    ) { entry ->
+                        val day = entry.arguments?.getLong("epochDay") ?: LocalDate.now().toEpochDay()
+                        JournalScreen(
+                            date = LocalDate.ofEpochDay(day),
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+
+                    composable("organize-cards") {
+                        OrganizeCardsScreen(onBack = { navController.popBackStack() })
+                    }
+
+                    composable("search") {
+                        SearchScreen(
+                            onBack = { navController.popBackStack() },
+                            onDayClick = { date -> navController.navigate("day/${date.toEpochDay()}") },
+                        )
+                    }
+                }
+            }
+
             if (showTabs) {
                 TabHeader(
                     route = currentRoute,
                     firstName = LocalContext.current.dayByDayApp.prefs.firstName.trim(),
                     onOpenSearch = { navController.navigate("search") },
                     modifier = Modifier
-                        .statusBarsPadding()
-                        .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 10.dp),
+                        .height(TAB_HEADER_HEIGHT)
+                        .graphicsLayer {
+                            translationY = headerOffset
+                            // Il s'efface en partant : un titre a moitie sorti
+                            // de l'ecran se lit mal et attire l'oeil pour rien.
+                            alpha = 1f + headerOffset / headerHeightPx
+                        }
+                        .padding(start = 16.dp, end = 16.dp, top = 12.dp),
                 )
             }
-
-            Box(modifier = Modifier.weight(1f)) {
-            // Les ecrans ne se remplacent plus d'un coup : celui qui arrive
-            // monte en apparaissant, celui qui part s'efface. Un basculement
-            // brut donne l'impression de changer d'application ; un fondu
-            // glisse donne celle de tourner une page.
-            NavHost(
-                navController = navController,
-                startDestination = "calendar",
-                enterTransition = {
-                    fadeIn(tween(Motion.NORMAL)) +
-                        slideInVertically(tween(Motion.NORMAL)) { it / 14 }
-                },
-                exitTransition = { fadeOut(tween(Motion.QUICK)) },
-                popEnterTransition = { fadeIn(tween(Motion.NORMAL)) },
-                popExitTransition = {
-                    fadeOut(tween(Motion.QUICK)) +
-                        slideOutVertically(tween(Motion.NORMAL)) { it / 14 }
-                },
-            ) {
-
-                composable("calendar") {
-                    CalendarScreen(
-                        month = indexToMonth(monthIndex),
-                        onMonthChange = { monthIndex = it.toIndex() },
-                        onDayClick = { date -> navController.navigate("day/${date.toEpochDay()}") },
-                        onOpenYear = { year ->
-                            yearShown = year
-                            navController.navigate("year")
-                        },
-                    )
-                }
-
-                composable("year") {
-                    YearScreen(
-                        year = yearShown,
-                        onYearChange = { yearShown = it },
-                        onMonthClick = { month ->
-                            monthIndex = month.toIndex()
-                            navController.popBackStack()
-                        },
-                        onBack = { navController.popBackStack() },
-                        onDayClick = { date -> navController.navigate("day/${date.toEpochDay()}") },
-                    )
-                }
-
-                composable("stats") {
-                    StatsScreen(onOpenWeek = { navController.navigate("week") })
-                }
-
-                composable("money") {
-                    MoneyScreen(
-                        onDayClick = { date -> navController.navigate("day/${date.toEpochDay()}") },
-                    )
-                }
-
-                composable("settings") {
-                    SettingsScreen(onOpenWeek = { navController.navigate("week") })
-                }
-
-                composable("week") {
-                    WeekReviewScreen(
-                        onBack = { navController.popBackStack() },
-                        onDayClick = { date -> navController.navigate("day/${date.toEpochDay()}") },
-                    )
-                }
-
-                composable(
-                    route = "day/{epochDay}",
-                    arguments = listOf(navArgument("epochDay") { type = NavType.LongType }),
-                ) { entry ->
-                    val epochDay = entry.arguments?.getLong("epochDay") ?: LocalDate.now().toEpochDay()
-                    DayScreen(
-                        initialDate = LocalDate.ofEpochDay(epochDay),
-                        onBack = { navController.popBackStack() },
-                        onOrganizeCards = { navController.navigate("organize-cards") },
-                        onOpenJournal = { day ->
-                            navController.navigate("journal/${day.toEpochDay()}")
-                        },
-                    )
-                }
-
-                composable(
-                    route = "journal/{epochDay}",
-                    arguments = listOf(navArgument("epochDay") { type = NavType.LongType }),
-                ) { entry ->
-                    val day = entry.arguments?.getLong("epochDay") ?: LocalDate.now().toEpochDay()
-                    JournalScreen(
-                        date = LocalDate.ofEpochDay(day),
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-
-                composable("organize-cards") {
-                    OrganizeCardsScreen(onBack = { navController.popBackStack() })
-                }
-
-                composable("search") {
-                    SearchScreen(
-                        onBack = { navController.popBackStack() },
-                        onDayClick = { date -> navController.navigate("day/${date.toEpochDay()}") },
-                    )
-                }
-            }
-            }
+        }
         }
     }
 }
+
+/**
+ * La hauteur reservee a l'en-tete des onglets.
+ *
+ * Elle est **la meme pour les quatre**, alors que seul le calendrier porte une
+ * date sous son titre. C'est volontaire : une hauteur qui change d'un onglet a
+ * l'autre ferait sauter le contenu au moment ou l'on change de page, et c'est
+ * exactement ce qu'on cherche a eviter ici.
+ */
+val TAB_HEADER_HEIGHT = 86.dp
 
 /**
  * L'en-tete des quatre onglets. Il ne change que de mots.

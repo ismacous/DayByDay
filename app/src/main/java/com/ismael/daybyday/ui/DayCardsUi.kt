@@ -38,7 +38,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
@@ -75,68 +75,87 @@ fun DayCardShell(
      * seule carte par ecran le porte : celle de l'humeur, qui est la raison
      * d'etre de la page. Les autres restent blanches autour d'elle — c'est ce
      * contraste qui donne une hierarchie, pas la taille des titres.
+     *
+     * La couleur ne remplit **pas** la carte : elle tient un bandeau en haut et
+     * se fond dans le blanc avant le contenu. C'est la lecon d'une version ou
+     * la carte entiere prenait la couleur du jour — les quatre tuiles de choix
+     * et les quatre moments portent eux aussi ces couleurs, et une tuile verte
+     * sur un fond vert disparait. La couleur doit dire de quelle journee il
+     * s'agit, pas avaler ce qu'on vient y regler.
      */
     accent: List<Color>? = null,
     /**
-     * L'encre a utiliser, quand elle est imposee. Sert au degrade de
+     * L'encre du bandeau, quand elle est imposee. Sert au degrade de
      * l'application, qui se porte en blanc partout ailleurs : le calcul
-     * automatique choisirait du sombre, et la carte ne ressemblerait plus a
-     * celle qu'on a touchee pour arriver ici.
+     * automatique choisirait du sombre, et le bandeau ne ressemblerait plus aux
+     * autres surfaces fortes.
      */
     accentInk: Color? = null,
     content: @Composable () -> Unit,
 ) {
-    // L'encre se choisit sur **tout** le degrade, pas sur sa premiere couleur :
-    // le vert des bonnes journees part d'un vert moyen et finit clair, et une
-    // encre choisie sur le depart s'efface a l'arrivee.
+    // L'encre du bandeau se choisit sur **tout** le degrade, pas sur sa
+    // premiere couleur : le vert des bonnes journees part d'un vert moyen et
+    // finit clair, et une encre choisie sur le depart s'efface a l'arrivee.
     val onAccent = accent?.let { accentInk ?: readableOnAll(it) }
-    val title = @Composable {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .clickable(onClick = onToggleCollapse),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                card.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = onAccent ?: MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.width(8.dp))
-            Spacer(Modifier.weight(1f))
-            Icon(
-                imageVector = if (collapsed) {
-                    Icons.Default.KeyboardArrowDown
-                } else {
-                    Icons.Default.KeyboardArrowUp
-                },
-                contentDescription = if (collapsed) "Déplier" else "Replier",
-                tint = onAccent ?: MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
+    val surface = MaterialTheme.colorScheme.surface
 
-    // L'encre est annoncee une fois pour toute la carte : sans ca, seul le titre
-    // etait lisible et le reste du contenu gardait les couleurs du theme, gris
-    // sur vert ou bleu nuit sur indigo.
-    CompositionLocalProvider(LocalCardInk provides onAccent) {
-        if (accent != null) {
-            HeroCard(colors = accent) {
-                title()
-                if (!collapsed) {
-                    Spacer(Modifier.height(14.dp))
-                    content()
-                }
+    SoftCard(padding = 0.dp) {
+        val header = @Composable {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(onClick = onToggleCollapse)
+                    .padding(horizontal = 18.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    card.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = onAccent ?: MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.weight(1f))
+                Icon(
+                    imageVector = if (collapsed) {
+                        Icons.Default.KeyboardArrowDown
+                    } else {
+                        Icons.Default.KeyboardArrowUp
+                    },
+                    contentDescription = if (collapsed) "Déplier" else "Replier",
+                    tint = onAccent ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        if (accent == null) {
+            header()
+        } else {
+            // Le bandeau : la couleur du jour en haut, qui se fond dans la
+            // carte avant d'atteindre le contenu. Le degre du fondu compte —
+            // trop court et la couleur fait un trait, trop long et elle mange
+            // les tuiles.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            0f to accent.first(),
+                            0.55f to accent.last(),
+                            1f to surface,
+                        )
+                    ),
+            ) {
+                header()
+            }
+        }
+
+        if (!collapsed) {
+            Column(modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 18.dp)) {
+                content()
             }
         } else {
-            SoftCard {
-                title()
-                if (!collapsed) {
-                    Spacer(Modifier.height(14.dp))
-                    content()
-                }
-            }
+            Spacer(Modifier.height(2.dp))
         }
     }
 }

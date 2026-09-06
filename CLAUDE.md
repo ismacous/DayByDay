@@ -81,6 +81,26 @@ téléphone (Samsung S25, Android 15).
   Conséquence : les écrans d'onglet ne portent **ni titre ni
   `statusBarsPadding`** — l'en-tête s'en charge. Les écrans qui s'ouvrent
   par-dessus (journée, journal, recherche, semaine) gardent les leurs.
+- **Fond de l'application** : `ScreenBackground` est posé **une fois**, autour de
+  la navigation (`AppNavigation`), donc derrière l'en-tête, les écrans et la
+  barre du bas. Quand chaque écran portait le sien, la place prise par l'en-tête
+  et par la barre restait en dehors et laissait deux bandes plates et opaques.
+  Les écrans gardent leur appel à `ScreenBackground` : à l'intérieur d'un fond,
+  il ne fait plus qu'une boîte (`LocalInsideBackground`) — repeindre deux fois
+  coûterait double et foncerait les halos.
+- **En-tête qui s'efface** : il flotte au-dessus des écrans et recule quand on
+  descend, via un `NestedScrollConnection` posé autour du `NavHost`. Aucun écran
+  n'a rien à déclarer : listes et colonnes annoncent toutes leur défilement de
+  cette façon. Les écrans d'onglet réservent sa place par un
+  `Spacer(TAB_HEADER_HEIGHT)` en tête de leur contenu, et cette hauteur est la
+  **même pour les quatre** — une hauteur variable ferait sauter le contenu au
+  changement d'onglet.
+- **Carte de l'humeur** : la couleur du jour tient un **bandeau en haut** et se
+  fond dans le blanc avant le contenu. Elle a rempli toute la carte pendant une
+  version, et c'était une faute : les quatre tuiles de choix et les quatre
+  moments portent eux aussi ces couleurs, donc une tuile verte sur un fond vert
+  disparaissait. La couleur dit de quelle journée il s'agit ; elle n'avale pas ce
+  qu'on vient y régler.
 - **Barre du bas** : une bille saute en arc jusqu'à l'onglet choisi, et une
   encoche la suit dans le bord haut de la barre. La forme de la barre change à
   chaque image : elle est donc posée dans un `graphicsLayer` (voir « animations

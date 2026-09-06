@@ -22,6 +22,9 @@ interface DayDao {
     @Query("SELECT * FROM day_entries WHERE epochDay BETWEEN :start AND :end")
     fun observeRange(start: Long, end: Long): Flow<List<DayEntry>>
 
+    @Query("SELECT * FROM day_entries WHERE epochDay BETWEEN :start AND :end")
+    suspend fun rangeOnce(start: Long, end: Long): List<DayEntry>
+
     @Query("SELECT * FROM day_entries ORDER BY epochDay")
     fun observeAll(): Flow<List<DayEntry>>
 
@@ -121,6 +124,9 @@ interface DayDao {
 
     @Query("SELECT * FROM media_items WHERE epochDay = :epochDay ORDER BY addedAt, id")
     suspend fun mediaForDay(epochDay: Long): List<MediaItem>
+
+    @Query("SELECT * FROM media_items WHERE epochDay BETWEEN :start AND :end ORDER BY epochDay, id")
+    suspend fun mediaForRange(start: Long, end: Long): List<MediaItem>
 
     @Query("SELECT * FROM media_items ORDER BY epochDay, addedAt, id")
     suspend fun allMedia(): List<MediaItem>

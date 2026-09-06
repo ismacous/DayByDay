@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -53,8 +54,23 @@ private val tabs = listOf(
 )
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(
+    /** Destination demandee par une notification, ou `null`. */
+    pendingDestination: String? = null,
+    onDestinationConsumed: () -> Unit = {},
+) {
     val navController = rememberNavController()
+
+    // La notification du lundi ouvre le bilan de la semaine. On consomme la
+    // demande tout de suite : sans ca, chaque recomposition rouvrirait l'ecran
+    // et on ne pourrait plus en sortir.
+    LaunchedEffect(pendingDestination) {
+        when (pendingDestination) {
+            MainActivity.OPEN_WEEK -> navController.navigate("week")
+        }
+        if (pendingDestination != null) onDestinationConsumed()
+    }
+
     var monthIndex by rememberSaveable { mutableIntStateOf(YearMonth.now().toIndex()) }
     var yearShown by rememberSaveable { mutableIntStateOf(LocalDate.now().year) }
 
@@ -136,7 +152,7 @@ fun AppNavigation() {
                 }
 
                 composable("stats") {
-                    StatsScreen()
+                    StatsScreen(onOpenWeek = { navController.navigate("week") })
                 }
 
                 composable("money") {
@@ -146,7 +162,14 @@ fun AppNavigation() {
                 }
 
                 composable("settings") {
-                    SettingsScreen()
+                    SettingsScreen(onOpenWeek = { navController.navigate("week") })
+                }
+
+                composable("week") {
+                    WeekReviewScreen(
+                        onBack = { navController.popBackStack() },
+                        onDayClick = { date -> navController.navigate("day/${date.toEpochDay()}") },
+                    )
                 }
 
                 composable(

@@ -181,6 +181,33 @@ class Prefs(context: Context) {
         get() = prefs.getString(KEY_SCHEDULED_BACKUP, null)
         set(value) = prefs.edit().putString(KEY_SCHEDULED_BACKUP, value).apply()
 
+    // --- Bilan de la semaine ----------------------------------------------
+
+    /**
+     * Le rendez-vous du lundi matin. Actif par defaut : c'est le seul moment ou
+     * l'application parle d'elle-meme, et elle ne sert pas a grand-chose si
+     * elle attend qu'on vienne la consulter.
+     */
+    var weeklyReviewEnabled: Boolean
+        get() = prefs.getBoolean(KEY_WEEKLY_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_WEEKLY_ENABLED, value).apply()
+
+    var weeklyReviewHour: Int
+        get() = prefs.getInt(KEY_WEEKLY_HOUR, 9)
+        set(value) = prefs.edit().putInt(KEY_WEEKLY_HOUR, value).apply()
+
+    var weeklyReviewMinute: Int
+        get() = prefs.getInt(KEY_WEEKLY_MINUTE, 0)
+        set(value) = prefs.edit().putInt(KEY_WEEKLY_MINUTE, value).apply()
+
+    var scheduledWeeklyReview: String?
+        get() = prefs.getString(KEY_SCHEDULED_WEEKLY, null)
+        set(value) = prefs.edit().putString(KEY_SCHEDULED_WEEKLY, value).apply()
+
+    var lastWeeklyReviewAt: Long
+        get() = prefs.getLong(KEY_LAST_WEEKLY, 0L)
+        set(value) = prefs.edit().putLong(KEY_LAST_WEEKLY, value).apply()
+
     /** Quand le dernier rappel a ete envoye. Zero tant qu'il n'y en a pas eu. */
     var lastReminderAt: Long
         get() = prefs.getLong(KEY_LAST_REMINDER, 0L)
@@ -246,6 +273,11 @@ class Prefs(context: Context) {
         const val KEY_SCHEDULED_REMINDER = "reminder_scheduled_for"
         const val KEY_SCHEDULED_BACKUP = "backup_scheduled_for"
         const val KEY_LAST_REMINDER = "reminder_last_at"
+        const val KEY_WEEKLY_ENABLED = "weekly_review_enabled"
+        const val KEY_WEEKLY_HOUR = "weekly_review_hour"
+        const val KEY_WEEKLY_MINUTE = "weekly_review_minute"
+        const val KEY_SCHEDULED_WEEKLY = "weekly_review_scheduled_for"
+        const val KEY_LAST_WEEKLY = "weekly_review_last_at"
         const val KEY_AUTO_BACKUP = "auto_backup_enabled"
         const val KEY_AUTO_BACKUP_HOUR = "auto_backup_hour"
         const val KEY_AUTO_BACKUP_MINUTE = "auto_backup_minute"

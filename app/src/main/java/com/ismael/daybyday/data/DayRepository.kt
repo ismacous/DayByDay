@@ -93,6 +93,29 @@ class DayRepository(context: Context) {
     }
 
     /**
+     * Le bilan d'une semaine, charge en une fois.
+     *
+     * On lit **deux** semaines : celle qu'on raconte et celle d'avant, parce
+     * que la seule comparaison qui ait un sens ici est avec la precedente.
+     */
+    suspend fun weekReview(monday: LocalDate): WeekReview {
+        val from = monday.minusWeeks(1)
+        val to = monday.plusDays(6)
+        val days = dao.rangeOnce(from.toEpochDay(), to.toEpochDay()).associateBy { it.epochDay }
+        val mediaCounts = dao.mediaForRange(monday.toEpochDay(), to.toEpochDay())
+            .groupingBy { it.epochDay }
+            .eachCount()
+        return WeekReviewBuilder.build(
+            monday = monday,
+            days = days,
+            mediaCounts = mediaCounts,
+            tags = dao.allTags(),
+            links = dao.allDayTags(),
+            money = dao.allMoney(),
+        )
+    }
+
+    /**
      * Enregistre le contenu d'une journee. Une journee totalement vide, sans
      * etiquette ni media, est supprimee pour ne pas polluer les statistiques.
      */

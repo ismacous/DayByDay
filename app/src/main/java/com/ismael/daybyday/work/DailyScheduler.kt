@@ -22,6 +22,31 @@ object DailyScheduler {
     const val REMINDER_WORK = "daybyday-rappel-quotidien"
     const val BACKUP_WORK = "daybyday-sauvegarde-quotidienne"
     const val TEST_REMINDER_WORK = "daybyday-rappel-test"
+    const val WEEKLY_WORK = "daybyday-bilan-semaine"
+    const val TEST_WEEKLY_WORK = "daybyday-bilan-test"
+
+    /**
+     * Millisecondes jusqu'au prochain [dayOfWeek] a [hour]:[minute].
+     *
+     * Si c'est deja passe aujourd'hui, ou si aujourd'hui n'est pas le bon jour,
+     * on vise la semaine suivante.
+     */
+    fun weeklyDelayMillis(
+        dayOfWeek: java.time.DayOfWeek,
+        hour: Int,
+        minute: Int,
+        now: ZonedDateTime = ZonedDateTime.now(),
+    ): Long {
+        var target = now.withHour(hour.coerceIn(0, 23))
+            .withMinute(minute.coerceIn(0, 59))
+            .withSecond(0)
+            .withNano(0)
+            .with(java.time.temporal.TemporalAdjusters.nextOrSame(dayOfWeek))
+        if (!target.isAfter(now)) {
+            target = target.plusWeeks(1)
+        }
+        return Duration.between(now, target).toMillis()
+    }
 
     /** Millisecondes jusqu'a la prochaine occurrence de [hour]:[minute]. */
     fun initialDelayMillis(hour: Int, minute: Int, now: ZonedDateTime = ZonedDateTime.now()): Long {
@@ -109,8 +134,50 @@ object DailyScheduler {
         prefs.scheduledBackup = signature
     }
 
+    /**
+     * Le bilan du lundi matin. Meme regle que le rappel du soir : on ne
+     * reprogramme que si l'heure a change, sinon ouvrir l'application le
+     * repousserait indefiniment.
+     */
+    fun scheduleWeeklyReview(context: Context, prefs: Prefs) {
+        val manager = WorkManager.getInstance(context.applicationContext)
+        if (!prefs.weeklyReviewEnabled) {
+            manager.cancelUniqueWork(WEEKLY_WORK)
+            prefs.scheduledWeeklyReview = null
+            return
+        }
+        val signature = "${prefs.weeklyReviewHour}:${prefs.weeklyReviewMinute}"
+        val changed = prefs.scheduledWeeklyReview != signature
+        val request = PeriodicWorkRequestBuilder<WeeklyReviewWorker>(7, TimeUnit.DAYS)
+            .setInitialDelay(
+                weeklyDelayMillis(
+                    java.time.DayOfWeek.MONDAY,
+                    prefs.weeklyReviewHour,
+                    prefs.weeklyReviewMinute,
+                ),
+                TimeUnit.MILLISECONDS,
+            )
+            .build()
+        manager.enqueueUniquePeriodicWork(
+            WEEKLY_WORK,
+            if (changed) ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE else ExistingPeriodicWorkPolicy.KEEP,
+            request,
+        )
+        prefs.scheduledWeeklyReview = signature
+    }
+
+    /** Envoie le bilan de la semaine tout de suite, pour voir ce qu'il donne. */
+    fun sendTestWeeklyReview(context: Context) {
+        val request = OneTimeWorkRequestBuilder<WeeklyReviewWorker>()
+            .setInputData(Data.Builder().putBoolean(WeeklyReviewWorker.KEY_FORCE, true).build())
+            .build()
+        WorkManager.getInstance(context.applicationContext)
+            .enqueueUniqueWork(TEST_WEEKLY_WORK, ExistingWorkPolicy.REPLACE, request)
+    }
+
     fun rescheduleAll(context: Context, prefs: Prefs) {
         scheduleReminder(context, prefs)
         scheduleAutoBackup(context, prefs)
+        scheduleWeeklyReview(context, prefs)
     }
 }

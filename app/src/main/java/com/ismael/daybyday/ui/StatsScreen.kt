@@ -51,7 +51,7 @@ import java.time.YearMonth
 import java.util.Locale
 
 @Composable
-fun StatsScreen() {
+fun StatsScreen(onOpenWeek: () -> Unit = {}) {
     val app = LocalContext.current.dayByDayApp
     val repository = app.repository
     val today = LocalDate.now()
@@ -96,10 +96,37 @@ fun StatsScreen() {
 
             Spacer(Modifier.height(20.dp))
 
+            // La semaine avant l'annee : c'est l'echelle a laquelle on se
+            // souvient de quelque chose. L'annee, elle, se regarde de loin.
+            Appear(index = 0) {
+                SoftCard(onClick = onOpenWeek, onClickLabel = "Ouvrir le bilan de la semaine") {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Ma semaine",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                "Les sept derniers jours, comparés à ceux d'avant.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
             // Le point chaud de l'ecran : la moyenne de l'annee dans un grand
             // anneau qui se remplit a l'ouverture. Un chiffre seul ne dit rien ;
             // le meme chiffre dans un anneau se lit d'un coup d'oeil.
-            Appear(index = 0) {
+            Appear(index = 1) {
                 HeroCard {
                     Row(
                         modifier = Modifier.fillMaxWidth(),

@@ -1,5 +1,6 @@
 package com.ismael.daybyday.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.compose.setContent
@@ -21,10 +22,27 @@ import com.ismael.daybyday.ui.theme.DayByDayTheme
 
 class MainActivity : FragmentActivity() {
 
+    /**
+     * La destination demandee par une notification, ou `null`.
+     *
+     * C'est un `mutableStateOf` et pas une simple lecture de l'intention : quand
+     * l'application tourne deja, Android ne recree pas l'activite mais appelle
+     * [onNewIntent]. Sans etat observable, la notification du lundi n'ouvrirait
+     * le bilan qu'une fois sur deux — celle ou l'application etait fermee.
+     */
+    private var pendingDestination by mutableStateOf<String?>(null)
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingDestination = intent.getStringExtra(EXTRA_OPEN)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         applySecureFlag()
+        pendingDestination = intent?.getStringExtra(EXTRA_OPEN)
 
         setContent {
             DayByDayTheme {
@@ -56,7 +74,10 @@ class MainActivity : FragmentActivity() {
                             onFinished = { offerRestore = false },
                         )
 
-                        else -> AppNavigation()
+                        else -> AppNavigation(
+                            pendingDestination = pendingDestination,
+                            onDestinationConsumed = { pendingDestination = null },
+                        )
                     }
                 }
             }
@@ -72,6 +93,14 @@ class MainActivity : FragmentActivity() {
     override fun onStop() {
         super.onStop()
         dayByDayApp.lock.onEnterBackground()
+    }
+
+    companion object {
+        /** Nom de l'extra qui porte la destination demandee par une notification. */
+        const val EXTRA_OPEN = "daybyday.open"
+
+        /** Ouvrir le bilan de la semaine. */
+        const val OPEN_WEEK = "semaine"
     }
 
     /** Empeche les captures d'ecran et masque l'app dans la liste des recentes. */

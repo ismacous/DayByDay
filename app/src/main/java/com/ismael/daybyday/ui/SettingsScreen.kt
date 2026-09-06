@@ -86,7 +86,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
     val context = LocalContext.current
     val app = context.dayByDayApp
     val prefs = app.prefs
@@ -103,6 +103,10 @@ fun SettingsScreen() {
     var reminderMinute by remember { mutableIntStateOf(prefs.reminderMinute) }
 
     var lastReminder by remember { mutableLongStateOf(prefs.lastReminderAt) }
+
+    var weeklyEnabled by remember { mutableStateOf(prefs.weeklyReviewEnabled) }
+    var weeklyHour by remember { mutableIntStateOf(prefs.weeklyReviewHour) }
+    var weeklyMinute by remember { mutableIntStateOf(prefs.weeklyReviewMinute) }
 
     var autoBackupEnabled by remember { mutableStateOf(prefs.autoBackupEnabled) }
     var autoBackupHour by remember { mutableIntStateOf(prefs.autoBackupHour) }
@@ -500,8 +504,69 @@ fun SettingsScreen() {
 
             Spacer(Modifier.height(16.dp))
 
+            // --- Bilan de la semaine --------------------------------------
+            SectionCard(title = "Bilan de la semaine", index = 4) {
+                Text(
+                    "Le lundi matin, un récapitulatif de la semaine écoulée : " +
+                        "ses sept couleurs, ce que tu as fait, et la comparaison avec " +
+                        "la semaine d'avant. Rien n'est envoyé si la semaine est vide.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(10.dp))
+                SettingSwitchRow(
+                    title = "M'envoyer le bilan du lundi",
+                    subtitle = "Une notification par semaine, à lire quand tu veux.",
+                    checked = weeklyEnabled,
+                    onCheckedChange = { enabled ->
+                        weeklyEnabled = enabled
+                        prefs.weeklyReviewEnabled = enabled
+                        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                        DailyScheduler.scheduleWeeklyReview(context, prefs)
+                    },
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Heure du lundi",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = {
+                        showTimePicker(context, weeklyHour, weeklyMinute) { hour, minute ->
+                            weeklyHour = hour
+                            weeklyMinute = minute
+                            prefs.weeklyReviewHour = hour
+                            prefs.weeklyReviewMinute = minute
+                            DailyScheduler.scheduleWeeklyReview(context, prefs)
+                        }
+                    }) {
+                        Text(formatTime(weeklyHour, weeklyMinute))
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Button(onClick = onOpenWeek, modifier = Modifier.fillMaxWidth()) {
+                    Text("Voir le bilan de la semaine")
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        DailyScheduler.sendTestWeeklyReview(context)
+                        scope.launch {
+                            snackbar.showSnackbar("Bilan d'essai envoyé.")
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Envoyer le bilan maintenant")
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
             // --- Sauvegarde automatique -----------------------------------
-            SectionCard(title = "Sauvegarde automatique", index = 4) {
+            SectionCard(title = "Sauvegarde automatique", index = 5) {
                 Text(
                     "Une sauvegarde par jour dans le dossier de ton choix. Le fichier " +
                         "précédent est remplacé, donc ça ne prend pas de place en plus.",
@@ -592,7 +657,7 @@ fun SettingsScreen() {
             Spacer(Modifier.height(16.dp))
 
             // --- Sauvegarde manuelle --------------------------------------
-            SectionCard(title = "Sauvegarde manuelle", index = 5) {
+            SectionCard(title = "Sauvegarde manuelle", index = 6) {
                 Button(
                     onClick = { exportBackup.launch("DayByDay-${LocalDate.now()}.zip") },
                     enabled = !busy,
@@ -625,7 +690,7 @@ fun SettingsScreen() {
             Spacer(Modifier.height(16.dp))
 
             // --- Resume annuel --------------------------------------------
-            SectionCard(title = "Résumé annuel", index = 6) {
+            SectionCard(title = "Résumé annuel", index = 7) {
                 Text(
                     "Exporte une année entière en texte (titres, notes, détails, " +
                         "statistiques) pour préparer ta vidéo de fin d'année.",
@@ -650,7 +715,7 @@ fun SettingsScreen() {
             Spacer(Modifier.height(16.dp))
 
             // --- Confidentialite ------------------------------------------
-            SectionCard(title = "Confidentialité", index = 7) {
+            SectionCard(title = "Confidentialité", index = 8) {
                 SettingSwitchRow(
                     title = "Verrouiller l'application",
                     subtitle = if (hasPin) {
@@ -721,7 +786,7 @@ fun SettingsScreen() {
             Spacer(Modifier.height(16.dp))
 
             // --- A propos -------------------------------------------------
-            SectionCard(title = "À propos", index = 8) {
+            SectionCard(title = "À propos", index = 9) {
                 InfoRow("Version", "${appVersion.name} (build ${appVersion.code})")
                 InfoRow("Terminée le", formatDateTime(BuildConfig.BUILD_TIME))
                 InfoRow("Identifiant", appVersion.packageName)
@@ -750,7 +815,7 @@ fun SettingsScreen() {
             Spacer(Modifier.height(16.dp))
 
             // --- Effacer --------------------------------------------------
-            SectionCard(title = "Effacer mes données", index = 9) {
+            SectionCard(title = "Effacer mes données", index = 10) {
                 Text(
                     "Supprime définitivement toutes les journées, notes, photos, " +
                         "vidéos et mouvements d'argent. C'est irréversible : fais " +

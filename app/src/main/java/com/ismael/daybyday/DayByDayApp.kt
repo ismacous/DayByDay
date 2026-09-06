@@ -13,6 +13,7 @@ import com.ismael.daybyday.data.Prefs
 import com.ismael.daybyday.data.TagCatalog
 import com.ismael.daybyday.work.DailyScheduler
 import com.ismael.daybyday.work.ReminderWorker
+import com.ismael.daybyday.work.WeeklyReviewWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,6 +31,7 @@ class DayByDayApp : Application() {
     override fun onCreate() {
         super.onCreate()
         createReminderChannel()
+        createWeeklyChannel()
         DailyScheduler.rescheduleAll(this, prefs)
         appScope.launch {
             runCatching { TagCatalog.sync(AppDatabase.get(this@DayByDayApp).dayDao()) }
@@ -57,6 +59,20 @@ class DayByDayApp : Application() {
             .setVibrationEnabled(true)
             .build()
         manager.createNotificationChannel(channel)
+    }
+
+    /**
+     * Le canal du bilan du lundi. Importance normale, volontairement : ce n'est
+     * pas quelque chose a faire, c'est quelque chose a lire. Un bandeau
+     * par-dessus l'ecran pour une lecture, ca s'appelle deranger.
+     */
+    private fun createWeeklyChannel() {
+        val channel = NotificationChannelCompat
+            .Builder(WeeklyReviewWorker.CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_DEFAULT)
+            .setName("Bilan de la semaine")
+            .setDescription("Le récapitulatif du lundi matin.")
+            .build()
+        NotificationManagerCompat.from(this).createNotificationChannel(channel)
     }
 }
 

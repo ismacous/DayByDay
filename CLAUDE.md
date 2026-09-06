@@ -49,7 +49,7 @@ téléphone (Samsung S25, Android 15).
 - `health/` — lecture locale des pas (Health Connect) et du temps d'écran
   (statistiques d'usage, calculées à partir des **événements** pour ne pas
   compter deux fois les périodes qui se chevauchent).
-- `work/` — rappel du soir et sauvegarde automatique quotidienne.
+- `work/` — rappel du soir, bilan du lundi matin, sauvegarde automatique.
 - `ui/` — écrans Compose. Navigation par onglets : Mois, Année, Bilan, Argent,
   Réglages ; le journal d'une journée et la recherche s'ouvrent par-dessus.
 
@@ -66,6 +66,13 @@ téléphone (Samsung S25, Android 15).
   automatique. Reste la cause qui n'est pas dans le code : Samsung endort les
   applications, d'où la ligne « Mise en veille par Android » et le rappel
   d'essai dans les Réglages.
+- **Bilan de la semaine** : il raconte des **faits** (« bougé 3 jours »), jamais
+  des corrélations. Sur sept jours, comparer « les jours où tu as bougé » aux
+  autres n'a aucun sens statistique — ces rapprochements restent dans « Ce qui va
+  avec tes bonnes journées », qui travaille sur des mois. La seule comparaison
+  faite ici est avec la **semaine précédente**. La semaine va du lundi au
+  dimanche (`WeekReviewBuilder.mondayOf`), et le lundi matin on raconte celle qui
+  vient de finir, pas celle qui commence. Testé dans `WeekReviewTest`.
 - **Importance d'un canal de notification** : elle ne se change plus une fois le
   canal créé — Android la confie à l'utilisateur et ignore toute modification du
   code. Faire passer le rappel en bandeau (comme un SMS) a donc demandé un

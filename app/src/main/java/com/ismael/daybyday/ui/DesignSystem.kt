@@ -2,13 +2,12 @@ package com.ismael.daybyday.ui
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.using
+import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -254,16 +253,15 @@ private fun <T> MorphingBlock(state: T, content: @Composable (T) -> Unit) {
     AnimatedContent(
         targetState = state,
         transitionSpec = {
-            (
-                fadeIn(tween(Motion.NORMAL)) +
-                    slideInVertically(tween(Motion.NORMAL)) { it / 2 }
-                ) togetherWith (
-                fadeOut(tween(Motion.QUICK)) +
-                    slideOutVertically(tween(Motion.NORMAL)) { -it / 2 }
-                ) using
+            ContentTransform(
+                targetContentEnter = fadeIn(tween(Motion.NORMAL)) +
+                    slideInVertically(tween(Motion.NORMAL)) { it / 2 },
+                initialContentExit = fadeOut(tween(Motion.QUICK)) +
+                    slideOutVertically(tween(Motion.NORMAL)) { -it / 2 },
                 // Sans ca, la boite se redimensionne en decoupant, et le mot le
                 // plus long apparait tronque pendant le changement.
-                SizeTransform(clip = false)
+                sizeTransform = SizeTransform(clip = false),
+            )
         },
         label = "titre",
     ) { value ->

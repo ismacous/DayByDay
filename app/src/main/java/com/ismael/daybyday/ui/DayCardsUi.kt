@@ -9,7 +9,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.SizeTransform
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -201,10 +202,16 @@ fun DayCardShell(
                 AnimatedContent(
                     targetState = summary.orEmpty(),
                     transitionSpec = {
-                        (fadeIn(tween(Motion.NORMAL)) +
-                            slideInVertically(tween(Motion.NORMAL)) { it / 2 }) togetherWith
-                            (fadeOut(tween(Motion.QUICK)) +
-                                slideOutVertically(tween(Motion.NORMAL)) { -it / 2 })
+                        ContentTransform(
+                            targetContentEnter = fadeIn(tween(Motion.NORMAL)) +
+                                slideInVertically(tween(Motion.NORMAL)) { it / 2 },
+                            initialContentExit = fadeOut(tween(Motion.QUICK)) +
+                                slideOutVertically(tween(Motion.NORMAL)) { -it / 2 },
+                            // Meme raison qu'au titre : sans ca, la boite se
+                            // redimensionne en decoupant, et un resume plus long
+                            // apparait tronque pendant le changement.
+                            sizeTransform = SizeTransform(clip = false),
+                        )
                     },
                     label = "resume",
                 ) { value ->

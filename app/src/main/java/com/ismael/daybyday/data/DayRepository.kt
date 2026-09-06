@@ -188,6 +188,10 @@ class DayRepository(context: Context) {
     fun observeMediaForDay(date: LocalDate): Flow<List<MediaItem>> =
         dao.observeMediaForDay(date.toEpochDay())
 
+    /** Le nombre de photos de chaque journee, pour la recherche. */
+    fun observeAllMediaCounts(): Flow<Map<Long, Int>> =
+        dao.observeAllMediaCounts().map { list -> list.associate { it.epochDay to it.count } }
+
     fun observeMediaCounts(start: LocalDate, end: LocalDate): Flow<Map<Long, Int>> =
         dao.observeMediaCounts(start.toEpochDay(), end.toEpochDay())
             .map { list -> list.associate { it.epochDay to it.count } }

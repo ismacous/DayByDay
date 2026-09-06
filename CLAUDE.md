@@ -66,6 +66,13 @@ téléphone (Samsung S25, Android 15).
   automatique. Reste la cause qui n'est pas dans le code : Samsung endort les
   applications, d'où la ligne « Mise en veille par Android » et le rappel
   d'essai dans les Réglages.
+- **Recherche** : elle croise le texte, la couleur, ce qu'on a fait et les
+  étiquettes (`data/DaySearch.kt`, testé dans `DaySearchTest`). Deux règles de
+  sens : plusieurs couleurs se lisent « ou », plusieurs étiquettes « et ». Et un
+  piège : `DaySearch.fold` (qui enlève accents et majuscules) plie **lettre par
+  lettre**. Normaliser la chaîne entière puis jeter les accents la raccourcit,
+  et l'extrait affiché autour du mot trouvé serait décalé d'autant de lettres
+  accentuées qu'il y a avant lui.
 - **Bilan de la semaine** : il raconte des **faits** (« bougé 3 jours »), jamais
   des corrélations. Sur sept jours, comparer « les jours où tu as bougé » aux
   autres n'a aucun sens statistique — ces rapprochements restent dans « Ce qui va

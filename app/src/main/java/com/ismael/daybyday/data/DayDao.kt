@@ -122,6 +122,9 @@ interface DayDao {
     )
     fun observeMediaCounts(start: Long, end: Long): Flow<List<DayMediaCount>>
 
+    @Query("SELECT epochDay AS epochDay, COUNT(*) AS count FROM media_items GROUP BY epochDay")
+    fun observeAllMediaCounts(): Flow<List<DayMediaCount>>
+
     @Query("SELECT * FROM media_items WHERE epochDay = :epochDay ORDER BY addedAt, id")
     suspend fun mediaForDay(epochDay: Long): List<MediaItem>
 

@@ -67,6 +67,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
@@ -80,6 +81,7 @@ import com.ismael.daybyday.data.DoseTime
 import com.ismael.daybyday.data.FoodLevel
 import com.ismael.daybyday.data.MediaItem
 import com.ismael.daybyday.data.MediaKind
+import com.ismael.daybyday.data.Memory
 import com.ismael.daybyday.data.MoneyEntry
 import com.ismael.daybyday.data.RichText
 import com.ismael.daybyday.data.SportLevel
@@ -119,6 +121,14 @@ fun DayScreen(
     val date = LocalDate.ofEpochDay(epochDay)
     val birthday = app.prefs.birthDate
     val isBirthday = date.dayOfMonth == birthday.dayOfMonth && date.monthValue == birthday.monthValue
+
+    // Le meme jour, les annees d'avant. La recherche remonte jusqu'a douze ans
+    // et s'arrete a la premiere annee qui a quelque chose a montrer ; s'il n'y
+    // a rien nulle part, il n'y a pas de carte du tout.
+    var memory by remember { mutableStateOf<Memory?>(null) }
+    LaunchedEffect(epochDay) {
+        memory = withContext(Dispatchers.IO) { repository.memoryFor(date) }
+    }
 
     var colorKey by remember { mutableStateOf<Int?>(null) }
     var colorManual by remember { mutableStateOf(false) }
@@ -399,6 +409,14 @@ fun DayScreen(
                 ) {
                     Text("Aller à aujourd'hui")
                 }
+            }
+
+            memory?.let { souvenir ->
+                Spacer(Modifier.height(14.dp))
+                MemoryCard(
+                    memory = souvenir,
+                    onOpen = { epochDay = souvenir.date.toEpochDay() },
+                )
             }
 
             Spacer(Modifier.height(8.dp))
@@ -1064,6 +1082,72 @@ private fun ColorChoice(
                 Icons.Default.Check,
                 contentDescription = "Sélectionné",
                 tint = readableOn(dayColor.color),
+            )
+        }
+    }
+}
+
+/**
+ * Le meme jour, il y a un an — ou deux, ou cinq.
+ *
+ * Une seule regle de conception ici, et c'est celle qui fait la difference
+ * entre un plaisir et une nuisance : **la carte n'existe que s'il y a quelque
+ * chose**. Pas de « rien noté il y a un an », pas de cadre vide. Quand elle
+ * apparait, c'est qu'il y a une couleur, un mot ou une photo, et un appui
+ * emmene directement sur cette journee-la.
+ *
+ * Elle reste volontairement basse de ton : une ligne, une pastille de couleur,
+ * une vignette. Ce n'est pas ce qu'on est venu faire — c'est un cadeau au
+ * passage.
+ */
+@Composable
+private fun MemoryCard(memory: Memory, onOpen: () -> Unit) {
+    val entry = memory.entry
+    val preview = entry.title.ifBlank { entry.note }.trim().replace('\n', ' ')
+
+    SoftCard(onClick = onOpen, onClickLabel = "Ouvrir cette journée", padding = 12.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            memory.photo?.let { photo ->
+                MediaThumb(
+                    item = photo,
+                    onClick = onOpen,
+                    modifier = Modifier.size(56.dp),
+                )
+                Spacer(Modifier.width(12.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    entry.color?.let { dayColor ->
+                        ColorDot(color = dayColor.color, size = 9.dp)
+                        Spacer(Modifier.width(7.dp))
+                    }
+                    Text(
+                        text = if (memory.yearsAgo == 1) "Il y a un an" else "Il y a ${memory.yearsAgo} ans",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = if (preview.isBlank()) {
+                        // Il y a forcement quelque chose, sinon la carte
+                        // n'existerait pas : ici, ce sont les photos.
+                        Dates.dayLong(memory.date)
+                    } else {
+                        preview
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
             )
         }
     }

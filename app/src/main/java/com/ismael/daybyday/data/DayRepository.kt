@@ -61,6 +61,38 @@ class DayRepository(context: Context) {
     suspend fun dayOnce(date: LocalDate): DayEntry? = dao.dayOnce(date.toEpochDay())
 
     /**
+     * Le meme jour, les annees d'avant.
+     *
+     * On remonte annee par annee et on s'arrete a la premiere qui a quelque
+     * chose a montrer — une couleur, un texte ou une photo. C'est la regle qui
+     * compte : une carte « il y a un an » qui s'affiche pour dire qu'il ne
+     * s'est rien passe il y a un an n'apprend rien et encombre l'ecran. Si
+     * l'annee derniere est vide mais pas celle d'avant, c'est celle d'avant
+     * qu'on montre.
+     *
+     * `minusYears` gere le 29 fevrier tout seul : il retombe sur le 28.
+     */
+    suspend fun memoryFor(date: LocalDate, maxYearsBack: Int = 12): Memory? {
+        for (yearsAgo in 1..maxYearsBack) {
+            val then = date.minusYears(yearsAgo.toLong())
+            val entry = dao.dayOnce(then.toEpochDay())
+            val media = dao.mediaForDay(then.toEpochDay())
+            val worthShowing = entry != null &&
+                (entry.colorKey != null || entry.title.isNotBlank() || entry.note.isNotBlank())
+            if (worthShowing || media.isNotEmpty()) {
+                return Memory(
+                    date = then,
+                    yearsAgo = yearsAgo,
+                    entry = entry ?: DayEntry(epochDay = then.toEpochDay()),
+                    photo = media.firstOrNull { it.kind == MediaKind.PHOTO } ?: media.firstOrNull(),
+                    mediaCount = media.size,
+                )
+            }
+        }
+        return null
+    }
+
+    /**
      * Enregistre le contenu d'une journee. Une journee totalement vide, sans
      * etiquette ni media, est supprimee pour ne pas polluer les statistiques.
      */
@@ -226,3 +258,15 @@ class DayRepository(context: Context) {
         doses.forEach { dao.markDose(it) }
     }
 }
+
+/**
+ * Un souvenir : la meme date, une ou plusieurs annees plus tot, quand il y a
+ * quelque chose a en dire. Voir [DayRepository.memoryFor].
+ */
+data class Memory(
+    val date: LocalDate,
+    val yearsAgo: Int,
+    val entry: DayEntry,
+    val photo: MediaItem?,
+    val mediaCount: Int,
+)

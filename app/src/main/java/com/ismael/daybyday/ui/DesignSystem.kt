@@ -1,6 +1,12 @@
 package com.ismael.daybyday.ui
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -63,6 +69,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ismael.daybyday.ui.theme.Brand
 import com.ismael.daybyday.ui.theme.Serif
+import com.ismael.daybyday.ui.theme.accentSerif
 import kotlinx.coroutines.delay
 
 /**
@@ -176,6 +183,92 @@ fun ScreenTitle(
             Spacer(Modifier.width(12.dp))
             trailing()
         }
+    }
+}
+
+/**
+ * Le titre d'un onglet, qui **survit** au changement de page.
+ *
+ * Avant, chaque ecran dessinait le sien : passer du bilan a l'argent detruisait
+ * « Mon bilan » pour reconstruire « Mon argent », et tout l'en-tete clignotait
+ * alors que les deux titres sont au meme endroit et commencent par le meme mot.
+ *
+ * Ici le titre vit **au-dessus** de la navigation : il ne disparait jamais. Les
+ * deux mots sont animes separement, donc « Mon » ne bouge pas du tout entre le
+ * bilan et l'argent — seul le second mot glisse et se remplace. C'est ce que le
+ * regard attend : ce qui ne change pas ne doit pas bouger.
+ */
+@Composable
+fun MorphingTitle(
+    text: String,
+    accent: String,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                MorphingWord(word = text) { value ->
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.displaySmall,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                    )
+                }
+                Spacer(Modifier.width(9.dp))
+                MorphingWord(word = accent) { value ->
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.displaySmall.accentSerif(),
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                    )
+                }
+            }
+            MorphingWord(word = subtitle.orEmpty()) { value ->
+                if (value.isNotEmpty()) {
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+        if (trailing != null) {
+            Spacer(Modifier.width(12.dp))
+            trailing()
+        }
+    }
+}
+
+/**
+ * Un mot qui se remplace en glissant vers le haut, le suivant arrivant par le
+ * bas. Un mot inchange n'est pas anime du tout : `AnimatedContent` ne rejoue
+ * rien quand la cible est la meme.
+ */
+@Composable
+private fun MorphingWord(word: String, content: @Composable (String) -> Unit) {
+    AnimatedContent(
+        targetState = word,
+        transitionSpec = {
+            (
+                fadeIn(tween(Motion.NORMAL)) +
+                    slideInVertically(tween(Motion.NORMAL)) { it / 2 }
+                ) togetherWith (
+                fadeOut(tween(Motion.QUICK)) +
+                    slideOutVertically(tween(Motion.NORMAL)) { -it / 2 }
+                )
+        },
+        label = "mot",
+    ) { value ->
+        content(value)
     }
 }
 

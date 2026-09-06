@@ -126,15 +126,10 @@ fun MoneyScreen(onDayClick: (LocalDate) -> Unit) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
                 .padding(bottom = innerPadding.calculateBottomPadding())
                 .padding(horizontal = 16.dp),
         ) {
-            item {
-                Spacer(Modifier.height(14.dp))
-                ScreenTitle(text = "Mon", accent = "argent")
-                Spacer(Modifier.height(20.dp))
-            }
+            item { Spacer(Modifier.height(4.dp)) }
 
             item {
                 // Le point chaud de l'ecran : ce qu'il reste, en grand, sur la

@@ -2,9 +2,15 @@ package com.ismael.daybyday.ui
 
 import android.app.TimePickerDialog
 import android.content.Context
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -41,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,6 +56,7 @@ import com.ismael.daybyday.data.DayColor
 import com.ismael.daybyday.data.DayEntry
 import com.ismael.daybyday.data.DoseTaken
 import com.ismael.daybyday.data.DoseTime
+import com.ismael.daybyday.data.Prayer
 import com.ismael.daybyday.data.Treatment
 import java.util.Locale
 
@@ -221,6 +229,120 @@ private fun TimeButton(
             text = minutes?.let { formatClock(it) } ?: "—:—",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+/**
+ * Les cinq prieres de la journee.
+ *
+ * Une ligne par priere, dans l'ordre du jour, avec une case a cocher franche —
+ * on doit pouvoir la toucher sans viser. La ligne du dessous compte, sans
+ * commenter : cinq sur cinq n'est pas felicite, deux sur cinq n'est pas
+ * reproche. L'application constate, elle ne note pas.
+ *
+ * `null` et zero ne veulent pas dire la meme chose : une journee ou rien n'a
+ * ete touche est une journee dont on ne sait rien, et le texte le dit.
+ */
+@Composable
+fun PrayerCardBody(mask: Int?, onToggle: (Prayer, Boolean) -> Unit) {
+    val done = mask ?: 0
+    val count = Prayer.entries.count { done and it.bit != 0 }
+
+    Prayer.entries.forEachIndexed { index, prayer ->
+        if (index > 0) Spacer(Modifier.height(8.dp))
+        val checked = done and prayer.bit != 0
+        PrayerRow(
+            prayer = prayer,
+            checked = checked,
+            onClick = { onToggle(prayer, !checked) },
+        )
+    }
+
+    Spacer(Modifier.height(12.dp))
+    Text(
+        text = when {
+            mask == null -> "Rien de coché pour l'instant."
+            count == 0 -> "Aucune prière cochée."
+            count == Prayer.entries.size -> "Les cinq prières."
+            else -> "$count prière(s) sur ${Prayer.entries.size}."
+        },
+        style = MaterialTheme.typography.bodyMedium,
+        color = if (count == Prayer.entries.size) {
+            DayColor.GREEN.color
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+    )
+}
+
+@Composable
+private fun PrayerRow(prayer: Prayer, checked: Boolean, onClick: () -> Unit) {
+    // La couleur glisse d'un etat a l'autre, et la coche arrive au ressort :
+    // cocher quelque chose doit se sentir sous le doigt, pas seulement se voir.
+    val background by animateColorAsState(
+        targetValue = if (checked) {
+            DayColor.GREEN.color.copy(alpha = 0.16f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+        },
+        animationSpec = tween(Motion.NORMAL),
+        label = "fond",
+    )
+    val boxColor by animateColorAsState(
+        targetValue = if (checked) DayColor.GREEN.color else Color.Transparent,
+        animationSpec = tween(Motion.NORMAL),
+        label = "case",
+    )
+    val markScale by animateFloatAsState(
+        targetValue = if (checked) 1f else 0f,
+        animationSpec = Motion.softSpring(),
+        label = "coche",
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(background)
+            .clickable(onClickLabel = prayer.label, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(boxColor)
+                .border(
+                    BorderStroke(
+                        2.dp,
+                        if (checked) Color.Transparent else MaterialTheme.colorScheme.outline,
+                    ),
+                    RoundedCornerShape(8.dp),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Default.Check,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier
+                    .size(17.dp)
+                    .graphicsLayer {
+                        // Lue dans la couche, pas dans la composition : la
+                        // coche rebondit sans rien faire remesurer.
+                        scaleX = markScale
+                        scaleY = markScale
+                        alpha = markScale
+                    },
+            )
+        }
+        Spacer(Modifier.width(14.dp))
+        Text(
+            text = prayer.label,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = if (checked) FontWeight.SemiBold else FontWeight.Normal,
         )
     }
 }

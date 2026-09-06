@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Version du schema. Affichee dans les reglages, a propos, pour savoir ce que
  * fait tourner le telephone en cas de probleme.
  */
-const val DATABASE_VERSION = 11
+const val DATABASE_VERSION = 12
 
 @Database(
     entities = [
@@ -269,6 +269,19 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Les cinq prieres du jour, en masque de bits dans une seule colonne.
+         *
+         * La colonne accepte `null`, et c'est voulu : une journee d'avant cette
+         * version n'est pas une journee sans priere, c'est une journee dont on
+         * ne sait rien. Mettre zero partout inventerait des reponses.
+         */
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE day_entries ADD COLUMN prayerMask INTEGER")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -289,6 +302,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_8_9,
                     MIGRATION_9_10,
                     MIGRATION_10_11,
+                    MIGRATION_11_12,
                 )
                 .build()
                 .also { instance = it }

@@ -86,15 +86,10 @@ fun StatsScreen(onOpenWeek: () -> Unit = {}) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
-            Spacer(Modifier.height(14.dp))
-
-            ScreenTitle(text = "Mon", accent = "bilan")
-
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(4.dp))
 
             // La semaine avant l'annee : c'est l'echelle a laquelle on se
             // souvient de quelque chose. L'annee, elle, se regarde de loin.

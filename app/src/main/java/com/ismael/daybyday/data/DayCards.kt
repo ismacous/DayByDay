@@ -96,6 +96,11 @@ enum class DayCard(
         tagCategory = TagCategory.MONEY,
         canHoldMedia = true,
     ),
+    PRAYER(
+        key = "priere",
+        title = "Prières",
+        description = "Cocher les cinq prières de la journée.",
+    ),
     MEDIA(
         key = "medias",
         title = "Photos & vidéos",

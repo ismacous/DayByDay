@@ -93,6 +93,29 @@ enum class FoodLevel(val key: Int, val label: String, val emoji: String) {
     }
 }
 
+/**
+ * Les cinq prieres du jour, dans leur ordre.
+ *
+ * Elles sont enregistrees en **masque de bits** dans une seule colonne
+ * ([DayEntry.prayerMask]) plutot qu'en cinq colonnes ou cinq lignes : c'est
+ * cinq oui-ou-non par journee, et une seule valeur suffit a les porter. Le
+ * [bit] ne doit jamais changer — c'est lui qui est ecrit dans la base.
+ */
+enum class Prayer(val key: Int, val label: String) {
+    FAJR(0, "Fajr"),
+    DHUHR(1, "Dhuhr"),
+    ASR(2, "Asr"),
+    MAGHRIB(3, "Maghrib"),
+    ISHA(4, "Isha");
+
+    val bit: Int get() = 1 shl key
+
+    companion object {
+        /** Toutes faites : les cinq bits a un. */
+        val ALL_DONE: Int = entries.fold(0) { mask, prayer -> mask or prayer.bit }
+    }
+}
+
 /** Les quatre moments d'une journee, pour nuancer une humeur qui bouge. */
 enum class DayPart(val key: Int, val label: String, val emoji: String) {
     MORNING(0, "Matin", "🌅"),
@@ -164,8 +187,26 @@ data class DayEntry(
      * lire sans rien savoir de la decoration.
      */
     val noteSpans: String = "",
+    /**
+     * Les prieres faites dans la journee, en masque de bits (voir [Prayer]).
+     * `null` tant que la carte n'a pas ete touchee : une journee ou l'on n'a
+     * rien coche n'est pas une journee ou l'on n'a rien fait, c'est une journee
+     * dont on ne sait rien.
+     */
+    val prayerMask: Int? = null,
 ) {
     val color: DayColor? get() = DayColor.fromKey(colorKey)
+
+    /** Cette priere est-elle cochee ? */
+    fun isPrayerDone(prayer: Prayer): Boolean = (prayerMask ?: 0) and prayer.bit != 0
+
+    /** Le masque une fois [prayer] cochee ou decochee. */
+    fun withPrayer(prayer: Prayer, done: Boolean): Int {
+        val current = prayerMask ?: 0
+        return if (done) current or prayer.bit else current and prayer.bit.inv()
+    }
+
+    val prayersDone: Int get() = Prayer.entries.count { isPrayerDone(it) }
 
     val sport: SportLevel? get() = SportLevel.fromKey(sportLevel)
 
@@ -213,6 +254,7 @@ data class DayEntry(
             sportLevel == null && foodLevel == null && wentOut == null && weightKg == null &&
             sleepStartMinutes == null && sleepEndMinutes == null &&
             waterGlasses == null && mealsNote.isBlank() &&
+            (prayerMask ?: 0) == 0 &&
             filledParts.isEmpty()
 
     companion object {

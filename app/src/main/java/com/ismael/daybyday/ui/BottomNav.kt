@@ -2,9 +2,8 @@ package com.ismael.daybyday.ui
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -25,7 +25,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,11 +38,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -53,28 +53,30 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ismael.daybyday.ui.theme.Brand
-import kotlinx.coroutines.launch
+import kotlin.math.PI
+import kotlin.math.sin
 
 /**
- * La barre de navigation.
+ * La barre de navigation, avec sa bille.
  *
- * Elle flotte au-dessus du contenu au lieu d'etre collee au bord : une barre
- * posee sur le fond fait partie de la page, une barre collee fait partie du
- * telephone. Et au milieu, un bouton en relief qui va droit a la journee du
- * jour — c'est ce qu'on vient faire ici neuf fois sur dix, ca ne doit pas
- * demander de chercher.
+ * Une bille de couleur se tient au-dessus de l'onglet choisi, dans une encoche
+ * creusee dans le bord haut de la barre. Quand on change d'onglet, elle ne
+ * glisse pas : elle **saute**, en suivant un arc. Un objet qui saute a un
+ * poids ; un objet qui glisse n'est qu'une tache qui se deplace. Le creux la
+ * suit, et la barre semble se deformer sous elle.
  *
- * Le choix d'un onglet ne se joue pas en deux pastilles qui se croisent, l'une
- * qui s'eteint et l'autre qui s'allume : **une seule** pastille glisse de l'un
- * a l'autre. C'est toute la difference — un objet qui se deplace se suit du
- * regard, deux objets qui clignotent se subissent. L'icone choisie se souleve
- * d'un cheveu au passage, et son nom prend du poids.
+ * Trois precautions, toutes apprises en les cassant ailleurs dans
+ * l'application :
  *
- * Les quatre onglets occupent des largeurs **egales** et fixes. Ce n'est pas un
- * detail de mise en page : c'est ce qui permet a la pastille de n'avoir qu'un
- * seul mouvement a jouer, un glissement. Des largeurs qui changent avec le
- * texte l'obligeraient a se redimensionner en meme temps, et la mesure serait
- * refaite a chaque image.
+ * 1. La forme de la barre change a chaque image pendant le saut. Elle est donc
+ *    posee dans un `graphicsLayer` : le bloc est rejoue sans recomposer ni
+ *    remesurer quoi que ce soit.
+ * 2. La bille se deplace en `translation`, pas en changeant de position dans la
+ *    mise en page.
+ * 3. Les positions des onglets sont mesurees en coordonnees d'ecran, et la
+ *    barre note les siennes : c'est la difference des deux qui donne la
+ *    position dans la barre. Mesurer « par rapport au parent » se trompe des
+ *    qu'une marge s'intercale.
  */
 @Composable
 fun FloatingNavBar(
@@ -84,109 +86,122 @@ fun FloatingNavBar(
     onToday: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // La position et la largeur de chaque onglet, mesurees par la mise en page.
-    // Elles sont notees **en coordonnees d'ecran**, et la barre note aussi les
-    // siennes : c'est la soustraction des deux qui donne la position dans la
-    // barre. Mesurer « par rapport au parent » aurait ete plus court, mais le
-    // parent d'un onglet n'est pas la surface qu'on peint — une marge entre les
-    // deux, et la pastille se retrouve decalee sans qu'on comprenne pourquoi.
-    val slots = remember { mutableStateMapOf<String, ClosedFloatingPointRange<Float>>() }
+    val slots = remember { mutableStateMapOf<String, Float>() }
     var barOrigin by remember { mutableFloatStateOf(0f) }
-    val indicatorX = remember { Animatable(0f) }
-    val indicatorWidth = remember { Animatable(0f) }
-    val indicatorColor = MaterialTheme.colorScheme.primaryContainer
+
+    // Le saut est une seule valeur, de 0 a 1 : la position horizontale
+    // s'interpole entre le depart et l'arrivee, et la hauteur suit un demi-tour
+    // de sinus — haute au milieu du trajet, nulle aux deux bouts. C'est ce qui
+    // fait l'arc.
+    val jump = remember { Animatable(1f) }
+    var fromX by remember { mutableFloatStateOf(Float.NaN) }
+    var toX by remember { mutableFloatStateOf(Float.NaN) }
 
     val target = currentRoute?.let { slots[it] }
     LaunchedEffect(target) {
-        if (target == null) return@LaunchedEffect
-        val x = target.start
-        val width = target.endInclusive - target.start
-        if (indicatorWidth.value == 0f) {
-            // Premiere mesure : la pastille se pose, elle ne glisse pas depuis
-            // le bord gauche de l'ecran.
-            indicatorX.snapTo(x)
-            indicatorWidth.snapTo(width)
+        val destination = target ?: return@LaunchedEffect
+        if (toX.isNaN()) {
+            // Premiere mesure : la bille se pose, elle n'arrive pas du bord.
+            fromX = destination
+            toX = destination
+            jump.snapTo(1f)
         } else {
-            launch {
-                indicatorX.animateTo(
-                    x,
-                    spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow),
-                )
-            }
-            launch {
-                indicatorWidth.animateTo(width, spring(stiffness = Spring.StiffnessMediumLow))
-            }
+            fromX = toX
+            toX = destination
+            jump.snapTo(0f)
+            jump.animateTo(1f, tween(durationMillis = 420, easing = FastOutSlowInEasing))
         }
     }
 
-    Surface(
+    val barColor = MaterialTheme.colorScheme.surface
+    val ballColors = Brand.gradient
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            // La barre du telephone passe par-dessus la notre : sans cette
-            // marge, on n'atteint que le haut des boutons. C'est le genre de
-            // detail qui rend une belle barre inutilisable.
             .navigationBarsPadding()
-            .padding(horizontal = 14.dp, vertical = 8.dp)
-            .brandShadow(elevation = 18.dp, shape = CircleShape),
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surface,
+            .padding(horizontal = 14.dp, bottom = 8.dp, top = BALL_OVERHANG),
     ) {
+        fun ballCenterX(): Float =
+            if (toX.isNaN()) Float.NaN else fromX + (toX - fromX) * jump.value
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(66.dp)
+                .height(BAR_HEIGHT)
+                .align(Alignment.BottomCenter)
                 .onGloballyPositioned { barOrigin = it.positionInRoot().x }
-                // La pastille est **dessinee**, pas posee : la valeur animee
-                // n'est donc lue que dans le dessin. Rien n'est recompose, rien
-                // n'est remesure, il ne reste qu'une forme a repeindre — et
-                // c'est ce qui fait la difference entre un glissement fluide et
-                // un glissement qui accroche.
-                .drawBehind {
-                    val width = indicatorWidth.value
-                    if (width <= 0f) return@drawBehind
-                    val height = 48.dp.toPx()
-                    drawRoundRect(
-                        color = indicatorColor,
-                        topLeft = Offset(
-                            indicatorX.value - barOrigin,
-                            (size.height - height) / 2f,
-                        ),
-                        size = Size(width, height),
-                        cornerRadius = CornerRadius(height / 2f, height / 2f),
+                .graphicsLayer {
+                    // La forme est relue ici, dans la couche : l'encoche peut
+                    // donc se deplacer a chaque image sans qu'aucune mesure ne
+                    // soit refaite.
+                    val center = ballCenterX()
+                    shape = NotchedBarShape(
+                        notchCenterX = if (center.isNaN()) Float.NaN else center - barOrigin,
+                        notchRadius = (BALL_RADIUS + NOTCH_MARGIN).toPx(),
                     )
-                },
-            contentAlignment = Alignment.Center,
+                    clip = true
+                    shadowElevation = 18.dp.toPx()
+                    ambientShadowColor = Brand.Primary.copy(alpha = 0.35f)
+                    spotShadowColor = Brand.Primary.copy(alpha = 0.45f)
+                }
+                .background(barColor),
+        )
+
+        // La bille, dessinee **avant** la rangee d'onglets : quand elle passe au
+        // milieu, elle glisse derriere le bouton du jour au lieu de lui rentrer
+        // dedans.
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(bottom = BAR_HEIGHT - BALL_RADIUS)
+                .size(BALL_RADIUS * 2)
+                .graphicsLayer {
+                    val center = ballCenterX()
+                    if (center.isNaN()) {
+                        alpha = 0f
+                        return@graphicsLayer
+                    }
+                    alpha = 1f
+                    translationX = center - barOrigin - BALL_RADIUS.toPx()
+                    // L'arc : un demi-sinus, nul au depart et a l'arrivee.
+                    translationY = -BALL_ARC.toPx() * sin(PI * jump.value).toFloat()
+                }
+                .clip(CircleShape)
+                .background(Brush.linearGradient(ballColors)),
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(BAR_HEIGHT)
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                val half = items.size / 2
+            val half = items.size / 2
 
-                items.take(half).forEach { item ->
-                    NavTab(
-                        item = item,
-                        selected = currentRoute == item.route,
-                        onClick = { onSelect(item.route) },
-                        onBounds = { start, end -> slots[item.route] = start..end },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+            items.take(half).forEach { item ->
+                NavTab(
+                    item = item,
+                    selected = currentRoute == item.route,
+                    onClick = { onSelect(item.route) },
+                    onCenter = { x -> slots[item.route] = x },
+                    modifier = Modifier.weight(1f),
+                )
+            }
 
-                TodayButton(onClick = onToday)
+            TodayButton(onClick = onToday)
 
-                items.drop(half).forEach { item ->
-                    NavTab(
-                        item = item,
-                        selected = currentRoute == item.route,
-                        onClick = { onSelect(item.route) },
-                        onBounds = { start, end -> slots[item.route] = start..end },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+            items.drop(half).forEach { item ->
+                NavTab(
+                    item = item,
+                    selected = currentRoute == item.route,
+                    onClick = { onSelect(item.route) },
+                    onCenter = { x -> slots[item.route] = x },
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
     }
@@ -194,20 +209,78 @@ fun FloatingNavBar(
 
 data class NavItem(val route: String, val label: String, val icon: ImageVector)
 
+/** Hauteur de la barre elle-meme, sans ce qui depasse au-dessus. */
+private val BAR_HEIGHT = 64.dp
+
+private val BALL_RADIUS = 21.dp
+
+/** Ce que la bille laisse depasser au-dessus du bord de la barre. */
+private val BALL_OVERHANG = 22.dp
+
+/** Hauteur du sommet de l'arc pendant le saut. */
+private val BALL_ARC = 26.dp
+
+/** L'air entre la bille et le bord de l'encoche. */
+private val NOTCH_MARGIN = 5.dp
+
+/**
+ * La barre : un rectangle a bouts ronds, moins un disque mordu dans son bord
+ * haut. Le disque est retire par difference de chemins — c'est ce qui donne le
+ * creux, et non un simple cercle pose par-dessus, qui laisserait un bord.
+ */
+private class NotchedBarShape(
+    private val notchCenterX: Float,
+    private val notchRadius: Float,
+) : androidx.compose.ui.graphics.Shape {
+
+    override fun createOutline(
+        size: androidx.compose.ui.geometry.Size,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+        density: androidx.compose.ui.unit.Density,
+    ): androidx.compose.ui.graphics.Outline {
+        val bar = Path().apply {
+            addRoundRect(
+                androidx.compose.ui.geometry.RoundRect(
+                    rect = Rect(0f, 0f, size.width, size.height),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                        size.height / 2f,
+                        size.height / 2f,
+                    ),
+                )
+            )
+        }
+        if (notchCenterX.isNaN()) {
+            return androidx.compose.ui.graphics.Outline.Generic(bar)
+        }
+
+        val notch = Path().apply {
+            addOval(
+                Rect(
+                    left = notchCenterX - notchRadius,
+                    top = -notchRadius,
+                    right = notchCenterX + notchRadius,
+                    bottom = notchRadius,
+                )
+            )
+        }
+        val result = Path().apply { op(bar, notch, PathOperation.Difference) }
+        return androidx.compose.ui.graphics.Outline.Generic(result)
+    }
+}
+
 /**
  * Un onglet : son dessin et son nom, l'un au-dessus de l'autre.
  *
- * Le nom est toujours la. Le faire apparaitre seulement quand l'onglet est
- * choisi obligeait la barre a changer de largeurs pendant l'animation, et donc
- * la pastille a courir apres une cible qui bouge. Quatre noms visibles en
- * permanence, c'est aussi quatre destinations qu'on n'a pas a deviner.
+ * Le dessin de l'onglet choisi s'efface : c'est la bille qui le remplace
+ * au-dessus. Le nom, lui, reste et prend du poids — sans quoi on ne saurait
+ * plus ce que la bille designe.
  */
 @Composable
 private fun NavTab(
     item: NavItem,
     selected: Boolean,
     onClick: () -> Unit,
-    onBounds: (Float, Float) -> Unit,
+    onCenter: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -215,36 +288,28 @@ private fun NavTab(
 
     val content by animateColorAsState(
         targetValue = if (selected) {
-            MaterialTheme.colorScheme.onPrimaryContainer
+            MaterialTheme.colorScheme.primary
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant
         },
         animationSpec = tween(Motion.NORMAL),
         label = "contenu",
     )
-    // Le dessin se souleve quand on le choisit, et s'enfonce sous le doigt. Les
-    // deux valeurs ne servent qu'a la couche graphique : elles ne coutent aucun
-    // recalcul de mise en page.
-    val lift = animateFloatAsState(
-        targetValue = if (selected) -3f else 0f,
-        animationSpec = Motion.softSpring(),
-        label = "elevation",
+    val iconAlpha = animateFloatAsState(
+        targetValue = if (selected) 0f else 1f,
+        animationSpec = tween(Motion.NORMAL),
+        label = "dessin",
     )
     val scale = animateFloatAsState(
-        targetValue = when {
-            pressed -> 0.88f
-            selected -> 1.08f
-            else -> 1f
-        },
+        targetValue = if (pressed) 0.88f else 1f,
         animationSpec = Motion.softSpring(),
-        label = "taille",
+        label = "pression",
     )
 
     Column(
         modifier = modifier
             .onGloballyPositioned { coordinates ->
-                val start = coordinates.positionInRoot().x
-                onBounds(start, start + coordinates.size.width)
+                onCenter(coordinates.positionInRoot().x + coordinates.size.width / 2f)
             }
             .clip(CircleShape)
             .clickable(
@@ -263,7 +328,7 @@ private fun NavTab(
             modifier = Modifier
                 .size(22.dp)
                 .graphicsLayer {
-                    translationY = lift.value.dp.toPx()
+                    alpha = iconAlpha.value
                     scaleX = scale.value
                     scaleY = scale.value
                 },
@@ -292,25 +357,20 @@ private fun TodayButton(onClick: () -> Unit) {
         label = "pression",
     )
 
-    // Pas d'animation de fond ici. Un anneau qui pulse ressemblait a une
-    // notification, un degrade qui tourne attirait l'oeil en permanence : ce
-    // bouton n'a rien a annoncer, il doit juste etre le plus evident de la
-    // barre. Un degrade fixe, en diagonale, y suffit — c'est le degrade de
-    // l'application, et il reste le seul de la barre.
-    val sweep = Brush.linearGradient(
-        colors = Brand.gradient,
-        start = Offset(0f, 0f),
-        end = Offset(140f, 140f),
-    )
-
     Box(
         modifier = Modifier
             .padding(horizontal = 6.dp)
-            .size(56.dp)
+            .size(54.dp)
             .scale(scale)
-            .brandShadow(elevation = 18.dp, shape = CircleShape)
+            .brandShadow(elevation = 14.dp, shape = CircleShape)
             .clip(CircleShape)
-            .background(sweep)
+            .background(
+                Brush.linearGradient(
+                    colors = Brand.gradient,
+                    start = Offset(0f, 0f),
+                    end = Offset(140f, 140f),
+                )
+            )
             .clickable(
                 interactionSource = interaction,
                 indication = null,
@@ -323,7 +383,7 @@ private fun TodayButton(onClick: () -> Unit) {
             imageVector = Icons.Default.Add,
             contentDescription = "Ma journée d'aujourd'hui",
             tint = Color.White,
-            modifier = Modifier.size(28.dp),
+            modifier = Modifier.size(26.dp),
         )
     }
 }

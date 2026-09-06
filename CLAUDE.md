@@ -66,6 +66,26 @@ téléphone (Samsung S25, Android 15).
   automatique. Reste la cause qui n'est pas dans le code : Samsung endort les
   applications, d'où la ligne « Mise en veille par Android » et le rappel
   d'essai dans les Réglages.
+- **Titre des onglets** : il vit **au-dessus** du `NavHost` (`TabHeader` dans
+  `AppNavigation`), pas dans chaque écran. Avant, passer du bilan à l'argent
+  détruisait « Mon bilan » pour reconstruire « Mon argent » et tout l'en-tête
+  clignotait, alors que les deux commencent par le même mot au même endroit.
+  `MorphingTitle` anime chaque mot séparément : « Mon » ne bouge pas du tout.
+  Conséquence : les écrans d'onglet ne portent **ni titre ni
+  `statusBarsPadding`** — l'en-tête s'en charge. Les écrans qui s'ouvrent
+  par-dessus (journée, journal, recherche, semaine) gardent les leurs.
+- **Barre du bas** : une bille saute en arc jusqu'à l'onglet choisi, et une
+  encoche la suit dans le bord haut de la barre. La forme de la barre change à
+  chaque image : elle est donc posée dans un `graphicsLayer` (voir « animations
+  saccadées »). Le creux est une **différence de chemins**, pas un cercle posé
+  par-dessus. Une conséquence connue : Android ne sait pas projeter d'ombre
+  depuis un contour non convexe, donc la barre n'en a pas.
+- **Prières** : cinq oui-ou-non par journée, rangés en **masque de bits** dans
+  une seule colonne (`DayEntry.prayerMask`, migration 11→12). Les `bit` de
+  `Prayer` ne doivent jamais changer : c'est eux qui sont écrits. La colonne
+  accepte `null`, et ça compte — une journée d'avant cette version n'est pas une
+  journée sans prière, c'est une journée dont on ne sait rien. Testé dans
+  `PrayerTest`.
 - **Recherche** : elle croise le texte, la couleur, ce qu'on a fait et les
   étiquettes (`data/DaySearch.kt`, testé dans `DaySearchTest`). Deux règles de
   sens : plusieurs couleurs se lisent « ou », plusieurs étiquettes « et ». Et un

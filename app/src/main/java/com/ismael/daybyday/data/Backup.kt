@@ -109,6 +109,7 @@ object Backup {
                     .put("waterGlasses", day.waterGlasses ?: JSONObject.NULL)
                     .put("mealsNote", day.mealsNote)
                     .put("noteSpans", day.noteSpans)
+                    .put("prayerMask", day.prayerMask ?: JSONObject.NULL)
             )
         }
         root.put("days", daysJson)
@@ -338,6 +339,10 @@ object Backup {
                         waterGlasses = item.optIntOrNull("waterGlasses"),
                         mealsNote = item.optString("mealsNote", ""),
                         noteSpans = item.optString("noteSpans", ""),
+                        // Absent des sauvegardes d'avant les prieres : la
+                        // journee revient alors sans rien de coche, ce qui est
+                        // exactement ce qu'elle etait.
+                        prayerMask = item.optIntOrNull("prayerMask"),
                     )
                 }
 

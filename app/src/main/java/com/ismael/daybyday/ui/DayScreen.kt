@@ -3,6 +3,18 @@ package com.ismael.daybyday.ui
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -83,6 +95,7 @@ import com.ismael.daybyday.data.MediaItem
 import com.ismael.daybyday.data.MediaKind
 import com.ismael.daybyday.data.Memory
 import com.ismael.daybyday.data.MoneyEntry
+import com.ismael.daybyday.data.Prayer
 import com.ismael.daybyday.data.RichText
 import com.ismael.daybyday.data.SportLevel
 import com.ismael.daybyday.data.Treatment
@@ -155,6 +168,7 @@ fun DayScreen(
     var sleepFromDevice by remember { mutableStateOf(false) }
     var waterGlasses by remember { mutableStateOf<Int?>(null) }
     var mealsNote by remember { mutableStateOf("") }
+    var prayerMask by remember { mutableStateOf<Int?>(null) }
     var editingTreatment by remember { mutableStateOf<Treatment?>(null) }
     var creatingTreatment by remember { mutableStateOf(false) }
 
@@ -201,6 +215,7 @@ fun DayScreen(
         partEvening = parts[DayPart.EVENING],
         partNight = parts[DayPart.NIGHT],
         colorManual = colorManual,
+        prayerMask = prayerMask,
     )
 
     /** Applique la couleur d'un moment, puis recalcule la couleur du jour. */
@@ -231,6 +246,7 @@ fun DayScreen(
         sleepFromDevice = entry?.sleepFromDevice ?: false
         waterGlasses = entry?.waterGlasses
         mealsNote = entry?.mealsNote.orEmpty()
+        prayerMask = entry?.prayerMask
         loadedFor = epochDay
     }
 
@@ -461,10 +477,12 @@ fun DayScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
-                                DayColor.entries.forEach { dayColor ->
+                                DayColor.entries.forEachIndexed { index, dayColor ->
                                     ColorChoice(
                                         dayColor = dayColor,
                                         selected = colorKey == dayColor.key,
+                                        anySelected = colorKey != null,
+                                        index = index,
                                         onClick = {
                                             if (colorKey == dayColor.key && colorManual) {
                                                 colorManual = false
@@ -642,6 +660,14 @@ fun DayScreen(
                                 },
                                 onEdit = { editingTreatment = it },
                                 onAdd = { creatingTreatment = true },
+                            )
+                        }
+                        DayCard.PRAYER -> {
+                            PrayerCardBody(
+                                mask = prayerMask,
+                                onToggle = { prayer, done ->
+                                    prayerMask = currentEntry(epochDay).withPrayer(prayer, done)
+                                },
                             )
                         }
                         DayCard.SOCIAL, DayCard.WORK -> {
@@ -1052,104 +1078,152 @@ private fun PartRow(part: DayPart, selectedKey: Int?, onPick: (Int?) -> Unit) {
     }
 }
 
+/**
+ * Une des quatre couleurs de la journee.
+ *
+ * C'est le geste principal de l'application : il devait cesser d'etre quatre
+ * carres immobiles. Quatre choses s'y jouent, et aucune n'est decorative.
+ *
+ * - **L'arrivee en cascade.** Les tuiles montent l'une apres l'autre, a
+ *   soixante millisecondes d'ecart. L'ecran se deploie au lieu d'apparaitre.
+ * - **Le relief.** Une lumiere en haut a gauche et une ombre teintee de la
+ *   couleur : la tuile a une epaisseur, elle n'est pas un aplat colle.
+ * - **Le choix qui se sent.** La tuile choisie se souleve, grandit, et les
+ *   trois autres reculent — elles palissent et se retrecissent. On voit ce
+ *   qu'on a choisi sans avoir a chercher une coche.
+ * - **Le reflet.** Un trait de lumiere traverse lentement la tuile choisie, en
+ *   boucle. C'est ce qui la rend vivante plutot que simplement allumee, et il
+ *   ne dit rien — contrairement a un clignotement, qui aurait l'air d'annoncer
+ *   quelque chose.
+ *
+ * Tout est lu dans la couche graphique ou dans le dessin, jamais dans la
+ * composition : rien n'est remesure pendant que ca bouge.
+ */
 @Composable
 private fun ColorChoice(
     dayColor: DayColor,
     selected: Boolean,
+    anySelected: Boolean,
+    index: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val border = cardInk()
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(index * 60L)
+        entered = true
+    }
+    val entrance = animateFloatAsState(
+        targetValue = if (entered) 1f else 0f,
+        animationSpec = Motion.softSpring(),
+        label = "arrivee",
+    )
+
+    val lift = animateFloatAsState(
+        targetValue = when {
+            pressed -> 0.92f
+            selected -> 1.10f
+            anySelected -> 0.93f
+            else -> 1f
+        },
+        animationSpec = Motion.softSpring(),
+        label = "relief",
+    )
+    val presence = animateFloatAsState(
+        targetValue = if (!anySelected || selected) 1f else 0.5f,
+        animationSpec = tween(Motion.NORMAL),
+        label = "presence",
+    )
+
+    // Le reflet ne tourne que sur la tuile choisie : trois reflets qui passent
+    // en meme temps feraient une vitrine, pas un choix.
+    val shine = if (selected) {
+        val loop = rememberInfiniteTransition(label = "reflet")
+        loop.animateFloat(
+            initialValue = -0.4f,
+            targetValue = 1.4f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(2600, delayMillis = 900, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+            label = "passage",
+        )
+    } else {
+        null
+    }
+
+    val shape = RoundedCornerShape(22.dp)
+    val markScale = animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
+        animationSpec = Motion.softSpring(),
+        label = "coche",
+    )
+
     Box(
         modifier = modifier
             .aspectRatio(1f)
-            .brandShadow(elevation = 8.dp, shape = RoundedCornerShape(20.dp), color = dayColor.color)
-            .clip(RoundedCornerShape(20.dp))
+            .graphicsLayer {
+                val appear = entrance.value
+                alpha = appear * presence.value
+                translationY = (1f - appear) * 26.dp.toPx()
+                val grow = appear * lift.value
+                scaleX = grow
+                scaleY = grow
+            }
+            .brandShadow(elevation = 10.dp, shape = shape, color = dayColor.color)
+            .clip(shape)
             .background(Brush.linearGradient(dayColor.gradient))
-            .border(
-                BorderStroke(
-                    if (selected) 3.dp else 0.dp,
-                    if (selected) border else Color.Transparent,
-                ),
-                RoundedCornerShape(20.dp),
+            .drawWithContent {
+                // La lumiere du coin haut-gauche : c'est elle qui donne
+                // l'epaisseur. Sans elle, la tuile est un timbre.
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color.White.copy(alpha = 0.34f), Color.Transparent),
+                        center = Offset(size.width * 0.24f, size.height * 0.18f),
+                        radius = size.width * 0.8f,
+                    ),
+                    radius = size.width * 0.8f,
+                    center = Offset(size.width * 0.24f, size.height * 0.18f),
+                )
+                drawContent()
+                val pass = shine?.value
+                if (pass != null) {
+                    val x = size.width * pass
+                    drawRect(
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.White.copy(alpha = 0.42f),
+                                Color.Transparent,
+                            ),
+                            start = Offset(x - size.width * 0.3f, 0f),
+                            end = Offset(x + size.width * 0.3f, size.height),
+                        )
+                    )
+                }
+            }
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                onClickLabel = dayColor.label,
+                onClick = onClick,
             )
-            .clickable(onClick = onClick)
             .testTag("color-${dayColor.name}"),
         contentAlignment = Alignment.Center,
     ) {
-        if (selected) {
-            Icon(
-                Icons.Default.Check,
-                contentDescription = "Sélectionné",
-                tint = readableOn(dayColor.color),
-            )
-        }
-    }
-}
-
-/**
- * Le meme jour, il y a un an — ou deux, ou cinq.
- *
- * Une seule regle de conception ici, et c'est celle qui fait la difference
- * entre un plaisir et une nuisance : **la carte n'existe que s'il y a quelque
- * chose**. Pas de « rien noté il y a un an », pas de cadre vide. Quand elle
- * apparait, c'est qu'il y a une couleur, un mot ou une photo, et un appui
- * emmene directement sur cette journee-la.
- *
- * Elle reste volontairement basse de ton : une ligne, une pastille de couleur,
- * une vignette. Ce n'est pas ce qu'on est venu faire — c'est un cadeau au
- * passage.
- */
-@Composable
-private fun MemoryCard(memory: Memory, onOpen: () -> Unit) {
-    val entry = memory.entry
-    val preview = entry.title.ifBlank { entry.note }.trim().replace('\n', ' ')
-
-    SoftCard(onClick = onOpen, onClickLabel = "Ouvrir cette journée", padding = 12.dp) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            memory.photo?.let { photo ->
-                MediaThumb(
-                    item = photo,
-                    onClick = onOpen,
-                    modifier = Modifier.size(56.dp),
-                )
-                Spacer(Modifier.width(12.dp))
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    entry.color?.let { dayColor ->
-                        ColorDot(color = dayColor.color, size = 9.dp)
-                        Spacer(Modifier.width(7.dp))
-                    }
-                    Text(
-                        text = if (memory.yearsAgo == 1) "Il y a un an" else "Il y a ${memory.yearsAgo} ans",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = if (preview.isBlank()) {
-                        // Il y a forcement quelque chose, sinon la carte
-                        // n'existerait pas : ici, ce sont les photos.
-                        Dates.dayLong(memory.date)
-                    } else {
-                        preview
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Icon(
-                Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp),
-            )
-        }
+        Icon(
+            Icons.Default.Check,
+            contentDescription = if (selected) "Sélectionné" else null,
+            tint = readableOn(dayColor.color),
+            modifier = Modifier.graphicsLayer {
+                scaleX = markScale.value
+                scaleY = markScale.value
+                alpha = markScale.value
+            },
+        )
     }
 }
 

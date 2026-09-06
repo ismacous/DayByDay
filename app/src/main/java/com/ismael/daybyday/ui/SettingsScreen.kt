@@ -263,15 +263,12 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
                 .padding(bottom = innerPadding.calculateBottomPadding())
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
-            Spacer(Modifier.height(12.dp))
-            ScreenTitle(text = "Mes", accent = "réglages")
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(4.dp))
 
             // La carte forte de l'ecran, et elle ne dit qu'une chose : rien ne
             // sort du telephone. C'est la promesse de l'application, elle merite

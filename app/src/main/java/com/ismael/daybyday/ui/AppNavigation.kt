@@ -6,9 +6,12 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -22,6 +25,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import com.ismael.daybyday.dayByDayApp
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -99,13 +104,29 @@ fun AppNavigation(
         // qui s'ouvrent par-dessus gerent leurs propres marges : l'appliquer
         // ici aussi laissait une bande vide sous eux, et une deuxieme quand le
         // clavier s'ouvrait.
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(
                     bottom = if (showTabs) scaffoldPadding.calculateBottomPadding() else 0.dp
                 ),
         ) {
+            // Le titre vit ici, **au-dessus** de la navigation, et pas dans
+            // chaque ecran : passer d'un onglet a l'autre ne le detruit donc
+            // pas. Seuls les mots qui changent sont animes, et « Mon » ne bouge
+            // pas entre le bilan et l'argent.
+            if (showTabs) {
+                TabHeader(
+                    route = currentRoute,
+                    firstName = LocalContext.current.dayByDayApp.prefs.firstName.trim(),
+                    onOpenSearch = { navController.navigate("search") },
+                    modifier = Modifier
+                        .statusBarsPadding()
+                        .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 10.dp),
+                )
+            }
+
+            Box(modifier = Modifier.weight(1f)) {
             // Les ecrans ne se remplacent plus d'un coup : celui qui arrive
             // monte en apparaissant, celui qui part s'efface. Un basculement
             // brut donne l'impression de changer d'application ; un fondu
@@ -130,7 +151,6 @@ fun AppNavigation(
                         month = indexToMonth(monthIndex),
                         onMonthChange = { monthIndex = it.toIndex() },
                         onDayClick = { date -> navController.navigate("day/${date.toEpochDay()}") },
-                        onOpenSearch = { navController.navigate("search") },
                         onOpenYear = { year ->
                             yearShown = year
                             navController.navigate("year")
@@ -209,8 +229,50 @@ fun AppNavigation(
                     )
                 }
             }
+            }
         }
     }
+}
+
+/**
+ * L'en-tete des quatre onglets. Il ne change que de mots.
+ *
+ * Le bouton de recherche n'appartient qu'au calendrier : c'est la qu'on se dit
+ * « c'etait quand, deja ». Le mettre partout ferait une barre d'outils, et une
+ * barre d'outils n'accueille personne.
+ */
+@Composable
+private fun TabHeader(
+    route: String?,
+    firstName: String,
+    onOpenSearch: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val today = LocalDate.now()
+    val (text, accent) = when (route) {
+        "stats" -> "Mon" to "bilan"
+        "money" -> "Mon" to "argent"
+        "settings" -> "Mes" to "réglages"
+        else -> if (firstName.isEmpty()) "Mon" to "carnet" else "Salut" to firstName
+    }
+
+    MorphingTitle(
+        text = text,
+        accent = accent,
+        modifier = modifier,
+        subtitle = if (route == "calendar") Dates.dayLong(today) else null,
+        trailing = if (route == "calendar") {
+            {
+                RoundIconButton(
+                    icon = Icons.Default.Search,
+                    label = "Rechercher",
+                    onClick = onOpenSearch,
+                )
+            }
+        } else {
+            null
+        },
+    )
 }
 
 /** Change d'onglet sans empiler les destinations les unes sur les autres. */

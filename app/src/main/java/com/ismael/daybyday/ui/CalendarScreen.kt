@@ -71,7 +71,6 @@ fun CalendarScreen(
     month: YearMonth,
     onMonthChange: (YearMonth) -> Unit,
     onDayClick: (LocalDate) -> Unit,
-    onOpenSearch: () -> Unit,
     onOpenYear: (Int) -> Unit,
 ) {
     val app = LocalContext.current.dayByDayApp
@@ -100,39 +99,16 @@ fun CalendarScreen(
     }
     val monthSummary = Stats.summarize(Dates.monthTitle(month), monthEntries, month.lengthOfMonth())
 
-    // Le titre se lit en deux voix : le bonjour en sans-serif, le prenom en
-    // serif italique. C'est la signature typographique de l'application, et
-    // c'est aussi ce qui rend l'accueil personnel plutot qu'administratif.
-    val name = app.prefs.firstName.trim()
-    val greeting = if (name.isEmpty()) "Mon" else "Salut"
-    val accentWord = if (name.isEmpty()) "carnet" else name
-
-    // Pas de barre d'application ici : on n'arrive pas dans un outil, on
-    // ouvre son carnet. Le nom et la date tiennent lieu d'accueil.
+    // Pas de barre d'application ici, et plus de titre non plus : il vit
+    // au-dessus de la navigation pour survivre au changement d'onglet.
     ScreenBackground(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
-            Spacer(Modifier.height(14.dp))
-
-            ScreenTitle(
-                text = greeting,
-                accent = accentWord,
-                subtitle = Dates.dayLong(today),
-                trailing = {
-                    RoundIconButton(
-                        icon = Icons.Default.Search,
-                        label = "Rechercher",
-                        onClick = onOpenSearch,
-                    )
-                },
-            )
-
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(4.dp))
 
             Appear(index = 0) {
             TodayCard(

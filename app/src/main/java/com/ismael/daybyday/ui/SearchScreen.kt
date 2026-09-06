@@ -104,7 +104,7 @@ fun SearchScreen(
         dayTags.groupBy({ it.epochDay }, { it.tagId }).mapValues { it.value.toSet() }
     }
     val results = remember(allDays, filter, tagsByDay, mediaCounts) {
-        DaySearch.apply(allDays, filter, tagsByDay, mediaCounts)
+        DaySearch.matching(allDays, filter, tagsByDay, mediaCounts)
     }
 
     ScreenBackground(modifier = Modifier.fillMaxSize()) {
@@ -169,11 +169,14 @@ fun SearchScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                SoftChip("🏃 Bougé", moved) { moved = !moved }
-                SoftChip("🚪 Sorti", wentOut) { wentOut = !wentOut }
-                SoftChip("🥗 Bien mangé", ateWell) { ateWell = !ateWell }
-                SoftChip("📷 Avec photo", withPhoto) { withPhoto = !withPhoto }
-                SoftChip("✍️ Écrit", withText) { withText = !withText }
+                // `onClick` est nomme, et il faut qu'il le reste : le dernier
+                // parametre de SoftChip est le dessin optionnel, donc des
+                // accolades a la fin s'y rattacheraient au lieu du clic.
+                SoftChip("🏃 Bougé", moved, onClick = { moved = !moved })
+                SoftChip("🚪 Sorti", wentOut, onClick = { wentOut = !wentOut })
+                SoftChip("🥗 Bien mangé", ateWell, onClick = { ateWell = !ateWell })
+                SoftChip("📷 Avec photo", withPhoto, onClick = { withPhoto = !withPhoto })
+                SoftChip("✍️ Écrit", withText, onClick = { withText = !withText })
                 if (allTags.isNotEmpty()) {
                     SoftChip(
                         label = if (tagIds.isEmpty()) {

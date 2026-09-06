@@ -47,7 +47,7 @@ object DaySearch {
      * capable de croiser huit criteres facultatifs serait illisible pour un
      * gain nul.
      */
-    fun apply(
+    fun matching(
         days: List<DayEntry>,
         filter: SearchFilter,
         tagsByDay: Map<Long, Set<Long>>,

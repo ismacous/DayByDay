@@ -45,7 +45,7 @@ class DaySearchTest {
         filter: SearchFilter,
         tags: Map<Long, Set<Long>> = emptyMap(),
         media: Map<Long, Int> = emptyMap(),
-    ) = DaySearch.apply(days, filter, tags, media)
+    ) = DaySearch.matching(days, filter, tags, media)
 
     @Test
     fun `sans critere, on ne renvoie rien`() {

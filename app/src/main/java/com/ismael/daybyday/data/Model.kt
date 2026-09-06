@@ -212,6 +212,14 @@ data class DayEntry(
      * « je n'ai pas rempli » n'en est pas une.
      */
     val jobApplications: Int? = null,
+    /**
+     * Le rendez-vous medical du jour : chez qui, pour quoi.
+     *
+     * Cocher « rendez-vous médical » disait qu'il y en avait eu un, ce qui ne
+     * sert a rien six mois plus tard quand on cherche lequel. Le texte, lui,
+     * se retrouve par la recherche.
+     */
+    val medicalNote: String = "",
 ) {
     val color: DayColor? get() = DayColor.fromKey(colorKey)
 
@@ -272,6 +280,7 @@ data class DayEntry(
             sportLevel == null && foodLevel == null && wentOut == null && weightKg == null &&
             sleepStartMinutes == null && sleepEndMinutes == null &&
             waterGlasses == null && mealsNote.isBlank() && snackNote.isBlank() &&
+            medicalNote.isBlank() &&
             (prayerMask ?: 0) == 0 && jobApplications == null &&
             filledParts.isEmpty()
 

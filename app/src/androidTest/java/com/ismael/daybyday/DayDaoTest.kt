@@ -224,7 +224,7 @@ class DayDaoTest {
         // Une etiquette de l'ancienne version, sans identifiant stable,
         // rattachee a une journee.
         val epochDay = LocalDate.of(2026, 9, 12).toEpochDay()
-        val oldId = dao.insertTag(Tag(name = "Travail", emoji = "💼", sortOrder = 5))
+        val oldId = dao.insertTag(Tag(name = "Copine", emoji = "💬", sortOrder = 5))
         dao.upsertDay(DayEntry(epochDay = epochDay))
         dao.linkTag(DayTagCrossRef(epochDay = epochDay, tagId = oldId))
 
@@ -235,11 +235,11 @@ class DayDaoTest {
         assertEquals(TagCatalog.tags.size, tags.size)
         assertEquals(0, tags.count { it.slug == null })
 
-        // L'ancienne "Travail" est devenue "Recherche d'emploi" en gardant son id,
-        // donc la journee reste marquee.
-        val renamed = tags.first { it.slug == "job_search" }
+        // L'ancienne "Copine" est devenue "Ma moitié" en gardant son id, donc
+        // la journee reste marquee.
+        val renamed = tags.first { it.slug == "girlfriend" }
         assertEquals(oldId, renamed.id)
-        assertEquals("Recherche d'emploi", renamed.name)
+        assertEquals("Ma moitié", renamed.name)
         assertEquals(1, dao.tagCountForDay(epochDay))
     }
 

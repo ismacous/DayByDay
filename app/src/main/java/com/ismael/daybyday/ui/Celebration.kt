@@ -1,7 +1,6 @@
 package com.ismael.daybyday.ui
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -16,18 +15,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -35,77 +33,69 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.rememberLottieComposition
+import com.ismael.daybyday.R
+import com.ismael.daybyday.data.Badge
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
-import kotlin.math.cos
 import kotlin.math.sin
-import kotlin.random.Random
 
 /**
- * Le moment ou quelque chose est fini.
+ * Le moment ou quelque chose est fait.
  *
- * Ce n'est pas une phrase de plus dans une carte : c'est le seul endroit de
- * l'application, avec le bonjour du demarrage, ou il se passe **quelque chose**.
- * Une application qu'on ouvre chaque soir a besoin d'au moins un moment qui
- * recompense l'ouverture.
+ * C'est, avec le bonjour du demarrage, le seul endroit de l'application ou il
+ * se passe quelque chose pour le plaisir. Une application qu'on ouvre chaque
+ * soir a besoin d'au moins un moment qui recompense l'ouverture.
  *
- * Quatre regles, et elles valent pour toute animation de ce genre :
+ * Trois couches, et chacune fait une seule chose :
  *
- * - **Elle ne se declenche qu'au passage.** Cocher la cinquieme priere la
- *   lance ; rouvrir la journee le lendemain ne la relance pas. Une celebration
- *   qui rejoue a chaque affichage devient une porte a pousser.
- * - **Elle dure moins de deux secondes** et se coupe d'un appui n'importe ou.
- * - **Elle ne bloque rien.** Pendant qu'elle joue, la page dessous continue
- *   d'exister ; a la fin elle disparait sans rien demander.
- * - **Tout est lu dans le dessin.** Une seule valeur animee mene les quarante
- *   confettis, le disque et le texte, et elle n'est lue que dans des
- *   `graphicsLayer` et des `drawBehind` : rien n'est recompose ni remesure
- *   pendant les deux secondes.
+ * 1. **Le fond** : les confettis, un fichier Lottie embarque dans l'APK.
+ * 2. **La medaille** : dessinee a la main, pas importee. Elle doit vieillir
+ *    avec l'application — reprendre ses couleurs, ses rayons, sa lumiere — ce
+ *    qu'un badge tout fait telecharge quelque part ne fait jamais.
+ * 3. **Le texte** : ce qui a ete fait, en deux lignes.
+ *
+ * Quatre regles, valables pour toute animation de ce genre :
+ *
+ * - **Elle se declenche au passage**, jamais a l'affichage. Rouvrir la journee
+ *   demain ne doit pas la rejouer.
+ * - **Elle dure moins de deux secondes et demie**, entree et sortie comprises.
+ * - **Un appui n'importe ou la coupe.**
+ * - **Tout est lu dans le dessin.** Une seule horloge mene la medaille, son
+ *   reflet et son onde ; elle n'est lue que dans des `graphicsLayer` et des
+ *   `draw*`. Rien n'est recompose pendant qu'elle joue.
  */
 @Composable
-fun Celebration(
-    title: String,
-    subtitle: String,
-    emoji: String,
-    colors: List<Color>,
-    onDone: () -> Unit,
-) {
-    // Les confettis sont tires une fois pour toutes : leur trajectoire est une
-    // fonction du temps, pas une suite de positions recalculees. C'est ce qui
-    // permet de tout dessiner en une passe.
-    val flakes = remember {
-        val random = Random(System.currentTimeMillis())
-        List(44) {
-            Flake(
-                angle = (random.nextFloat() * 2f - 1f) * 0.85f - PI.toFloat() / 2f,
-                speed = 0.55f + random.nextFloat() * 0.75f,
-                spin = (random.nextFloat() * 2f - 1f) * 9f,
-                size = 5f + random.nextFloat() * 7f,
-                color = colors[random.nextInt(colors.size)],
-                delay = random.nextFloat() * 0.18f,
-                square = random.nextBoolean(),
-            )
-        }
-    }
+fun Celebration(badge: Badge, onDone: () -> Unit) {
+    val palette = badgePalette(badge)
 
-    // Une seule horloge, de 0 a 1, pour tout l'ecran.
+    // Une seule horloge pour tout l'ecran, plus deux ressorts : l'arrivee et
+    // la sortie. Les ressorts font le geste, l'horloge fait la matiere.
     val time = remember { Animatable(0f) }
-    // Le disque arrive au ressort, en depassant sa taille : c'est ce
-    // depassement qui fait la difference entre apparaitre et surgir.
     val pop = remember { Animatable(0f) }
     val fade = remember { Animatable(0f) }
 
-    LaunchedEffect(Unit) {
-        launch { fade.animateTo(1f, tween(180)) }
+    val confetti by rememberLottieComposition(
+        LottieCompositionSpec.RawRes(R.raw.celebration_confetti)
+    )
+    val confettiTime = remember { Animatable(0f) }
+
+    LaunchedEffect(badge) {
+        launch { fade.animateTo(1f, tween(160)) }
+        launch { confettiTime.animateTo(1f, tween(CONFETTI_MS, easing = LinearEasing)) }
         launch {
+            // Peu amorti : la medaille depasse sa taille et revient. C'est ce
+            // depassement qui fait la difference entre apparaitre et surgir.
             pop.animateTo(
                 targetValue = 1f,
-                animationSpec = spring(dampingRatio = 0.42f, stiffness = Spring.StiffnessLow),
+                animationSpec = spring(dampingRatio = 0.44f, stiffness = Spring.StiffnessLow),
             )
         }
-        time.animateTo(1f, tween(DURATION_MS, easing = LinearEasing))
-        delay(120)
+        time.animateTo(1f, tween(HOLD_MS, easing = LinearEasing))
+        launch { pop.animateTo(0.86f, tween(240)) }
         fade.animateTo(0f, tween(260))
         onDone()
     }
@@ -120,43 +110,20 @@ fun Celebration(
                 onClickLabel = "Fermer",
                 onClick = onDone,
             )
-            // Un voile a peine pose : on doit voir que la page est toujours la.
-            .background(Color.Black.copy(alpha = 0.28f))
-            .drawBehind {
-                val t = time.value
-                val origin = Offset(size.width / 2f, size.height * 0.42f)
-                flakes.forEach { flake ->
-                    val local = ((t - flake.delay) / (1f - flake.delay)).coerceIn(0f, 1f)
-                    if (local <= 0f) return@forEach
-                    // Une parabole : la vitesse initiale pousse, la gravite
-                    // rattrape. Deux lignes, et le confetti a un poids.
-                    val reach = size.height * 0.85f * flake.speed
-                    val x = origin.x + cos(flake.angle) * reach * local
-                    val y = origin.y + sin(flake.angle) * reach * local +
-                        GRAVITY * size.height * local * local
-                    val alpha = (1f - local * local).coerceIn(0f, 1f)
-                    val side = flake.size * (1f + local * 0.3f)
-                    if (flake.square) {
-                        // Un rectangle qui tourne : sa largeur se pince quand il
-                        // se met de profil, ce qui suffit a faire croire a une
-                        // rotation dans l'espace.
-                        val turn = kotlin.math.abs(cos(flake.spin * local * PI.toFloat()))
-                        drawRect(
-                            color = flake.color.copy(alpha = alpha),
-                            topLeft = Offset(x - side * turn / 2f, y - side / 2f),
-                            size = Size(side * turn.coerceAtLeast(0.15f), side),
-                        )
-                    } else {
-                        drawCircle(
-                            color = flake.color.copy(alpha = alpha),
-                            radius = side / 2.4f,
-                            center = Offset(x, y),
-                        )
-                    }
-                }
-            },
+            // Un voile a peine pose : la page doit rester visible dessous, sinon
+            // ce n'est plus une recompense, c'est une interruption.
+            .background(Color.Black.copy(alpha = 0.34f)),
         contentAlignment = Alignment.Center,
     ) {
+        LottieAnimation(
+            composition = confetti,
+            // La progression est passee en **lambda** : elle est lue au dessin
+            // et non pendant la composition, donc les soixante-quinze images ne
+            // provoquent aucune recomposition.
+            progress = { confettiTime.value },
+            modifier = Modifier.fillMaxSize(),
+        )
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
@@ -165,36 +132,16 @@ fun Celebration(
                     val grow = pop.value
                     scaleX = grow
                     scaleY = grow
-                    // Un souffle lent apres l'arrivee : le disque respire au
-                    // lieu de se figer.
-                    val breathe = 1f + 0.03f * sin(time.value * 2f * PI.toFloat())
-                    scaleX *= breathe
-                    scaleY *= breathe
+                    // Elle arrive de travers et se redresse : une medaille
+                    // posee bien droite d'emblee n'a pas ete gagnee.
+                    rotationZ = (1f - grow.coerceIn(0f, 1f)) * -22f
                     alpha = grow.coerceIn(0f, 1f)
                 },
         ) {
-            Box(
-                modifier = Modifier
-                    .size(112.dp)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(colors))
-                    .drawBehind {
-                        // Une onde qui s'echappe du disque, une seule fois.
-                        val wave = (time.value * 2.4f).coerceIn(0f, 1f)
-                        if (wave < 1f) {
-                            drawCircle(
-                                color = colors.first().copy(alpha = 0.35f * (1f - wave)),
-                                radius = size.minDimension / 2f * (1f + wave * 1.1f),
-                            )
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(emoji, fontSize = 52.sp)
-            }
-            Spacer(Modifier.height(20.dp))
+            Medal(palette = palette, emoji = badge.emoji, time = time)
+            Spacer(Modifier.height(22.dp))
             Text(
-                text = title,
+                text = badge.title,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
@@ -202,26 +149,136 @@ fun Celebration(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = subtitle,
+                text = badge.subtitle,
                 style = MaterialTheme.typography.bodyLarge,
-                color = Color.White.copy(alpha = 0.85f),
+                color = Color.White.copy(alpha = 0.86f),
                 textAlign = TextAlign.Center,
             )
         }
     }
 }
 
-private data class Flake(
-    val angle: Float,
-    val speed: Float,
-    val spin: Float,
-    val size: Float,
-    val color: Color,
-    val delay: Float,
-    val square: Boolean,
-)
+/**
+ * La medaille.
+ *
+ * Elle est dessinee, et c'est le point : un badge de jeu video pris tel quel
+ * ressemble a un badge de jeu video. Celle-ci est faite des couleurs de
+ * l'application, et sa lumiere suit la meme regle que partout ailleurs — une
+ * source en haut a gauche, une ombre teintee, jamais de gris.
+ *
+ * Quatre couches donnent la profondeur, de l'exterieur vers l'interieur :
+ * l'ombre portee, la couronne en degrade balaye qui **tourne**, le disque
+ * central avec sa lumiere decentree, et le reflet qui traverse.
+ */
+@Composable
+private fun Medal(
+    palette: List<Color>,
+    emoji: String,
+    time: Animatable<Float, *>,
+) {
+    val ring = remember(palette) {
+        // Un degrade balaye, avec la premiere couleur repetee a la fin : sans
+        // ca, la couronne aurait une couture visible a midi.
+        Brush.sweepGradient(
+            palette + palette.reversed().drop(1) + palette.first()
+        )
+    }
 
-private const val DURATION_MS = 1500
+    Box(
+        modifier = Modifier.size(148.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        // La couronne, qui tourne lentement sur elle-meme.
+        Box(
+            modifier = Modifier
+                .size(148.dp)
+                .graphicsLayer { rotationZ = time.value * 90f }
+                .drawBehind {
+                    drawCircle(brush = ring)
+                },
+        )
+        // Le disque central : un degrade radial dont le centre est decale en
+        // haut a gauche, la ou est la lumiere de toute l'application.
+        Box(
+            modifier = Modifier
+                .size(114.dp)
+                .drawBehind {
+                    val light = Offset(size.width * 0.32f, size.height * 0.26f)
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                palette.first().copy(alpha = 0.95f),
+                                palette.last(),
+                            ),
+                            center = light,
+                            radius = size.minDimension * 0.85f,
+                        )
+                    )
+                    // Le liere clair du bord haut : c'est lui qui donne
+                    // l'epaisseur, comme sur une vraie piece.
+                    drawCircle(
+                        brush = Brush.verticalGradient(
+                            listOf(Color.White.copy(alpha = 0.45f), Color.Transparent),
+                        ),
+                        radius = size.minDimension / 2f,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3f),
+                    )
+                }
+                .drawWithContent {
+                    drawContent()
+                    // Le reflet qui traverse une fois, en biais.
+                    val pass = (time.value * 2.2f - 0.25f).coerceIn(0f, 1f)
+                    if (pass > 0f && pass < 1f) {
+                        val x = size.width * (pass * 2.4f - 0.7f)
+                        drawCircle(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.White.copy(alpha = 0.30f),
+                                    Color.Transparent,
+                                ),
+                                startX = x - size.width * 0.28f,
+                                endX = x + size.width * 0.28f,
+                            ),
+                            radius = size.minDimension / 2f,
+                        )
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = emoji,
+                fontSize = 48.sp,
+                modifier = Modifier.graphicsLayer {
+                    // Un souffle lent : la medaille respire au lieu de se figer.
+                    val breathe = 1f + 0.035f * sin(time.value * 3f * PI.toFloat())
+                    scaleX = breathe
+                    scaleY = breathe
+                },
+            )
+        }
+    }
+}
 
-/** De combien la gravite ramene les confettis, en part de la hauteur d'ecran. */
-private const val GRAVITY = 1.15f
+/**
+ * Les couleurs d'un badge.
+ *
+ * Elles reprennent les teintes des cartes : le badge des prieres est de
+ * l'ambre de la carte des prieres, celui des pas du vert de l'activite. On
+ * reconnait d'ou vient la recompense avant d'avoir lu son titre.
+ */
+private fun badgePalette(badge: Badge): List<Color> = when (badge) {
+    Badge.PRAYERS -> listOf(Color(0xFFFFD166), Color(0xFFF59E0B))
+    Badge.STEPS, Badge.WORKOUT -> listOf(Color(0xFF5BE3B4), Color(0xFF10B981))
+    Badge.OUTSIDE -> listOf(Color(0xFFC4A0FF), Color(0xFF8B5CF6))
+    Badge.WATER -> listOf(Color(0xFF8FD3FF), Color(0xFF2E9BF0))
+    Badge.APPLICATION, Badge.WEEK_APPLICATIONS ->
+        listOf(Color(0xFF9B90FF), Color(0xFF5B4DF0))
+    Badge.JOURNAL -> listOf(Color(0xFFFFA9B8), Color(0xFFF2637F))
+}
+
+/** Duree du fichier de confettis : soixante-quinze images a trente par seconde. */
+private const val CONFETTI_MS = 2500
+
+/** Le temps que la medaille reste a l'ecran une fois arrivee. */
+private const val HOLD_MS = 1900

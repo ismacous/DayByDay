@@ -2,6 +2,14 @@ package com.ismael.daybyday.ui
 
 import android.app.TimePickerDialog
 import android.content.Context
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -23,7 +31,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -160,13 +168,28 @@ fun DayCardShell(
                     color = onAccent ?: MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                 )
-                if (!summary.isNullOrBlank()) {
-                    Text(
-                        text = summary,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = onAccent?.copy(alpha = 0.88f) ?: style.tint,
-                        maxLines = 1,
-                    )
+                // Le resume se **remplace** en glissant plutot qu'en sautant :
+                // c'est la ligne qui change le plus souvent de l'ecran, a
+                // chaque verre d'eau et a chaque priere cochee, et un texte qui
+                // change d'un coup sous le doigt donne l'impression d'un bug.
+                AnimatedContent(
+                    targetState = summary.orEmpty(),
+                    transitionSpec = {
+                        (fadeIn(tween(Motion.NORMAL)) +
+                            slideInVertically(tween(Motion.NORMAL)) { it / 2 }) togetherWith
+                            (fadeOut(tween(Motion.QUICK)) +
+                                slideOutVertically(tween(Motion.NORMAL)) { -it / 2 })
+                    },
+                    label = "resume",
+                ) { value ->
+                    if (value.isNotBlank()) {
+                        Text(
+                            text = value,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = onAccent?.copy(alpha = 0.88f) ?: style.tint,
+                            maxLines = 1,
+                        )
+                    }
                 }
             }
             Spacer(Modifier.width(8.dp))
@@ -179,15 +202,22 @@ fun DayCardShell(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
+                // Un seul chevron qui **pivote**, plutot que deux images qui
+                // se remplacent : la fleche montre le chemin que la carte va
+                // prendre, et le mouvement le dit mieux qu'un changement
+                // d'icone.
+                val turn by animateFloatAsState(
+                    targetValue = if (collapsed) 0f else 180f,
+                    animationSpec = tween(Motion.NORMAL),
+                    label = "chevron",
+                )
                 Icon(
-                    imageVector = if (collapsed) {
-                        Icons.Default.KeyboardArrowDown
-                    } else {
-                        Icons.Default.KeyboardArrowUp
-                    },
+                    imageVector = Icons.Default.KeyboardArrowDown,
                     contentDescription = if (collapsed) "Déplier" else "Replier",
                     tint = onAccent ?: style.tint,
-                    modifier = Modifier.size(19.dp),
+                    modifier = Modifier
+                        .size(19.dp)
+                        .graphicsLayer { rotationZ = turn },
                 )
             }
         }

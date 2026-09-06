@@ -29,6 +29,12 @@ téléphone (Samsung S25, Android 15).
    En revanche, **intégrer des fichiers** (polices, images, animations) est
    permis : ils sont téléchargés au moment d'écrire le code, vérifiés, et
    embarqués dans l'APK — rien n'est récupéré à l'exécution.
+   Depuis la 4.8, la règle est **vérifiée à la compilation** : la tâche
+   `verifyNoInternetDebug` (dans `app/build.gradle.kts`) lit le manifeste
+   *fusionné*, celui qui part réellement dans l'APK, et fait échouer le build
+   s'il contient encore la permission. C'est ce qui permet d'utiliser Lottie,
+   qui déclare INTERNET dans son propre manifeste pour charger une animation
+   depuis une adresse : la permission est retirée à la fusion, et on le sait.
 2. **La couleur du jour reste subjective.** Elle vient des quatre moments
    (matin, après-midi, soir, nuit) ou d'un choix manuel — jamais du sport, des
    pas, des repas ou de l'argent. Ces données sont comparées à la couleur dans
@@ -149,13 +155,27 @@ téléphone (Samsung S25, Android 15).
   seule** requête (`observeDaysBetween` sur sept jours) partagée par toutes les
   cartes. Les barres du poids partent du plus bas de la semaine et non de zéro :
   autour de quatre-vingts kilos, partir de zéro donne sept barres identiques.
-- **Motion design** (`ui/Celebration.kt`) : cocher la cinquième prière déclenche
-  une vraie animation — confettis, disque qui surgit au ressort, onde. Quatre
-  règles : elle se déclenche **au passage** (`before != ALL_DONE && after ==
-  ALL_DONE`), jamais à l'affichage, sinon rouvrir la journée la rejouerait ;
-  moins de deux secondes ; un appui n'importe où la coupe ; et une **seule**
-  valeur animée mène les quarante confettis, lue uniquement dans `drawBehind` et
-  `graphicsLayer` — rien n'est recomposé pendant qu'elle joue.
+- **Badges** (`data/Badge.kt`, `ui/Celebration.kt`) : une médaille apparaît quand
+  quelque chose est fait — les cinq prières, 6 000 pas, une vraie séance, être
+  sorti, huit verres, une candidature, la journée écrite. Le fond est un fichier
+  Lottie embarqué, la médaille est **dessinée** (couronne en dégradé balayé qui
+  tourne, disque à lumière décentrée, reflet qui traverse) : un badge tout fait
+  ressemble à un badge tout fait, celui-ci reprend les couleurs de sa carte.
+  Deux règles pour en ajouter un : il récompense un **geste**, et il reste
+  atteignable un mauvais jour. Et **jamais de série ni de score cumulé** — une
+  série brisée punirait exactement les journées qu'il ne faut pas punir.
+  Quatre règles d'animation : elle se déclenche **au passage** d'un état à
+  l'autre, jamais à l'affichage (sinon rouvrir la journée la rejouerait — d'où
+  les gardes `stepsSeen` / `noteSeen` pour les valeurs qui arrivent après coup) ;
+  moins de deux secondes et demie ; un appui n'importe où la coupe ; et une seule
+  horloge mène tout, lue uniquement dans `drawBehind` et `graphicsLayer`.
+- **Emoji animés** (`res/raw/mood_*.json`) : les quatre visages des tuiles
+  d'humeur sont les emoji animés de Google (Noto), du vecteur pur sans image ni
+  adresse dedans. La tuile choisie joue son animation **une fois** puis reste
+  dans sa pose ; les autres montrent la première image, atténuée. Quatre visages
+  qui s'agitent en permanence feraient une vitrine, pas un choix. La progression
+  passe en **lambda** à `LottieAnimation` : lue au dessin, elle ne recompose
+  rien.
 - **Une boucle d'animation doit être invisible à ses deux bouts.** Le reflet des
   tuiles d'humeur sautait : son dégradé avait un axe **oblique**, et hors de
   l'intervalle un dégradé se prolonge par sa couleur de bord — le coin bas-droit

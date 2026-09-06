@@ -110,6 +110,9 @@ object Backup {
                     .put("mealsNote", day.mealsNote)
                     .put("noteSpans", day.noteSpans)
                     .put("prayerMask", day.prayerMask ?: JSONObject.NULL)
+                    .put("snackNote", day.snackNote)
+                    .put("medicalNote", day.medicalNote)
+                    .put("jobApplications", day.jobApplications ?: JSONObject.NULL)
             )
         }
         root.put("days", daysJson)
@@ -343,6 +346,12 @@ object Backup {
                         // journee revient alors sans rien de coche, ce qui est
                         // exactement ce qu'elle etait.
                         prayerMask = item.optIntOrNull("prayerMask"),
+                        // Absents des sauvegardes plus anciennes : la journee
+                        // revient alors sans, ce qui est exactement ce qu'elle
+                        // etait.
+                        snackNote = item.optString("snackNote", ""),
+                        medicalNote = item.optString("medicalNote", ""),
+                        jobApplications = item.optIntOrNull("jobApplications"),
                     )
                 }
 

@@ -8,7 +8,9 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -91,6 +93,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.rememberLottieComposition
+import com.ismael.daybyday.R
+import com.ismael.daybyday.data.Badge
 import com.ismael.daybyday.data.DayCard
 import com.ismael.daybyday.data.DayColor
 import com.ismael.daybyday.data.DayEntry
@@ -129,7 +136,10 @@ private const val SAVE_DEBOUNCE_MS = 400L
  */
 private val SLEEP_QUALITY = listOf("sleep_good", "sleep_bad")
 
-/** Les gens qu'on a pu voir. « Personne aujourd'hui » vit a part, et les efface. */
+/**
+ * Les gens qu'on a pu voir. Il n'y a pas de « personne aujourd'hui » : ne rien
+ * cocher le dit deja.
+ */
 private val SEEN = listOf("girlfriend", "friends", "family")
 
 /**
@@ -140,6 +150,12 @@ private val SEEN = listOf("girlfriend", "friends", "family")
 private const val STEPS_REFERENCE = 6000
 
 private const val SCREEN_REFERENCE = 6
+
+/** Le nombre de verres qui remplit la rangee. */
+private const val WATER_FULL = 8
+
+/** Le nombre de candidatures sur sept jours qui vaut une medaille. */
+private const val WEEK_APPLICATIONS_GOAL = 5
 
 /**
  * Le trajet du reflet sur une tuile d'humeur, en largeurs de tuile.
@@ -210,6 +226,7 @@ fun DayScreen(
     var waterGlasses by remember { mutableStateOf<Int?>(null) }
     var mealsNote by remember { mutableStateOf("") }
     var snackNote by remember { mutableStateOf("") }
+    var medicalNote by remember { mutableStateOf("") }
     var prayerMask by remember { mutableStateOf<Int?>(null) }
     var jobApplications by remember { mutableStateOf<Int?>(null) }
     var editingTreatment by remember { mutableStateOf<Treatment?>(null) }
@@ -223,7 +240,13 @@ fun DayScreen(
     // La celebration en cours, ou null. Elle ne se declenche qu'au **passage**
     // d'un etat a l'autre, jamais a l'affichage : sinon rouvrir la journee la
     // rejouerait chaque fois.
-    var celebration by remember { mutableStateOf<Celebrated?>(null) }
+    var celebration by remember { mutableStateOf<Badge?>(null) }
+
+    // Les pas ne sont pas saisis : ils montent tout seuls pendant qu'on
+    // regarde. Pour feter le passage et non l'arrivee sur la page, on retient
+    // la derniere valeur **vue** — la premiere lecture ne declenche jamais
+    // rien, meme si elle est deja au-dessus du repere.
+    var stepsSeen by remember(epochDay) { mutableStateOf<Int?>(null) }
 
     // La disposition des cartes vit dans les preferences : elle est relue a
     // chaque changement pour que l'ecran suive immediatement.
@@ -270,6 +293,7 @@ fun DayScreen(
         waterGlasses = waterGlasses,
         mealsNote = mealsNote.trim(),
         snackNote = snackNote.trim(),
+        medicalNote = medicalNote.trim(),
         jobApplications = jobApplications,
         partMorning = parts[DayPart.MORNING],
         partAfternoon = parts[DayPart.AFTERNOON],
@@ -308,6 +332,7 @@ fun DayScreen(
         waterGlasses = entry?.waterGlasses
         mealsNote = entry?.mealsNote.orEmpty()
         snackNote = entry?.snackNote.orEmpty()
+        medicalNote = entry?.medicalNote.orEmpty()
         prayerMask = entry?.prayerMask
         jobApplications = entry?.jobApplications
         expandedCards = emptySet()
@@ -338,6 +363,28 @@ fun DayScreen(
                     sleepFromDevice = true
                 }
             }
+        }
+    }
+
+    // Le journal s'ecrit sur un autre ecran ; on ne voit revenir que son
+    // resultat. Meme regle que pour les pas : la premiere valeur vue ne fete
+    // rien, c'est le passage du vide au texte qui compte.
+    var noteSeen by remember(epochDay) { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(note, title) {
+        val written = note.isNotBlank() || title.isNotBlank()
+        val before = noteSeen
+        noteSeen = written
+        if (before == false && written) celebration = Badge.JOURNAL
+    }
+
+    LaunchedEffect(stepsValue) {
+        val steps = stepsValue ?: return@LaunchedEffect
+        val before = stepsSeen
+        stepsSeen = steps
+        if (before != null && before < STEPS_REFERENCE && steps >= STEPS_REFERENCE &&
+            date == LocalDate.now()
+        ) {
+            celebration = Badge.STEPS
         }
     }
 
@@ -383,6 +430,7 @@ fun DayScreen(
         waterGlasses,
         mealsNote,
         snackNote,
+        medicalNote,
         jobApplications,
     ) {
         if (loadedFor != epochDay) return@LaunchedEffect
@@ -476,14 +524,21 @@ fun DayScreen(
         )
     }
 
-    /** Les reperes d'une famille, en lignes a cocher : une liste de choses faites. */
-    val tagChecks: @Composable (TagCategory, Color) -> Unit = { family, tint ->
+    /**
+     * Les reperes d'une famille, en lignes a cocher : une liste de choses
+     * faites.
+     *
+     * [emoji] se coupe pour ce qui est dur a dire. Un petit visage qui pleure a
+     * cote de « J'ai pleuré » transforme un fait en mise en scene ; la case et
+     * les trois mots suffisent.
+     */
+    val tagChecks: @Composable (TagCategory, Color, Boolean) -> Unit = { family, tint, emoji ->
         Column {
             allTags.filter { it.group == family }.forEachIndexed { index, tag ->
                 if (index > 0) Spacer(Modifier.height(8.dp))
                 val selected = tag.id in selectedTagIds
                 CheckRow(
-                    label = tag.display,
+                    label = if (emoji) tag.display else tag.name,
                     checked = selected,
                     tint = tint,
                     onClick = { toggleTag(tag, !selected) },
@@ -779,13 +834,6 @@ fun DayScreen(
                                         }
                                     },
                                 )
-                                Spacer(Modifier.height(10.dp))
-                                CardChip(
-                                    label = "🌙 Couché tard",
-                                    selected = tagOn("sleep_late"),
-                                    tint = tint,
-                                    onClick = { setTag("sleep_late", !tagOn("sleep_late")) },
-                                )
                             }
                             CardWeek(
                                 card = card,
@@ -822,6 +870,27 @@ fun DayScreen(
                                     openSystemScreen(context, HealthConnectSource.settingsIntent())
                                 },
                             )
+                            // La semaine se lit juste sous le chiffre qu'elle
+                            // met en perspective, pas en bas de la carte : sept
+                            // barres de pas rangees apres les questions sur le
+                            // sport auraient eu l'air de les commenter.
+                            CardWeek(
+                                card = card,
+                                tint = tint,
+                                expanded = card in expandedCards,
+                                onToggle = { expandedCards = expandedCards.toggle(card) },
+                            ) {
+                                MiniBars(
+                                    values = week.map { it?.steps?.toFloat() },
+                                    labels = weekLabels,
+                                    captions = week.map { entry ->
+                                        entry?.steps?.let { steps ->
+                                            if (steps >= 1000) "${steps / 1000}k" else "$steps"
+                                        }
+                                    },
+                                    tint = tint,
+                                )
+                            }
                             Spacer(Modifier.height(18.dp))
                             // Sortir ou rester chez soi a rejoint cette carte.
                             // C'etait un « dehors » coince entre le menage et
@@ -842,11 +911,15 @@ fun DayScreen(
                                     },
                                     tint = tint,
                                     onSelect = { chosen ->
-                                        wentOut = when (chosen) {
+                                        val out = when (chosen) {
                                             0 -> true
                                             1 -> false
                                             else -> null
                                         }
+                                        if (out == true && wentOut != true) {
+                                            celebration = Badge.OUTSIDE
+                                        }
+                                        wentOut = out
                                     },
                                 )
                             }
@@ -859,30 +932,17 @@ fun DayScreen(
                                         .takeIf { it >= 0 },
                                     tint = tint,
                                     onSelect = { chosen ->
-                                        sportLevel = chosen?.let { SportLevel.entries[it].key }
+                                        val level = chosen?.let { SportLevel.entries[it] }
+                                        if (level == SportLevel.GOOD && sportLevel != level.key) {
+                                            celebration = Badge.WORKOUT
+                                        }
+                                        sportLevel = level?.key
                                     },
                                 )
                             }
                             Spacer(Modifier.height(18.dp))
                             CardSection("Ce que tu as fait", tint) {
                                 tagTiles(TagCategory.ACTIVITY, tint)
-                            }
-                            CardWeek(
-                                card = card,
-                                tint = tint,
-                                expanded = card in expandedCards,
-                                onToggle = { expandedCards = expandedCards.toggle(card) },
-                            ) {
-                                MiniBars(
-                                    values = week.map { it?.steps?.toFloat() },
-                                    labels = weekLabels,
-                                    captions = week.map { entry ->
-                                        entry?.steps?.let { steps ->
-                                            if (steps >= 1000) "${steps / 1000}k" else "$steps"
-                                        }
-                                    },
-                                    tint = tint,
-                                )
                             }
                         }
                         DayCard.FOOD -> {
@@ -906,7 +966,12 @@ fun DayScreen(
                                 WaterGlasses(
                                     count = waterGlasses,
                                     tint = tint,
-                                    onChange = { waterGlasses = it },
+                                    onChange = { glasses ->
+                                        if (glasses == WATER_FULL && waterGlasses != WATER_FULL) {
+                                            celebration = Badge.WATER
+                                        }
+                                        waterGlasses = glasses
+                                    },
                                 )
                                 Spacer(Modifier.height(8.dp))
                                 Text(
@@ -973,15 +1038,6 @@ fun DayScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
-                            Spacer(Modifier.height(18.dp))
-                            // « J'ai pleuré » n'est pas une etiquette qu'on
-                            // colle a sa journee : c'est quelque chose qui est
-                            // arrive. Une ligne a cocher, pleine largeur, le
-                            // dit sans le ranger a cote de « rendez-vous
-                            // médical » comme un mot-cle de plus.
-                            CardSection("Ce que ton corps a dit", tint) {
-                                tagChecks(TagCategory.HEALTH, tint)
-                            }
                             CardWeek(
                                 card = card,
                                 tint = tint,
@@ -1012,6 +1068,14 @@ fun DayScreen(
                                     )
                                 }
                             }
+                            Spacer(Modifier.height(18.dp))
+                            // Sans emoji, volontairement. Un petit visage qui
+                            // pleure a cote de « J'ai pleuré » transforme un
+                            // fait en mise en scene, et donne a la ligne l'air
+                            // de s'apitoyer. Une case et trois mots suffisent.
+                            CardSection("Ce qui est arrivé", tint) {
+                                tagChecks(TagCategory.HEALTH, tint, false)
+                            }
                         }
                         DayCard.TREATMENT -> {
                             TreatmentsCardBody(
@@ -1027,8 +1091,28 @@ fun DayScreen(
                                 onAdd = { creatingTreatment = true },
                             )
                             Spacer(Modifier.height(18.dp))
+                            // Cocher « rendez-vous médical » disait qu'il y en
+                            // avait eu un — ce qui ne sert a rien six mois plus
+                            // tard, quand on cherche lequel. Le nom du medecin
+                            // et le motif, eux, se retrouvent par la recherche.
+                            val appointment = tagOn("appointment")
                             CardSection("Rendez-vous", tint) {
-                                tagChecks(TagCategory.MEDICAL, tint)
+                                CheckRow(
+                                    label = "🩺 Rendez-vous médical",
+                                    checked = appointment,
+                                    tint = tint,
+                                    onClick = { setTag("appointment", !appointment) },
+                                )
+                                if (appointment) {
+                                    Spacer(Modifier.height(10.dp))
+                                    OutlinedTextField(
+                                        value = medicalNote,
+                                        onValueChange = { medicalNote = it.take(300) },
+                                        label = { Text("Chez qui, pour quoi ?") },
+                                        shape = RoundedCornerShape(16.dp),
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                }
                             }
                         }
                         DayCard.PRAYER -> {
@@ -1043,7 +1127,7 @@ fun DayScreen(
                                     // cinq, pas a l'affichage de cinq : rouvrir
                                     // la journee demain ne la rejouera pas.
                                     if (before != Prayer.ALL_DONE && after == Prayer.ALL_DONE) {
-                                        celebration = Celebrated.PRAYERS
+                                        celebration = Badge.PRAYERS
                                     }
                                 },
                             )
@@ -1104,11 +1188,26 @@ fun DayScreen(
                                 } else {
                                     "Aujourd'hui"
                                 },
-                                onChange = { jobApplications = it },
+                                onChange = { sent ->
+                                    val before = jobApplications ?: 0
+                                    val after = sent ?: 0
+                                    if (after > before) {
+                                        val weekBefore = weekTotal
+                                        val weekAfter = weekBefore - before + after
+                                        celebration = when {
+                                            weekBefore < WEEK_APPLICATIONS_GOAL &&
+                                                weekAfter >= WEEK_APPLICATIONS_GOAL ->
+                                                Badge.WEEK_APPLICATIONS
+                                            before == 0 -> Badge.APPLICATION
+                                            else -> null
+                                        }
+                                    }
+                                    jobApplications = sent
+                                },
                             )
                             Spacer(Modifier.height(18.dp))
                             CardSection("Ce que tu as avancé", tint) {
-                                tagChecks(TagCategory.WORK, tint)
+                                tagChecks(TagCategory.WORK, tint, true)
                             }
                             CardWeek(
                                 card = card,
@@ -1246,6 +1345,14 @@ fun DayScreen(
                         Spacer(Modifier.height(16.dp))
                         CardMediaRow(
                             items = cardMedia,
+                            // Sur la carte des traitements, une photo est une
+                            // ordonnance neuf fois sur dix : le bouton le dit,
+                            // au lieu de laisser deviner ce qu'on peut y mettre.
+                            label = if (card == DayCard.TREATMENT) {
+                                "Photographier une ordonnance"
+                            } else {
+                                "Ajouter une photo"
+                            },
                             onOpen = { item -> viewerIndex = mediaItems.indexOf(item) },
                             onAdd = { addMediaTo(card) },
                         )
@@ -1268,14 +1375,8 @@ fun DayScreen(
 
         // La fete passe **par-dessus** la page qui defile, pas dedans : elle ne
         // pousse rien et ne fait sauter aucune carte.
-        celebration?.let { moment ->
-            Celebration(
-                title = moment.title,
-                subtitle = moment.subtitle,
-                emoji = moment.emoji,
-                colors = moment.colors(),
-                onDone = { celebration = null },
-            )
+        celebration?.let { badge ->
+            Celebration(badge = badge, onDone = { celebration = null })
         }
     }
 
@@ -1378,26 +1479,6 @@ private fun CardWeek(
             Spacer(Modifier.height(10.dp))
             content()
         }
-    }
-}
-
-/** Les moments qui declenchent une fete, et ce qu'elle raconte. */
-private enum class Celebrated(
-    val title: String,
-    val subtitle: String,
-    val emoji: String,
-) {
-    PRAYERS("Les cinq prières", "Journée complète.", "🕌");
-
-    @Composable
-    fun colors(): List<Color> = when (this) {
-        PRAYERS -> listOf(
-            Color(0xFFF59E0B),
-            Color(0xFFFFD166),
-            Color(0xFF10B981),
-            Color(0xFF5B4DF0),
-            Color(0xFF3BA6FF),
-        )
     }
 }
 
@@ -1525,6 +1606,7 @@ private fun MoneyDayRow(entry: MoneyEntry, tint: Color, onClick: () -> Unit) {
 @Composable
 private fun CardMediaRow(
     items: List<MediaItem>,
+    label: String,
     onOpen: (MediaItem) -> Unit,
     onAdd: () -> Unit,
 ) {
@@ -1554,12 +1636,12 @@ private fun CardMediaRow(
                 .size(36.dp)
                 .clip(RoundedCornerShape(10.dp))
                 .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
-                .clickable(onClickLabel = "Ajouter une photo", onClick = onAdd),
+                .clickable(onClickLabel = label, onClick = onAdd),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 Icons.Default.Add,
-                contentDescription = "Ajouter une photo",
+                contentDescription = label,
                 modifier = Modifier.size(20.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1567,7 +1649,7 @@ private fun CardMediaRow(
         if (items.isEmpty()) {
             Spacer(Modifier.width(10.dp))
             Text(
-                "Ajouter une photo",
+                label,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1715,11 +1797,6 @@ private fun ColorChoice(
     }
 
     val shape = RoundedCornerShape(22.dp)
-    val markScale = animateFloatAsState(
-        targetValue = if (selected) 1f else 0f,
-        animationSpec = Motion.softSpring(),
-        label = "coche",
-    )
 
     Box(
         modifier = modifier
@@ -1796,17 +1873,66 @@ private fun ColorChoice(
             .testTag("color-${dayColor.name}"),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            Icons.Default.Check,
-            contentDescription = if (selected) "Sélectionné" else null,
-            tint = readableOn(dayColor.color),
-            modifier = Modifier.graphicsLayer {
-                scaleX = markScale.value
-                scaleY = markScale.value
-                alpha = markScale.value
-            },
-        )
+        MoodEmoji(dayColor = dayColor, selected = selected, modifier = Modifier.fillMaxSize())
     }
+}
+
+/**
+ * Le visage d'une humeur.
+ *
+ * Ce sont les emoji animes de Google (Noto), embarques dans l'APK en
+ * `res/raw` : du vecteur pur, sans image ni adresse a l'interieur — rien n'est
+ * telecharge a l'execution, la regle numero un tient.
+ *
+ * Deux etats seulement, et c'est ce qui les rend lisibles :
+ *
+ * - **Choisi** : le visage joue son animation en entier, une fois, puis reste
+ *   dans sa pose. C'est exactement ce qu'on attend d'une reaction — elle
+ *   repond au doigt, elle ne boucle pas. Quatre visages qui s'agitent en
+ *   permanence feraient une vitrine, pas un choix.
+ * - **Pas choisi** : la premiere image, attenuee. Le visage est la, il attend.
+ *
+ * La progression est passee en **lambda** a `LottieAnimation` : elle est lue au
+ * moment du dessin et non pendant la composition, donc l'animation ne provoque
+ * aucune recomposition de la carte.
+ */
+@Composable
+private fun MoodEmoji(dayColor: DayColor, selected: Boolean, modifier: Modifier = Modifier) {
+    val composition by rememberLottieComposition(
+        LottieCompositionSpec.RawRes(moodEmojiRes(dayColor))
+    )
+    val progress = remember { Animatable(0f) }
+
+    LaunchedEffect(selected, composition) {
+        if (selected && composition != null) {
+            progress.snapTo(0f)
+            progress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = (composition?.duration ?: 1200f).toInt(),
+                    easing = LinearEasing,
+                ),
+            )
+        } else {
+            progress.snapTo(0f)
+        }
+    }
+
+    LottieAnimation(
+        composition = composition,
+        progress = { progress.value },
+        modifier = modifier
+            .padding(9.dp)
+            .graphicsLayer { alpha = if (selected) 1f else 0.55f },
+    )
+}
+
+/** Le visage de chaque couleur de journee. */
+private fun moodEmojiRes(dayColor: DayColor): Int = when (dayColor) {
+    DayColor.GREEN -> R.raw.mood_green
+    DayColor.ORANGE -> R.raw.mood_orange
+    DayColor.RED -> R.raw.mood_red
+    DayColor.BLACK -> R.raw.mood_black
 }
 
 /**

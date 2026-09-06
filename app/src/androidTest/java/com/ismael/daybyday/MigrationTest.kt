@@ -70,6 +70,7 @@ class MigrationTest {
                 AppDatabase.MIGRATION_10_11,
                 AppDatabase.MIGRATION_11_12,
                 AppDatabase.MIGRATION_12_13,
+                AppDatabase.MIGRATION_13_14,
             )
             .build()
 
@@ -120,6 +121,7 @@ class MigrationTest {
                 // null, parce que zero candidature est une reponse.
                 assertEquals("", day?.snackNote)
                 assertEquals(null, day?.jobApplications)
+                assertEquals("", day?.medicalNote)
             }
         } finally {
             database.close()

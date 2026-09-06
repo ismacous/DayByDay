@@ -24,7 +24,9 @@ object TagCatalog {
         // selecteur, pas en pastilles.
         Builtin("sleep_good", "😴", "Bien dormi", TagCategory.SLEEP),
         Builtin("sleep_bad", "🥱", "Mal dormi", TagCategory.SLEEP),
-        Builtin("sleep_late", "🌙", "Couché tard", TagCategory.SLEEP),
+        // Plus de « couché tard » : l'heure du coucher est deja saisie
+        // juste au-dessus, et une etiquette qui repete une donnee laisse les
+        // deux se contredire.
 
         // Social. Pas de « personne aujourd'hui » : ne rien cocher le dit
         // deja, et une case pour dire qu'il ne s'est rien passe est une case
@@ -65,11 +67,13 @@ object TagCatalog {
         Builtin("series", "📺", "Séries, films", TagCategory.SCREENS),
         Builtin("games", "🎮", "Jeux vidéo", TagCategory.SCREENS),
 
-        // Sante. « Grosse angoisse » est partie : elle n'a jamais servi.
-        // « J'ai pleuré » reste, mais la carte l'affiche en ligne a cocher et
-        // non en pastille — ce n'est pas une etiquette qu'on colle a sa
-        // journee, c'est quelque chose qui est arrive.
-        Builtin("cried", "😢", "J'ai pleuré", TagCategory.HEALTH),
+        // Sante. Ces deux-la s'affichent en lignes a cocher et **sans
+        // emoji** : un petit visage qui pleure a cote de « J'ai pleuré »
+        // transforme un fait en mise en scene. L'emoji reste vide ici, ce qui
+        // fait que `display` vaut le nom seul partout ailleurs aussi — dans la
+        // recherche, par exemple.
+        Builtin("cried", "", "J'ai pleuré", TagCategory.HEALTH),
+        Builtin("anxiety", "", "Crise d'angoisse", TagCategory.HEALTH, listOf("Grosse angoisse")),
 
         // Traitements, qui ont maintenant leur propre carte.
         Builtin("appointment", "🩺", "Rendez-vous médical", TagCategory.MEDICAL),
@@ -105,6 +109,16 @@ object TagCatalog {
                 slug = builtin.slug,
             )
             dao.insertTag(updated)
+        }
+
+        // Ce qui reste sans identifiant stable apres ce passage n'a ete
+        // reconnu par aucune entree du catalogue : c'est un reste des
+        // migrations d'avant les slugs, que plus aucune carte n'affiche et donc
+        // que l'on ne pourrait plus decocher. L'application ne permet pas de
+        // creer ses propres etiquettes : il n'y a rien d'autre a perdre ici.
+        dao.allTags().filter { it.slug == null }.forEach { orphan ->
+            dao.deleteTagLinks(orphan.id)
+            dao.deleteTag(orphan.id)
         }
     }
 }

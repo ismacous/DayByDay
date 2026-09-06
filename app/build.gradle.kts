@@ -13,8 +13,8 @@ android {
         applicationId = "com.ismael.daybyday"
         minSdk = 26
         targetSdk = 35
-        versionCode = 37
-        versionName = "4.7"
+        versionCode = 38
+        versionName = "4.8"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         resourceConfigurations += listOf("fr")
 
@@ -70,6 +70,39 @@ android {
     }
 }
 
+/**
+ * Le filet de securite de la regle numero un.
+ *
+ * Le manifeste retire la permission INTERNET meme si une bibliotheque la
+ * reclame (`tools:node="remove"`). Cette tache verifie que c'est bien arrive :
+ * elle lit le manifeste **fusionne**, celui qui part reellement dans l'APK, et
+ * fait echouer la compilation s'il contient encore la permission.
+ *
+ * Autrement dit, la garantie « aucune donnee ne sort du telephone » n'est plus
+ * tenue par la vigilance de qui ajoute une dependance, mais par le build.
+ */
+androidComponents {
+    onVariants { variant ->
+        val merged = variant.artifacts.get(com.android.build.api.artifact.SingleArtifact.MERGED_MANIFEST)
+        val name = variant.name.replaceFirstChar { it.uppercase() }
+        val verify = tasks.register("verifyNoInternet$name") {
+            inputs.file(merged)
+            doLast {
+                val text = merged.get().asFile.readText()
+                if (text.contains("android.permission.INTERNET")) {
+                    throw GradleException(
+                        "Le manifeste fusionne contient la permission INTERNET. " +
+                            "C'est la regle que DayByDay ne casse jamais : sans reseau, " +
+                            "aucune donnee ne peut sortir du telephone. Retire la " +
+                            "dependance qui la reclame."
+                    )
+                }
+            }
+        }
+        tasks.matching { it.name == "assemble$name" }.configureEach { dependsOn(verify) }
+    }
+}
+
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
     arg("room.incremental", "true")
@@ -95,6 +128,14 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
+
+    // Lottie ne sert qu'a jouer des fichiers **embarques dans l'APK**
+    // (res/raw). La bibliotheque sait aussi charger une animation depuis une
+    // adresse, et declare donc la permission INTERNET dans son propre
+    // manifeste : elle est retiree a la fusion par le `tools:node="remove"` du
+    // notre, et la tache `verifyNoInternet…` ci-dessus fait echouer la
+    // compilation si jamais elle survivait.
+    implementation("com.airbnb.android:lottie-compose:6.6.6")
 
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.exifinterface:exifinterface:1.3.7")

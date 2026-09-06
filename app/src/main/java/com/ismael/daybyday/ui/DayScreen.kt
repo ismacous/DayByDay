@@ -366,15 +366,23 @@ fun DayScreen(
     // Le journal s'ecrit sur un autre ecran ; on ne voit revenir que son
     // resultat. Meme regle que pour les pas : la premiere valeur vue ne fete
     // rien, c'est le passage du vide au texte qui compte.
+    //
+    // Le `loadedFor` n'est pas un detail, c'est **le** piege : les champs
+    // partent vides et se remplissent une fraction de seconde plus tard, quand
+    // la journee arrive de la base. Sans cette garde, ouvrir une journee deja
+    // ecrite ressemblait exactement a l'ecrire — vide, puis rempli — et la
+    // medaille repartait a chaque ouverture.
     var noteSeen by remember(epochDay) { mutableStateOf<Boolean?>(null) }
-    LaunchedEffect(note, title) {
+    LaunchedEffect(note, title, loadedFor) {
+        if (loadedFor != epochDay) return@LaunchedEffect
         val written = note.isNotBlank() || title.isNotBlank()
         val before = noteSeen
         noteSeen = written
         if (before == false && written) celebration = Badge.JOURNAL
     }
 
-    LaunchedEffect(stepsValue) {
+    LaunchedEffect(stepsValue, loadedFor) {
+        if (loadedFor != epochDay) return@LaunchedEffect
         val steps = stepsValue ?: return@LaunchedEffect
         val before = stepsSeen
         stepsSeen = steps

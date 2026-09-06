@@ -1,5 +1,9 @@
 package com.ismael.daybyday.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -10,25 +14,39 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.ismael.daybyday.data.Placement
+import com.ismael.daybyday.data.StyleFamily
+import com.ismael.daybyday.data.TextStyleKind
 
 /**
  * L'apparence de la page du journal : le papier, et les lignes d'ecriture.
@@ -95,6 +113,35 @@ object JournalPaper {
      */
     fun ink(paper: Color): Color =
         if (paper.red + paper.green + paper.blue > 1.5f) Color(0xFF1B1B1B) else Color(0xFFECEFF3)
+
+    /**
+     * La police de base de la page.
+     *
+     * Elle est rangee sous le **code** du style, pas sous son rang dans la
+     * liste : ajouter une police plus tard ne doit pas changer celle des pages
+     * deja ecrites. Un code inconnu — une police retiree — retombe sur la
+     * police de l'application.
+     */
+    fun font(code: String): TextStyleKind =
+        TextStyleKind.fromCode(code)?.takeIf { it.family == StyleFamily.FONT }
+            ?: TextStyleKind.FONT_MODERN
+
+    /**
+     * Les tailles proposees, en sp.
+     *
+     * Toutes tiennent sous l'ecart entre deux lignes ([LINE_SPACING], 28
+     * points) : le texte grandit, le lignage ne bouge pas, et les mots restent
+     * poses dessus. C'est aussi ce qui borne la liste par le haut.
+     */
+    val sizes: List<Pair<String, Int>> = listOf(
+        "Petit" to 14,
+        "Normal" to 16,
+        "Grand" to 19,
+        "Très grand" to 22,
+    )
+
+    fun sizeLabel(size: Int): String =
+        sizes.firstOrNull { it.second == size }?.first ?: "$size points"
 }
 
 /**
@@ -136,83 +183,307 @@ fun PaperLines(color: Color, modifier: Modifier = Modifier) {
     }
 }
 
-/** Le menu des trois points : tout ce qui touche a l'allure de la page. */
+
+/**
+ * Les parametres de la page : le papier, les lignes, la police, la taille et
+ * l'aimant des photos.
+ *
+ * C'est un **panneau** qui monte du bas, et pas une boite de dialogue. La
+ * raison tient en une phrase : une boite de dialogue assombrit la page et la
+ * cache derriere, alors qu'ici chaque reglage se voit sur la page. Le panneau
+ * la laisse visible, et il porte en plus un apercu — le vrai papier, les
+ * vraies lignes, la vraie police, a la vraie taille. On choisit ce qu'on voit.
+ */
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun PaperSettingsDialog(
+fun PaperSettingsSheet(
     ruled: Boolean,
     paperIndex: Int,
     lineIndex: Int,
     snapToGrid: Boolean,
+    fontCode: String,
+    textSize: Int,
     onRuled: (Boolean) -> Unit,
     onPaper: (Int) -> Unit,
     onLine: (Int) -> Unit,
     onSnap: (Boolean) -> Unit,
+    onFont: (String) -> Unit,
+    onTextSize: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val font = JournalPaper.font(fontCode)
+
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Fermer") } },
-        title = { Text("Allure de la page") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                SettingLine(
-                    label = "Lignes d'écriture",
-                    value = if (ruled) "Affichées" else "Masquées",
-                    onClick = { onRuled(!ruled) },
-                )
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 22.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+        ) {
+            ScreenTitle(
+                text = "Paramètres",
+                accent = "de la page",
+                subtitle = "Tout se voit tout de suite sur l'aperçu.",
+            )
 
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Papier", style = MaterialTheme.typography.labelLarge)
-                    SwatchRow(
-                        colors = JournalPaper.papers,
-                        selected = paperIndex,
-                        onPick = onPaper,
-                    )
-                }
+            PagePreview(
+                paper = JournalPaper.paper(paperIndex),
+                lineColor = JournalPaper.line(lineIndex),
+                ruled = ruled,
+                font = font,
+                textSize = textSize,
+            )
 
-                if (ruled) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Lignes", style = MaterialTheme.typography.labelLarge)
-                        SwatchRow(
-                            colors = JournalPaper.lines,
-                            selected = lineIndex,
-                            onPick = onLine,
-                        )
-                    }
-                }
+            SettingSwitch(
+                label = "Lignes d'écriture",
+                hint = "Le lignage de la feuille, dessiné derrière le texte.",
+                checked = ruled,
+                onChange = onRuled,
+            )
 
-                SettingLine(
-                    label = "Aimanter les photos",
-                    // La grille des photos n'a rien a voir avec le lignage :
-                    // on peut ecrire sur page blanche et garder l'aimant.
-                    value = if (snapToGrid) "Activé" else "Coupé",
-                    onClick = { onSnap(!snapToGrid) },
+            SettingSection(label = "Papier", value = JournalPaper.papers[paperIndex.coerceIn(JournalPaper.papers.indices)].first) {
+                SwatchRow(
+                    colors = JournalPaper.papers,
+                    selected = paperIndex,
+                    onPick = onPaper,
                 )
             }
-        },
-    )
+
+            // Choisir la couleur des lignes quand il n'y en a pas n'a pas de
+            // sens : la section disparait en glissant plutot qu'en sautant.
+            AnimatedVisibility(visible = ruled) {
+                SettingSection(
+                    label = "Couleur des lignes",
+                    value = JournalPaper.lines[lineIndex.coerceIn(JournalPaper.lines.indices)].first,
+                ) {
+                    SwatchRow(
+                        colors = JournalPaper.lines,
+                        selected = lineIndex,
+                        onPick = onLine,
+                    )
+                }
+            }
+
+            SettingSection(label = "Police de base", value = font.label) {
+                // Chaque pastille est ecrite dans sa propre police : on lit le
+                // choix au lieu de lire son nom.
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(9.dp),
+                    verticalArrangement = Arrangement.spacedBy(9.dp),
+                ) {
+                    TextStyleKind.fonts.forEach { candidate ->
+                        ChoicePill(
+                            selected = candidate == font,
+                            onClick = { onFont(candidate.code) },
+                        ) { color ->
+                            Text(
+                                text = candidate.label,
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontFamily = candidate.fontFamily(),
+                                ),
+                                color = color,
+                            )
+                        }
+                    }
+                }
+            }
+
+            SettingSection(
+                label = "Taille du texte",
+                value = JournalPaper.sizeLabel(textSize),
+            ) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(9.dp),
+                    verticalArrangement = Arrangement.spacedBy(9.dp),
+                ) {
+                    JournalPaper.sizes.forEach { (name, size) ->
+                        ChoicePill(
+                            selected = size == textSize,
+                            onClick = { onTextSize(size) },
+                        ) { color ->
+                            // La pastille est ecrite a la taille qu'elle
+                            // propose : la difference se voit avant d'appuyer.
+                            Text(
+                                text = name,
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontSize = size.sp,
+                                    lineHeight = (size + 6).sp,
+                                ),
+                                color = color,
+                            )
+                        }
+                    }
+                }
+            }
+
+            SettingSwitch(
+                label = "Aimanter les photos",
+                // La grille des photos n'a rien a voir avec le lignage : on
+                // peut ecrire sur page blanche et garder l'aimant.
+                hint = "Les photos se calent sur une grille invisible quand tu les déplaces.",
+                checked = snapToGrid,
+                onChange = onSnap,
+            )
+        }
+    }
 }
 
+/**
+ * L'apercu de la page.
+ *
+ * Ce n'est pas une miniature : c'est la page elle-meme, a sa vraie echelle,
+ * simplement coupee apres quelques lignes. Une miniature aurait menti sur la
+ * taille du texte, qui est justement l'un des reglages.
+ */
 @Composable
-private fun SettingLine(label: String, value: String, onClick: () -> Unit) {
-    Row(
+private fun PagePreview(
+    paper: Color,
+    lineColor: Color,
+    ruled: Boolean,
+    font: TextStyleKind,
+    textSize: Int,
+) {
+    val ink = JournalPaper.ink(paper)
+    val background by animateColorAsState(paper, tween(Motion.NORMAL), label = "papier")
+    val rhythm = with(LocalDensity.current) { JournalPaper.LINE_SPACING.toSp() }
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClickLabel = label, onClick = onClick)
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .height(PREVIEW_HEIGHT)
+            .clip(RoundedCornerShape(18.dp))
+            .background(background)
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+                shape = RoundedCornerShape(18.dp),
+            ),
     ) {
-        Text(label, style = MaterialTheme.typography.bodyLarge)
+        if (ruled) {
+            PaperLines(color = lineColor, modifier = Modifier.matchParentSize())
+        }
         Text(
-            value,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
+            text = "Aujourd'hui, j'ai pris le temps de m'asseoir et d'écrire.",
+            style = MaterialTheme.typography.bodyLarge.copy(
+                color = ink,
+                fontFamily = font.fontFamily(),
+                fontSize = textSize.sp,
+                lineHeight = rhythm,
+                lineHeightStyle = LineHeightStyle(
+                    alignment = LineHeightStyle.Alignment.Bottom,
+                    trim = LineHeightStyle.Trim.None,
+                ),
+            ),
+            modifier = Modifier.padding(
+                horizontal = 20.dp,
+                vertical = JournalPaper.TOP_PADDING,
+            ),
         )
     }
 }
 
+/** Le titre d'une section, sa valeur en clair, et le choix en dessous. */
+@Composable
+private fun SettingSection(
+    label: String,
+    value: String,
+    content: @Composable () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            SectionLabelText(label)
+            Text(
+                text = value,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        content()
+    }
+}
+
+/** Un reglage qui n'a que deux etats : l'interrupteur le dit tout seul. */
+@Composable
+private fun SettingSwitch(
+    label: String,
+    hint: String,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClickLabel = label) { onChange(!checked) }
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = hint,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+/**
+ * Une pastille de choix dont le contenu est libre — c'est ce qui permet
+ * d'ecrire chaque police dans sa propre police, et chaque taille a sa taille.
+ */
+@Composable
+private fun ChoicePill(
+    selected: Boolean,
+    onClick: () -> Unit,
+    content: @Composable (Color) -> Unit,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    val background by animateColorAsState(
+        targetValue = if (selected) accent else MaterialTheme.colorScheme.surfaceVariant,
+        animationSpec = tween(Motion.NORMAL),
+        label = "fond",
+    )
+    val foreground by animateColorAsState(
+        targetValue = if (selected) readableOn(accent) else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(Motion.NORMAL),
+        label = "encre",
+    )
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = background,
+        onClick = onClick,
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            content(foreground)
+        }
+    }
+}
+
+/**
+ * Les couleurs proposees.
+ *
+ * La pastille choisie **grandit** et prend un anneau : deux signaux plutot
+ * qu'un, parce qu'un anneau seul se perd sur les papiers tres clairs, ou il a
+ * presque la couleur du fond.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SwatchRow(
@@ -220,29 +491,57 @@ private fun SwatchRow(
     selected: Int,
     onPick: (Int) -> Unit,
 ) {
-    // En ligne simple, la derniere pastille etait rognee par le bord de la
-    // boite de dialogue : on la voyait comme un trait.
+    // En ligne simple, la derniere pastille etait rognee par le bord du
+    // panneau : on la voyait comme un trait.
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         colors.forEachIndexed { index, (name, color) ->
+            val isSelected = index == selected
+            val scale by animateFloatAsState(
+                targetValue = if (isSelected) 1f else 0.84f,
+                animationSpec = tween(Motion.NORMAL),
+                label = "taille",
+            )
             Box(
                 modifier = Modifier
-                    .size(34.dp)
+                    .size(SWATCH_SIZE)
                     .clip(CircleShape)
-                    .background(color)
-                    .border(
-                        width = if (index == selected) 3.dp else 1.dp,
-                        color = if (index == selected) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                        },
-                        shape = CircleShape,
-                    )
                     .clickable(onClickLabel = name) { onPick(index) },
-            )
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        // L'echelle est lue dans graphicsLayer : lue dans la
+                        // composition, elle remesurerait la rangee entiere a
+                        // chaque image de l'animation.
+                        .graphicsLayer { scaleX = scale; scaleY = scale }
+                        .size(SWATCH_SIZE)
+                        .clip(CircleShape)
+                        .background(color)
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                            shape = CircleShape,
+                        ),
+                )
+                if (isSelected) {
+                    Box(
+                        modifier = Modifier
+                            .size(SWATCH_SIZE)
+                            .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
+                    )
+                }
+            }
         }
     }
 }
+
+private val SWATCH_SIZE = 40.dp
+
+/**
+ * Quatre lignes de la page, pas plus : l'apercu doit montrer le rythme du
+ * lignage sans prendre la moitie du panneau.
+ */
+private val PREVIEW_HEIGHT = 126.dp

@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.paddingFrom
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -55,6 +56,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.LastBaseline
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
@@ -165,31 +167,27 @@ fun ScreenTitle(
  *
  * Avant, chaque ecran dessinait le sien : passer du bilan a l'argent detruisait
  * « Mon bilan » pour reconstruire « Mon argent », et tout l'en-tete clignotait.
- * Ici le titre vit **au-dessus** de la navigation : il ne disparait jamais, il
- * se remplace.
+ * Ici le titre vit **au-dessus** de la navigation, et surtout chaque mot est
+ * anime separement : « Mon » ne bouge pas du tout entre le bilan et l'argent,
+ * seul le second mot glisse. C'est ce que le regard attend — ce qui ne change
+ * pas ne doit pas bouger.
  *
- * Il l'a fait pendant deux versions **mot par mot**, pour que « Mon » ne bouge
- * pas du tout entre le bilan et l'argent. C'etait une bonne idee et elle ne
- * marche pas, pour une raison qu'il faut retenir :
+ * Tenir ca **et** garder les deux polices sur la meme ligne d'ecriture a
+ * demande trois essais, et les deux ratages valent d'etre retenus :
  *
- * - Les deux mots sont de deux **polices** differentes, et la serif descend
- *   plus bas. Alignes par le bas de leur boite, le second flottait sous le
- *   premier.
- * - Les aligner sur leur ligne d'ecriture (`alignByBaseline`) reglait ca a
- *   l'arret, mais **pas pendant l'animation** : le temps du changement, un
- *   `AnimatedContent` contient **deux** textes a la fois — celui qui part et
- *   celui qui arrive — et la ligne d'ecriture qu'il annonce est celle du plus
- *   haut des deux. Elle bouge donc a chaque image, et les deux mots sautent.
- *   C'est le tremblement qu'on voyait en changeant d'onglet.
+ * 1. Alignes par le **bas de leur boite** : la serif descend plus bas que la
+ *    sans-serif, donc le second mot flottait un peu plus bas.
+ * 2. Alignes par `Modifier.alignByBaseline()` : juste a l'arret, faux pendant
+ *    l'animation. Le temps d'un changement, un `AnimatedContent` contient
+ *    **deux** textes — celui qui part et celui qui arrive — et la ligne
+ *    d'ecriture qu'il annonce est celle du plus haut des deux. Elle bouge a
+ *    chaque image, et les deux mots tremblent.
  *
- * Les deux mots vivent donc maintenant dans **un seul texte**, ou c'est le
- * paragraphe qui aligne les polices — comme dans [ScreenTitle], qui n'a jamais
- * eu le defaut. Le titre entier glisse d'un bloc, ce qui se voit a peine : les
- * lettres de « Mon » sont les memes avant et apres, au meme endroit.
- *
- * `SizeTransform(clip = false)` compte autant : sans lui, la boite se
- * redimensionne pendant le fondu **en decoupant**, et « argent » apparait
- * tronque au milieu du changement.
+ * La solution ne demande rien au parent : chaque mot reserve lui-meme
+ * [BASELINE_GAP] **sous sa propre ligne d'ecriture** (`paddingFrom`). Les deux
+ * boites ont alors leur ligne d'ecriture a la meme distance de leur bas, donc
+ * les aligner par le bas — une mesure fixe, que l'animation ne touche pas —
+ * aligne les lignes d'ecriture exactement.
  */
 @Composable
 fun MorphingTitle(
@@ -204,28 +202,33 @@ fun MorphingTitle(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            MorphingBlock(state = text to accent) { (first, second) ->
-                Text(
-                    text = buildAnnotatedString {
-                        append(first)
-                        append(" ")
-                        withStyle(
-                            SpanStyle(
-                                fontFamily = Serif,
-                                fontStyle = FontStyle.Italic,
-                                fontWeight = FontWeight.Normal,
-                                letterSpacing = 0.sp,
-                            )
-                        ) {
-                            append(second)
-                        }
-                    },
-                    style = MaterialTheme.typography.displaySmall,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    maxLines = 1,
-                )
+            Row(verticalAlignment = Alignment.Bottom) {
+                MorphingWord(word = text) { value ->
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.displaySmall,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                        modifier = Modifier.paddingFrom(LastBaseline, after = BASELINE_GAP),
+                    )
+                }
+                Spacer(Modifier.width(9.dp))
+                MorphingWord(word = accent) { value ->
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.displaySmall.copy(
+                            fontFamily = Serif,
+                            fontStyle = FontStyle.Italic,
+                            fontWeight = FontWeight.Normal,
+                            letterSpacing = 0.sp,
+                        ),
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                        modifier = Modifier.paddingFrom(LastBaseline, after = BASELINE_GAP),
+                    )
+                }
             }
-            MorphingBlock(state = subtitle.orEmpty()) { value ->
+            MorphingWord(word = subtitle.orEmpty()) { value ->
                 if (value.isNotEmpty()) {
                     Text(
                         text = value,
@@ -244,26 +247,37 @@ fun MorphingTitle(
 }
 
 /**
- * Ce qui se remplace en glissant vers le haut, le suivant arrivant par le bas.
- * Un contenu inchange n'est pas anime du tout : `AnimatedContent` ne rejoue
- * rien quand la cible est la meme.
+ * La place reservee sous la ligne d'ecriture de chaque mot du titre.
+ *
+ * Elle doit couvrir le jambage le plus profond des deux polices — le « g » de
+ * la serif italique — sinon il serait coupe. Et elle doit etre **la meme** pour
+ * les deux mots : c'est cette egalite, et rien d'autre, qui les aligne.
+ */
+private val BASELINE_GAP = 12.dp
+
+/**
+ * Un mot qui se remplace en glissant vers le haut, le suivant arrivant par le
+ * bas. Un mot inchange n'est pas anime du tout : `AnimatedContent` ne rejoue
+ * rien quand la cible est la meme — c'est ce qui immobilise « Mon ».
+ *
+ * `SizeTransform(clip = false)` est obligatoire : sans lui, la boite se
+ * redimensionne **en decoupant** pendant le fondu, et « argent » apparait
+ * tronque au milieu du changement.
  */
 @Composable
-private fun <T> MorphingBlock(state: T, content: @Composable (T) -> Unit) {
+private fun MorphingWord(word: String, content: @Composable (String) -> Unit) {
     AnimatedContent(
-        targetState = state,
+        targetState = word,
         transitionSpec = {
             ContentTransform(
                 targetContentEnter = fadeIn(tween(Motion.NORMAL)) +
                     slideInVertically(tween(Motion.NORMAL)) { it / 2 },
                 initialContentExit = fadeOut(tween(Motion.QUICK)) +
                     slideOutVertically(tween(Motion.NORMAL)) { -it / 2 },
-                // Sans ca, la boite se redimensionne en decoupant, et le mot le
-                // plus long apparait tronque pendant le changement.
                 sizeTransform = SizeTransform(clip = false),
             )
         },
-        label = "titre",
+        label = "mot",
     ) { value ->
         content(value)
     }

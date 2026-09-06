@@ -188,7 +188,10 @@ téléphone (Samsung S25, Android 15).
   série brisée punirait exactement les journées qu'il ne faut pas punir.
   Quatre règles d'animation : elle se déclenche **au passage** d'un état à
   l'autre, jamais à l'affichage (sinon rouvrir la journée la rejouerait — d'où
-  les gardes `stepsSeen` / `noteSeen` pour les valeurs qui arrivent après coup) ;
+  les gardes `stepsSeen` / `noteSeen` pour les valeurs qui arrivent après coup,
+  et surtout le `loadedFor != epochDay` : avant que la journée ne revienne de
+  la base, les champs sont vides, et le passage « vide → écrit » du chargement
+  ressemble trait pour trait à celui de l'écriture) ;
   moins de deux secondes et demie ; un appui n'importe où la coupe ; et une seule
   horloge mène tout, lue uniquement dans `drawBehind` et `graphicsLayer`.
 - **Emoji animés** (`res/raw/mood_*.json`, `res/raw/badge_*.json`) : les quatre
@@ -220,9 +223,14 @@ téléphone (Samsung S25, Android 15).
   contient *deux* textes à la fois, celui qui part et celui qui arrive, et la
   ligne d'écriture qu'il annonce est celle du plus haut des deux : elle bouge à
   chaque image et les mots sautent. **Ne jamais poser `alignByBaseline()` sur un
-  conteneur qui anime son contenu.** Les deux mots vivent donc dans un seul
-  `Text` avec un `SpanStyle` sur le second, comme `ScreenTitle` qui n'a jamais
-  eu le défaut. Et `SizeTransform(clip = false)` est obligatoire sur ces
+  conteneur qui anime son contenu.** Troisième essai : les deux mots réunis dans
+  un seul `Text` — aligné, stable, mais « Mon » se remettait à bouger, puisqu'un
+  seul `Text` s'anime d'un bloc. La solution ne demande rien au parent : chaque
+  mot réserve **lui-même** `BASELINE_GAP` sous sa propre ligne d'écriture
+  (`Modifier.paddingFrom(LastBaseline, after = …)`). Les deux boîtes ont alors
+  leur ligne d'écriture à la même distance de leur bas, et les aligner par le
+  bas — une mesure fixe, que l'animation ne touche pas — aligne les lignes
+  d'écriture exactement. Et `SizeTransform(clip = false)` est obligatoire sur ces
   `AnimatedContent` : sans lui, la boîte se redimensionne **en découpant**, et
   le mot le plus long apparaît tronqué au milieu du changement.
 - **Organiser ma journée** (`ui/OrganizeCardsScreen.kt`) : on y entre par le
@@ -342,6 +350,35 @@ téléphone (Samsung S25, Android 15).
   fermé, sinon la désélection automatique la balaierait aussitôt. Un champ sans
   focus ne peint pas non plus sa sélection : `SpanTransformation` la redessine,
   sinon on choisit une couleur à l'aveugle.
+- **La page suit le curseur** : le champ du journal ne défile pas lui-même — il
+  **grandit**, et c'est la page autour de lui qui défile. Personne ne le fait
+  donc à sa place : sans rien, écrire en bas de page tapait derrière le clavier.
+  La position du curseur vient de `onTextLayout` puis `getCursorRect`, en
+  coordonnées **du champ** : il faut y ajouter la marge du haut de la page pour
+  retomber dans le repère du défilement. On ne recentre que si le curseur sort
+  de la fenêtre, jamais sinon — un défilement à chaque lettre donnerait le mal
+  de mer.
+- **Boutons du journal et couleur du papier** : les outils de mise en forme
+  vivent **sur** la page, pas à côté. Ils prennent donc leur encre du papier
+  choisi (`LocalPaperInk` / `LocalPaperSurface` dans `ui/JournalToolbar.kt`),
+  et non du thème : sur l'ardoise, des boutons noirs sur fond sombre
+  disparaissaient. `paperAccent()` éclaircit en plus la couleur d'accent quand
+  le papier est foncé, sinon le violet de l'application y devient une tache
+  sourde.
+- **Paramètres de la page** (`PaperSettingsSheet`) : un **panneau** qui monte du
+  bas, pas une boîte de dialogue — une boîte assombrit la page et cache
+  justement ce qu'on est en train de régler. Il porte un aperçu qui est la page
+  elle-même, à sa vraie échelle et simplement coupée : une miniature aurait
+  menti sur la taille du texte, qui est l'un des réglages. La police de base est
+  rangée sous le **code** du style (`TextStyleKind.code`), jamais sous son rang
+  dans la liste : en ajouter une plus tard ne doit pas changer les pages déjà
+  écrites. Les tailles proposées restent toutes sous l'écart entre deux lignes
+  (28 points) : le texte grandit, le lignage ne bouge pas.
+- **Son des badges** (`ui/BadgeSound.kt`) : un fichier embarqué, joué seulement
+  si le téléphone est en sonnerie normale — en silencieux ou en vibreur, une
+  application qui sonne quand même est une application qu'on désinstalle. Le
+  son part en même temps que la vibration, au **passage** d'état comme
+  l'animation, jamais à l'affichage.
 - **Photos du journal** : elles sont **posées librement** sur la page, pas
   insérées dans le fil du texte. Écrire un paragraphe de plus ne les déplace
   pas — c'est voulu, et c'est l'inverse d'un traitement de texte. Trois

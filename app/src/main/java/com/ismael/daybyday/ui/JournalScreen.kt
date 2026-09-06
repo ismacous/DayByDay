@@ -62,6 +62,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -206,6 +207,14 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
 
     // --- Les photos posees sur la page ---------------------------------
     val pageScroll = rememberScrollState()
+
+    // La mise en page du texte, et de quoi convertir des points en pixels : les
+    // deux servent a savoir ou se trouve le curseur dans la page.
+    var bodyLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val density = LocalDensity.current
+    val textTopPadding = remember(density) {
+        with(density) { JournalPaper.TOP_PADDING.toPx() }
+    }
     var pageWidth by remember { mutableStateOf(0f) }
     var selectedPhotoId by remember { mutableStateOf<Long?>(null) }
 
@@ -215,10 +224,16 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
     var paperIndex by remember { mutableStateOf(prefs.journalPaperIndex) }
     var lineIndex by remember { mutableStateOf(prefs.journalLineIndex) }
     var snapToGrid by remember { mutableStateOf(prefs.journalSnapToGrid) }
+    var fontCode by remember { mutableStateOf(prefs.journalFontCode) }
+    var textSize by remember { mutableStateOf(prefs.journalTextSize) }
     var showPaperSettings by remember { mutableStateOf(false) }
     val paper = JournalPaper.paper(paperIndex)
     val ink = JournalPaper.ink(paper)
     val rhythm = with(density) { JournalPaper.LINE_SPACING.toSp() }
+    // La police et la taille de base de la page. Les mises en forme posees sur
+    // un morceau de texte passent par-dessus : ce style-ci n'est que le point
+    // de depart, celui de tout ce qui n'a rien de particulier.
+    val baseFont = JournalPaper.font(fontCode).fontFamily()
 
     // Pendant qu'un doigt deplace une photo, sa nouvelle place vit ici : on
     // n'ecrit pas dans la base a chaque image de l'animation.
@@ -384,7 +399,7 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                 },
                 actions = {
                     IconButton(onClick = { showPaperSettings = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Allure de la page")
+                        Icon(Icons.Default.MoreVert, contentDescription = "Paramètres de la page")
                     }
                 },
             )
@@ -448,6 +463,35 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                     viewportHeight,
                     (Placement.lowestEdge(journalMedia) + 160f).dp,
                 )
+
+                // Le curseur ne doit jamais passer sous le clavier. Le champ
+                // ne peut pas s'en charger : il n'a pas de defilement a lui, il
+                // s'etend sur toute la page et c'est la page qui bouge. On
+                // calcule donc nous-memes ou est le curseur, et on amene la
+                // page a lui — avec une marge, pour qu'on voie aussi la ligne
+                // qui suit et non le curseur colle au bord.
+                LaunchedEffect(body.selection, bodyLayout, viewportHeight) {
+                    val layout = bodyLayout ?: return@LaunchedEffect
+                    val caret = body.selection.end
+                        .coerceIn(0, layout.layoutInput.text.length)
+                    val rect = runCatching { layout.getCursorRect(caret) }.getOrNull()
+                        ?: return@LaunchedEffect
+                    val top = rect.top + textTopPadding
+                    val bottom = rect.bottom + textTopPadding
+                    val viewport = with(density) { viewportHeight.toPx() }
+                    val current = pageScroll.value.toFloat()
+                    val target = when {
+                        bottom + CARET_MARGIN > current + viewport ->
+                            bottom + CARET_MARGIN - viewport
+                        top - CARET_MARGIN < current -> top - CARET_MARGIN
+                        else -> null
+                    }
+                    if (target != null) {
+                        pageScroll.animateScrollTo(
+                            target.toInt().coerceIn(0, pageScroll.maxValue)
+                        )
+                    }
+                }
 
                 Box(
                     modifier = Modifier
@@ -518,6 +562,8 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                         },
                         textStyle = MaterialTheme.typography.bodyLarge.copy(
                             color = ink,
+                            fontFamily = baseFont,
+                            fontSize = textSize.sp,
                             // La hauteur de ligne vient d'une mesure en points,
                             // pas d'une taille de police : agrandir les
                             // caracteres dans les reglages d'Android decalerait
@@ -535,6 +581,11 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                             ),
                         ),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        // La mise en page du texte, gardee pour savoir **ou** est
+                        // le curseur. C'est la seule facon de le suivre ici : le
+                        // champ ne defile pas lui-meme, il grandit, et c'est la
+                        // page autour de lui qui defile.
+                        onTextLayout = { bodyLayout = it },
                         visualTransformation = run {
                             // Sans focus, le champ ne peint plus la selection : on la
                             // dessine nous-memes, sinon on colore a l'aveugle.
@@ -548,7 +599,10 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                                 if (body.text.isEmpty()) {
                                     Text(
                                         "Écris ce que tu veux, comme tu veux.",
-                                        style = MaterialTheme.typography.bodyLarge,
+                                        style = MaterialTheme.typography.bodyLarge.copy(
+                                            fontFamily = baseFont,
+                                            fontSize = textSize.sp,
+                                        ),
                                         color = ink.copy(alpha = 0.45f),
                                     )
                                 }
@@ -602,15 +656,19 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
             }
 
             if (showPaperSettings) {
-                PaperSettingsDialog(
+                PaperSettingsSheet(
                     ruled = ruled,
                     paperIndex = paperIndex,
                     lineIndex = lineIndex,
                     snapToGrid = snapToGrid,
+                    fontCode = fontCode,
+                    textSize = textSize,
                     onRuled = { ruled = it; prefs.journalRuled = it },
                     onPaper = { paperIndex = it; prefs.journalPaperIndex = it },
                     onLine = { lineIndex = it; prefs.journalLineIndex = it },
                     onSnap = { snapToGrid = it; prefs.journalSnapToGrid = it },
+                    onFont = { fontCode = it; prefs.journalFontCode = it },
+                    onTextSize = { textSize = it; prefs.journalTextSize = it },
                     onDismiss = { showPaperSettings = false },
                 )
             }
@@ -671,6 +729,8 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                     photoFile = { repository.media.file(it.relativePath) },
                     onPickPhoto = { selectPhoto(it.id) },
                     panelHeight = panelHeight,
+                    paper = paper,
+                    ink = ink,
                 )
 
                 // Le clavier remonte : on tient sa place jusqu'a ce qu'il y soit.
@@ -728,3 +788,10 @@ fun JournalPreview(
         }
     }
 }
+
+/**
+ * L'air garde entre le curseur et le bord de la page quand elle defile toute
+ * seule. Sans marge, le curseur se colle au bas de l'ecran et on ecrit sans
+ * voir la ligne suivante.
+ */
+private const val CARET_MARGIN = 120f

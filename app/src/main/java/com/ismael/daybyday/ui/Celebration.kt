@@ -33,6 +33,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -89,7 +92,14 @@ fun Celebration(badge: Badge, onDone: () -> Unit) {
     )
     val confettiTime = remember { Animatable(0f) }
 
+    val haptics = LocalHapticFeedback.current
+    val context = LocalContext.current
+
     LaunchedEffect(badge) {
+        // Le son et la secousse partent **avec** l'image, pas apres : c'est ce
+        // qui fait qu'on percoit un seul evenement et non trois.
+        BadgeSound.play(context)
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         launch { fade.animateTo(1f, tween(160)) }
         launch { confettiTime.animateTo(1f, tween(CONFETTI_MS, easing = LinearEasing)) }
         launch {

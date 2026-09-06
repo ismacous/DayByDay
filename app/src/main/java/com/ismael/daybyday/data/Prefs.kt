@@ -60,6 +60,28 @@ class Prefs(context: Context) {
         get() = prefs.getInt(KEY_JOURNAL_LINES, 0)
         set(value) = prefs.edit().putInt(KEY_JOURNAL_LINES, value).apply()
 
+    /**
+     * La police de base de la page, sous le **code** du style de texte.
+     *
+     * Un code et pas un rang dans la liste : ajouter une police plus tard ne
+     * doit pas changer celle des pages deja ecrites. Vide, c'est la police de
+     * l'application.
+     */
+    var journalFontCode: String
+        get() = prefs.getString(KEY_JOURNAL_FONT, TextStyleKind.FONT_MODERN.code)
+            ?: TextStyleKind.FONT_MODERN.code
+        set(value) = prefs.edit().putString(KEY_JOURNAL_FONT, value).apply()
+
+    /**
+     * La taille du texte de la page, en sp.
+     *
+     * Elle reste sous l'ecart entre deux lignes du lignage : le texte grandit,
+     * le lignage ne bouge pas.
+     */
+    var journalTextSize: Int
+        get() = prefs.getInt(KEY_JOURNAL_TEXT_SIZE, 16)
+        set(value) = prefs.edit().putInt(KEY_JOURNAL_TEXT_SIZE, value).apply()
+
     /** L'aimantation des photos sur la grille, gardee d'une page a l'autre. */
     var journalSnapToGrid: Boolean
         get() = prefs.getBoolean(KEY_JOURNAL_SNAP, true)
@@ -306,6 +328,8 @@ class Prefs(context: Context) {
         const val KEY_JOURNAL_PAPER = "journal_paper"
         const val KEY_JOURNAL_LINES = "journal_lines"
         const val KEY_JOURNAL_SNAP = "journal_snap"
+        const val KEY_JOURNAL_FONT = "journal_font"
+        const val KEY_JOURNAL_TEXT_SIZE = "journal_text_size"
         const val KEY_DAY_CARD_ORDER = "day_card_order"
         const val KEY_DAY_CARDS_HIDDEN = "day_cards_hidden"
         const val KEY_DAY_CARDS_COLLAPSED = "day_cards_collapsed"

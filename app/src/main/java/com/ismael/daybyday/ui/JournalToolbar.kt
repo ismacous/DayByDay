@@ -28,11 +28,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
@@ -60,6 +63,48 @@ enum class ToolPanel(val label: String) {
     COLORS("Couleur du texte"),
     HIGHLIGHTS("Surlignage"),
 }
+
+/**
+ * L'encre et le papier de la page, disponibles partout dans la barre d'outils.
+ *
+ * Passer les deux couleurs a chacun des huit boutons et des quatre panneaux
+ * aurait fait douze parametres a trainer. La barre les annonce une fois, et
+ * tout ce qu'elle contient les lit — c'est la meme idee que l'encre des cartes
+ * de « Ma journee », pour la meme raison : une surface coloree ne peut pas
+ * laisser son contenu prendre les couleurs du theme.
+ */
+private val LocalPaperInk = compositionLocalOf { Color.Black }
+
+private val LocalPaperSurface = compositionLocalOf { Color.White }
+
+/** L'encre principale de la barre : celle du texte de la page. */
+@Composable
+private fun paperInk(): Color = LocalPaperInk.current
+
+/** Un fond pose sur le papier : l'encre a peine posee dessus. */
+@Composable
+private fun paperFill(alpha: Float): Color = LocalPaperInk.current.copy(alpha = alpha)
+
+/**
+ * L'accent, ajuste au papier.
+ *
+ * Le violet de l'application se perd sur un papier noir. On garde donc sa
+ * teinte, mais on la ramene vers l'encre quand le papier est sombre : ce qui
+ * est actif reste visible, quelle que soit la page.
+ */
+@Composable
+private fun paperAccent(): Color {
+    val accent = MaterialTheme.colorScheme.primary
+    val dark = LocalPaperSurface.current.luminance() < 0.4f
+    return if (dark) blendTowards(accent, Color.White, 0.45f) else accent
+}
+
+private fun blendTowards(from: Color, to: Color, amount: Float): Color = Color(
+    red = from.red + (to.red - from.red) * amount,
+    green = from.green + (to.green - from.green) * amount,
+    blue = from.blue + (to.blue - from.blue) * amount,
+    alpha = from.alpha,
+)
 
 /** Les trois façons de numeroter une liste. */
 enum class ListMarker(val label: String, val sample: String, val marker: String) {
@@ -94,9 +139,24 @@ fun JournalToolbar(
     photoFile: (MediaItem) -> File,
     onPickPhoto: (MediaItem) -> Unit,
     panelHeight: Dp,
+    /**
+     * Le papier de la page, et son encre.
+     *
+     * La barre d'outils est **posee sur la page**, pas a cote : sur un papier
+     * noir, des boutons blancs du theme faisaient une bande lumineuse en bas de
+     * l'ecran ; sur un papier creme, ils tranchaient en froid. Tout ce que la
+     * barre dessine se teinte donc a partir de ces deux couleurs, et l'accent
+     * de l'application ne sert plus qu'a dire ce qui est **actif**.
+     */
+    paper: Color,
+    ink: Color,
 ) {
+    CompositionLocalProvider(
+        LocalPaperInk provides ink,
+        LocalPaperSurface provides paper,
+    ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+        HorizontalDivider(color = paperFill(0.12f))
 
         Row(
             modifier = Modifier
@@ -167,7 +227,7 @@ fun JournalToolbar(
         }
 
         if (openPanel != null) {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+            HorizontalDivider(color = paperFill(0.12f))
             ToolPanelContent(
                 panel = openPanel,
                 active = active,
@@ -182,6 +242,7 @@ fun JournalToolbar(
                 height = panelHeight,
             )
         }
+    }
     }
 }
 
@@ -202,7 +263,7 @@ private fun ToolPanelContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .background(paperFill(0.05f))
             // Le panneau prend exactement la hauteur laissee libre par le
             // clavier qui s'en va : ouvert ou ferme, le bas de l'ecran occupe
             // la meme place, donc le texte au-dessus ne bouge pas d'un pixel.
@@ -342,7 +403,7 @@ private fun AllToolsPanel(
                     modifier = Modifier
                         .size(64.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.surface)
+                        .background(LocalPaperSurface.current)
                         .clickable(onClickLabel = "Reprendre cette photo") { onPickPhoto(photo) },
                 ) {
                     MediaImage(
@@ -369,7 +430,7 @@ private fun ColorGlyph(chosen: TextStyleKind?) {
             "A",
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
-            color = chosen?.let { Color(it.argb) } ?: MaterialTheme.colorScheme.onSurface,
+            color = chosen?.let { Color(it.argb) } ?: paperInk(),
         )
         Spacer(Modifier.height(2.dp))
         Box(
@@ -401,7 +462,7 @@ private fun SectionLabel(text: String) {
     Text(
         text = text.uppercase(),
         style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = paperFill(0.62f),
         modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 8.dp),
     )
 }
@@ -431,9 +492,9 @@ private fun SwatchGrid(
                     .clip(RoundedCornerShape(12.dp))
                     .background(
                         if (style in active) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                            paperAccent().copy(alpha = 0.20f)
                         } else {
-                            MaterialTheme.colorScheme.surface
+                            paperFill(0.05f)
                         }
                     )
                     .clickable(onClickLabel = style.label) { onStyle(style) }
@@ -490,9 +551,9 @@ private fun PanelRow(
             .clip(RoundedCornerShape(12.dp))
             .background(
                 if (selected) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                    paperAccent().copy(alpha = 0.22f)
                 } else {
-                    MaterialTheme.colorScheme.surface
+                    paperFill(0.05f)
                 }
             )
             .clickable(onClickLabel = label, onClick = onClick)
@@ -523,9 +584,9 @@ private fun GroupButton(
             .clip(RoundedCornerShape(12.dp))
             .background(
                 when {
-                    open -> MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
-                    marked -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                    else -> MaterialTheme.colorScheme.surfaceVariant
+                    open -> paperAccent().copy(alpha = 0.30f)
+                    marked -> paperAccent().copy(alpha = 0.16f)
+                    else -> paperFill(0.08f)
                 }
             )
             .clickable(onClickLabel = label, onClick = onClick),
@@ -536,7 +597,7 @@ private fun GroupButton(
             Icon(
                 Icons.Default.Clear,
                 contentDescription = "Fermer $label",
-                tint = MaterialTheme.colorScheme.primary,
+                tint = paperAccent(),
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(2.dp)
@@ -552,7 +613,7 @@ private fun Separator() {
         modifier = Modifier
             .width(1.dp)
             .height(24.dp)
-            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+            .background(paperFill(0.20f)),
     )
 }
 
@@ -569,9 +630,9 @@ private fun ToolButton(
             .clip(RoundedCornerShape(12.dp))
             .background(
                 if (selected) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)
+                    paperAccent().copy(alpha = 0.22f)
                 } else {
-                    MaterialTheme.colorScheme.surfaceVariant
+                    paperFill(0.08f)
                 }
             )
             .clickable(onClickLabel = label, onClick = onClick),

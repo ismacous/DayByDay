@@ -162,14 +162,12 @@ téléphone (Samsung S25, Android 15).
   l'application, l'encre est imposée en blanc (`accentInk`) : `readableOnAll`
   choisirait du sombre, correct au contraste mais différent des autres cartes
   fortes.
-- **Encre d'une carte colorée** : une carte à fond de couleur ne peut pas
-  laisser son contenu prendre les couleurs du thème — le gris des textes
-  secondaires devient illisible sur un vert, le bleu nuit disparaît sur une
-  journée très noire. La carte annonce son encre une fois via `LocalCardInk`
-  (`cardInk` / `cardInkSoft` / `cardInkFaint`), et tout ce qu'elle contient la
-  lit. Cette encre se choisit avec `readableOnAll`, sur **toutes** les couleurs
-  du dégradé et au contraste réel (WCAG) : le vert part d'un vert moyen où le
-  blanc passe encore, et finit clair où il disparaît.
+- **Encre d'un en-tête coloré** : `readableOnAll` choisit noir ou blanc sur
+  **toutes** les couleurs d'un dégradé, au contraste réel (WCAG), et non sur sa
+  seule couleur de départ : le vert des bonnes journées part d'un vert moyen où
+  le blanc passe encore, et finit clair où il disparaît. Il n'y a plus de
+  `LocalCardInk` : plus aucun contenu de carte ne repose sur de la couleur —
+  seul l'en-tête de la carte d'humeur le fait, et il choisit son encre lui-même.
 - **Animations saccadées** : une valeur animée lue **pendant la composition**
   coûte une recomposition — et si elle nourrit une taille (l'épaisseur d'un
   `border`, par exemple), une remesure — à chaque image. L'anneau d'aujourd'hui

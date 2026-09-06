@@ -1298,12 +1298,12 @@ private fun CardMediaRow(
 /** Ligne d'un moment de la journee : le libelle et les quatre couleurs. */
 @Composable
 private fun PartRow(part: DayPart, selectedKey: Int?, onPick: (Int?) -> Unit) {
-    val partBorder = cardInk()
+    val partBorder = MaterialTheme.colorScheme.onSurface
     Column(modifier = Modifier.padding(bottom = 12.dp)) {
         Text(
             text = "${part.emoji} ${part.label}",
             style = MaterialTheme.typography.labelLarge,
-            color = cardInkSoft(),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(6.dp))
         Row(

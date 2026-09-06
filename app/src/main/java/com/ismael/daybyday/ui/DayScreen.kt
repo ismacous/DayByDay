@@ -717,6 +717,7 @@ fun DayScreen(
                             if (card in current) current - card else current + card
                         layoutTick += 1
                     },
+                    onOrganize = onOrganizeCards,
                 ) {
                     val tint = cardStyle(card).tint
 

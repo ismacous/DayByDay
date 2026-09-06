@@ -1,6 +1,8 @@
 package com.ismael.daybyday.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.using
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -68,9 +70,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.ismael.daybyday.ui.theme.Brand
 import com.ismael.daybyday.ui.theme.Serif
-import com.ismael.daybyday.ui.theme.accentSerif
 import kotlinx.coroutines.delay
 
 /**
@@ -163,13 +165,32 @@ fun ScreenTitle(
  * Le titre d'un onglet, qui **survit** au changement de page.
  *
  * Avant, chaque ecran dessinait le sien : passer du bilan a l'argent detruisait
- * « Mon bilan » pour reconstruire « Mon argent », et tout l'en-tete clignotait
- * alors que les deux titres sont au meme endroit et commencent par le meme mot.
+ * « Mon bilan » pour reconstruire « Mon argent », et tout l'en-tete clignotait.
+ * Ici le titre vit **au-dessus** de la navigation : il ne disparait jamais, il
+ * se remplace.
  *
- * Ici le titre vit **au-dessus** de la navigation : il ne disparait jamais. Les
- * deux mots sont animes separement, donc « Mon » ne bouge pas du tout entre le
- * bilan et l'argent — seul le second mot glisse et se remplace. C'est ce que le
- * regard attend : ce qui ne change pas ne doit pas bouger.
+ * Il l'a fait pendant deux versions **mot par mot**, pour que « Mon » ne bouge
+ * pas du tout entre le bilan et l'argent. C'etait une bonne idee et elle ne
+ * marche pas, pour une raison qu'il faut retenir :
+ *
+ * - Les deux mots sont de deux **polices** differentes, et la serif descend
+ *   plus bas. Alignes par le bas de leur boite, le second flottait sous le
+ *   premier.
+ * - Les aligner sur leur ligne d'ecriture (`alignByBaseline`) reglait ca a
+ *   l'arret, mais **pas pendant l'animation** : le temps du changement, un
+ *   `AnimatedContent` contient **deux** textes a la fois — celui qui part et
+ *   celui qui arrive — et la ligne d'ecriture qu'il annonce est celle du plus
+ *   haut des deux. Elle bouge donc a chaque image, et les deux mots sautent.
+ *   C'est le tremblement qu'on voyait en changeant d'onglet.
+ *
+ * Les deux mots vivent donc maintenant dans **un seul texte**, ou c'est le
+ * paragraphe qui aligne les polices — comme dans [ScreenTitle], qui n'a jamais
+ * eu le defaut. Le titre entier glisse d'un bloc, ce qui se voit a peine : les
+ * lettres de « Mon » sont les memes avant et apres, au meme endroit.
+ *
+ * `SizeTransform(clip = false)` compte autant : sans lui, la boite se
+ * redimensionne pendant le fondu **en decoupant**, et « argent » apparait
+ * tronque au milieu du changement.
  */
 @Composable
 fun MorphingTitle(
@@ -184,32 +205,28 @@ fun MorphingTitle(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            // Les deux mots s'alignent sur leur **ligne d'ecriture**, pas sur
-            // le bas de leur boite. Ce sont deux polices differentes : la
-            // serif descend plus bas que la sans-serif, donc aligner les bas
-            // faisait flotter « journée » sous « Ma ». Le titre en un seul
-            // texte ([ScreenTitle]) n'avait pas ce defaut, parce que c'est le
-            // paragraphe qui s'en occupait.
-            Row(verticalAlignment = Alignment.Bottom) {
-                MorphingWord(word = text, modifier = Modifier.alignByBaseline()) { value ->
-                    Text(
-                        text = value,
-                        style = MaterialTheme.typography.displaySmall,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        maxLines = 1,
-                    )
-                }
-                Spacer(Modifier.width(9.dp))
-                MorphingWord(word = accent, modifier = Modifier.alignByBaseline()) { value ->
-                    Text(
-                        text = value,
-                        style = MaterialTheme.typography.displaySmall.accentSerif(),
-                        color = MaterialTheme.colorScheme.onBackground,
-                        maxLines = 1,
-                    )
-                }
+            MorphingBlock(state = text to accent) { (first, second) ->
+                Text(
+                    text = buildAnnotatedString {
+                        append(first)
+                        append(" ")
+                        withStyle(
+                            SpanStyle(
+                                fontFamily = Serif,
+                                fontStyle = FontStyle.Italic,
+                                fontWeight = FontWeight.Normal,
+                                letterSpacing = 0.sp,
+                            )
+                        ) {
+                            append(second)
+                        }
+                    },
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 1,
+                )
             }
-            MorphingWord(word = subtitle.orEmpty()) { value ->
+            MorphingBlock(state = subtitle.orEmpty()) { value ->
                 if (value.isNotEmpty()) {
                     Text(
                         text = value,
@@ -228,19 +245,14 @@ fun MorphingTitle(
 }
 
 /**
- * Un mot qui se remplace en glissant vers le haut, le suivant arrivant par le
- * bas. Un mot inchange n'est pas anime du tout : `AnimatedContent` ne rejoue
+ * Ce qui se remplace en glissant vers le haut, le suivant arrivant par le bas.
+ * Un contenu inchange n'est pas anime du tout : `AnimatedContent` ne rejoue
  * rien quand la cible est la meme.
  */
 @Composable
-private fun MorphingWord(
-    word: String,
-    modifier: Modifier = Modifier,
-    content: @Composable (String) -> Unit,
-) {
+private fun <T> MorphingBlock(state: T, content: @Composable (T) -> Unit) {
     AnimatedContent(
-        targetState = word,
-        modifier = modifier,
+        targetState = state,
         transitionSpec = {
             (
                 fadeIn(tween(Motion.NORMAL)) +
@@ -248,9 +260,12 @@ private fun MorphingWord(
                 ) togetherWith (
                 fadeOut(tween(Motion.QUICK)) +
                     slideOutVertically(tween(Motion.NORMAL)) { -it / 2 }
-                )
+                ) using
+                // Sans ca, la boite se redimensionne en decoupant, et le mot le
+                // plus long apparait tronque pendant le changement.
+                SizeTransform(clip = false)
         },
-        label = "mot",
+        label = "titre",
     ) { value ->
         content(value)
     }

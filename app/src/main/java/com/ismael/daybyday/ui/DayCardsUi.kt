@@ -11,7 +11,9 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,7 +52,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -80,11 +84,22 @@ import java.util.Locale
  * Le contenu n'est pas compose quand la carte est repliee : une carte fermee ne
  * coute rien.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DayCardShell(
     card: DayCard,
     collapsed: Boolean,
     onToggleCollapse: () -> Unit,
+    /**
+     * Maintenir le doigt sur l'en-tete ouvre « Organiser ma journee ».
+     *
+     * C'est le meme geste que sur un ecran d'accueil de telephone : on appuie
+     * longtemps sur ce qu'on veut ranger. Il ne remplace pas le bouton en bas
+     * de page — un raccourci qu'on ne devine pas ne doit jamais etre le seul
+     * chemin — mais il tombe sous le doigt au moment exact ou l'envie vient,
+     * c'est-a-dire en regardant la carte qui derange.
+     */
+    onOrganize: () -> Unit = {},
     /** L'etat de la carte, en quelques mots. Rien a dire : `null`. */
     summary: String? = null,
     /**
@@ -141,10 +156,21 @@ fun DayCardShell(
             .background(surface)
             .then(if (moodBrush != null) Modifier.background(moodBrush) else Modifier.cardGlow(style)),
     ) {
+        val haptics = LocalHapticFeedback.current
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onToggleCollapse)
+                .combinedClickable(
+                    onClick = onToggleCollapse,
+                    onLongClickLabel = "Organiser ma journée",
+                    onLongClick = {
+                        // Une secousse au moment ou le maintien est reconnu :
+                        // sans elle, on ne sait pas si le geste a pris avant de
+                        // voir l'ecran changer.
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onOrganize()
+                    },
+                )
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

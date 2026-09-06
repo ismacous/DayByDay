@@ -26,14 +26,22 @@ enum class Badge(
     val key: String,
     val title: String,
     val subtitle: String,
+    /**
+     * Le signe du badge.
+     *
+     * Les huit ont ete choisis parmi ceux que Google **anime** : mieux vaut un
+     * emoji un peu detourne (la Terre pour « tu es sorti », une fusee pour une
+     * candidature) que huit medailles dont la moitie bougerait et l'autre non.
+     * Une regle a moitie appliquee se voit plus qu'une regle absente.
+     */
     val emoji: String,
 ) {
-    PRAYERS("prieres", "Les cinq prières", "La journée est complète.", "🕌"),
+    PRAYERS("prieres", "Les cinq prières", "La journée est complète.", "🤲"),
     STEPS("pas", "6 000 pas", "Tu as marché aujourd'hui.", "👟"),
     WORKOUT("seance", "Vraie séance", "Le corps a travaillé.", "💪"),
-    OUTSIDE("sortie", "Tu es sorti", "La porte a été passée.", "🚪"),
+    OUTSIDE("sortie", "Tu es sorti", "La porte a été passée.", "🌍"),
     WATER("eau", "Huit verres", "Bien hydraté.", "💧"),
-    APPLICATION("candidature", "Candidature envoyée", "Une de plus.", "📮"),
+    APPLICATION("candidature", "Candidature envoyée", "Une de plus.", "🚀"),
     WEEK_APPLICATIONS(
         "candidatures_semaine",
         "Cinq candidatures",

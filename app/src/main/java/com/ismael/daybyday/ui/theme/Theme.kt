@@ -131,8 +131,10 @@ private val AppShapes = Shapes(
  *
  * Deux hauteurs de voix seulement : les titres, en sans-serif dense, et le
  * texte courant, plus aere. La serif italique n'est pas ici — elle ne
- * s'utilise jamais toute seule, mais toujours comme accent dans un titre, via
- * [accentSerif].
+ * s'utilise jamais toute seule, mais toujours comme accent **a l'interieur**
+ * d'un titre, par un `SpanStyle` pose sur un seul mot. C'est ce qui garantit
+ * que les deux polices partagent la meme ligne d'ecriture : c'est le
+ * paragraphe qui les aligne, et non deux boites posees cote a cote.
  */
 private val AppTypography = Typography(
     displaySmall = TextStyle(
@@ -201,17 +203,6 @@ private val AppTypography = Typography(
     ),
 )
 
-/**
- * L'accent : la serif italique, a la meme taille que le titre qu'elle
- * accompagne. C'est le seul endroit ou les deux polices se cotoient, et c'est
- * ce qui donne son ton a l'application — moderne, mais ecrit a la main.
- */
-fun TextStyle.accentSerif(): TextStyle = copy(
-    fontFamily = Serif,
-    fontStyle = FontStyle.Italic,
-    fontWeight = FontWeight.Normal,
-    letterSpacing = 0.sp,
-)
 
 @Composable
 fun DayByDayTheme(

@@ -175,9 +175,15 @@ téléphone (Samsung S25, Android 15).
   les gardes `stepsSeen` / `noteSeen` pour les valeurs qui arrivent après coup) ;
   moins de deux secondes et demie ; un appui n'importe où la coupe ; et une seule
   horloge mène tout, lue uniquement dans `drawBehind` et `graphicsLayer`.
-- **Emoji animés** (`res/raw/mood_*.json`) : les quatre visages des tuiles
-  d'humeur sont les emoji animés de Google (Noto), du vecteur pur sans image ni
-  adresse dedans. La tuile choisie joue son animation **une fois** puis reste
+- **Emoji animés** (`res/raw/mood_*.json`, `res/raw/badge_*.json`) : les quatre
+  visages des tuiles d'humeur et les huit signes des badges sont les emoji
+  animés de Google (Noto), du vecteur pur sans image ni adresse dedans (les
+  `assets` de certains fichiers sont des **compositions imbriquées**, pas des
+  images — à vérifier avant d'en embarquer un). Google n'anime pas tous les
+  emoji : les badges ont donc été choisis **parmi ceux qui existent en animé**,
+  quitte à en détourner un (la Terre pour « tu es sorti », une fusée pour une
+  candidature). Mieux vaut ça que huit médailles dont la moitié bougerait —
+  une règle à moitié appliquée se voit plus qu'une règle absente. La tuile choisie joue son animation **une fois** puis reste
   dans sa pose ; les autres montrent la première image, atténuée. Quatre visages
   qui s'agitent en permanence feraient une vitrine, pas un choix. La progression
   passe en **lambda** à `LottieAnimation` : lue au dessin, elle ne recompose
@@ -189,14 +195,25 @@ téléphone (Samsung S25, Android 15).
   maintenant horizontal (donc la sortie ne dépend que de `x`), l'obliquité vient
   d'une `rotate` du dessin, et le trajet (`SHINE_FROM` / `SHINE_TO`) est calculé
   pour que la bande ait quitté la tuile **rotation comprise**.
-- **Deux polices sur une ligne s'alignent sur la ligne d'écriture**, pas sur le
-  bas de leur boîte. `MorphingTitle` fait « Mon » en sans-serif et « bilan » en
-  serif italique dans deux `Text` séparés : la serif descend plus bas, donc
-  `Alignment.Bottom` faisait flotter le second mot. `Modifier.alignByBaseline()`
-  sur chacun règle ça. `ScreenTitle` n'avait pas le défaut : les deux mots y
-  vivent dans un seul texte, et c'est le paragraphe qui s'en occupait.
-- **Organiser ma journée** (`ui/OrganizeCardsScreen.kt`) : chaque rangée est la
-  carte **en petit** — même teinte, même signe, même halo. On ne choisit pas une
+- **Deux polices sur une ligne ne s'alignent que dans le même paragraphe.**
+  `MorphingTitle` animait « Mon » et « bilan » séparément, pour que le premier
+  mot ne bouge pas. Deux tentatives, deux échecs, et la leçon vaut pour toute
+  animation : (1) alignés par le bas de leur boîte, la serif descendant plus
+  bas, le second mot flottait ; (2) `Modifier.alignByBaseline()` réglait ça
+  **à l'arrêt seulement** — le temps d'un changement, un `AnimatedContent`
+  contient *deux* textes à la fois, celui qui part et celui qui arrive, et la
+  ligne d'écriture qu'il annonce est celle du plus haut des deux : elle bouge à
+  chaque image et les mots sautent. **Ne jamais poser `alignByBaseline()` sur un
+  conteneur qui anime son contenu.** Les deux mots vivent donc dans un seul
+  `Text` avec un `SpanStyle` sur le second, comme `ScreenTitle` qui n'a jamais
+  eu le défaut. Et `SizeTransform(clip = false)` est obligatoire sur ces
+  `AnimatedContent` : sans lui, la boîte se redimensionne **en découpant**, et
+  le mot le plus long apparaît tronqué au milieu du changement.
+- **Organiser ma journée** (`ui/OrganizeCardsScreen.kt`) : on y entre par le
+  bouton en bas de la journée, ou en **maintenant le doigt sur l'en-tête d'une
+  carte** — le geste des écrans d'accueil, qui tombe sous le doigt au moment où
+  l'envie vient. Un raccourci qu'on ne devine pas ne doit jamais être le seul
+  chemin, d'où le bouton qui reste. Chaque rangée est la carte **en petit** — même teinte, même signe, même halo. On ne choisit pas une
   ligne de texte, on choisit une carte. On déplace en **maintenant puis tirant**
   (`detectDragGesturesAfterLongPress`), ce qui ne se bat pas avec le défilement.
   Deux choses à ne pas défaire : (1) les hauteurs de rangée sont **fixes**, et

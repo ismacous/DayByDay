@@ -37,7 +37,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
 import com.airbnb.lottie.compose.rememberLottieComposition
@@ -146,7 +145,7 @@ fun Celebration(badge: Badge, onDone: () -> Unit) {
                     alpha = grow.coerceIn(0f, 1f)
                 },
         ) {
-            Medal(palette = palette, emoji = badge.emoji, time = time, spin = spin)
+            Medal(badge = badge, palette = palette, time = time, spin = spin)
             Spacer(Modifier.height(22.dp))
             Text(
                 text = badge.title,
@@ -191,8 +190,8 @@ fun Celebration(badge: Badge, onDone: () -> Unit) {
  */
 @Composable
 private fun Medal(
+    badge: Badge,
     palette: List<Color>,
-    emoji: String,
     time: Animatable<Float, *>,
     spin: Animatable<Float, *>,
 ) {
@@ -291,7 +290,18 @@ private fun Medal(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            Text(text = emoji, fontSize = 46.sp)
+            // Le signe du badge est anime, comme les visages de l'humeur :
+            // il boucle pendant que la medaille est a l'ecran. C'est le seul
+            // endroit ou une boucle a du sens — la medaille ne dure que deux
+            // secondes, et c'est une fete.
+            val face by rememberLottieComposition(
+                LottieCompositionSpec.RawRes(badgeAnimation(badge))
+            )
+            LottieAnimation(
+                composition = face,
+                progress = { (time.value * BADGE_LOOPS) % 1f },
+                modifier = Modifier.size(58.dp),
+            )
         }
     }
 }
@@ -439,6 +449,26 @@ private fun badgePalette(badge: Badge): List<Color> = when (badge) {
         listOf(Color(0xFF9B90FF), Color(0xFF5B4DF0))
     Badge.JOURNAL -> listOf(Color(0xFFFFA9B8), Color(0xFFF2637F))
 }
+
+/**
+ * Le signe anime de chaque badge.
+ *
+ * Ce sont les memes emoji animes de Google que les visages de l'humeur, du
+ * vecteur pur sans image ni adresse dedans.
+ */
+private fun badgeAnimation(badge: Badge): Int = when (badge) {
+    Badge.PRAYERS -> R.raw.badge_prayers
+    Badge.STEPS -> R.raw.badge_steps
+    Badge.WORKOUT -> R.raw.badge_workout
+    Badge.OUTSIDE -> R.raw.badge_outside
+    Badge.WATER -> R.raw.badge_water
+    Badge.APPLICATION -> R.raw.badge_application
+    Badge.WEEK_APPLICATIONS -> R.raw.badge_week
+    Badge.JOURNAL -> R.raw.badge_journal
+}
+
+/** Combien de fois le signe rejoue pendant que la medaille est la. */
+private const val BADGE_LOOPS = 2f
 
 /** Duree du fichier de confettis : soixante-quinze images a trente par seconde. */
 private const val CONFETTI_MS = 2500

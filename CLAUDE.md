@@ -293,13 +293,19 @@ téléphone (Samsung S25, Android 15).
   personne — il s'arrêtait au premier mot. Un bloc, lui, est une chose : il a
   une place, une hauteur, un bord, et on peut le prendre.
   Quatre règles portent tout le reste :
-  1. **Un bloc de texte n'est pas un paragraphe.** C'est ce qui rend la chose
-     vivable : Entrée écrit un retour à la ligne comme partout, et une page
-     ordinaire n'a **qu'un seul champ** — donc le curseur, la sélection, les
-     mots-clés et les liens continuent de travailler comme avant. Un deuxième
-     bloc n'apparaît que quand on pose une citation, un trait ou un vocal au
-     milieu du texte : `PageBlocks.insertAt` coupe le bloc en deux et met
-     l'élément entre.
+  1. **Un paragraphe est un bloc.** Entrée coupe le bloc en deux
+     (`PageBlocks.splitAt`), effacer au tout début le recolle à celui du dessus
+     (`PageBlocks.mergeBack`). La première version faisait l'inverse — un bloc
+     de texte contenait plusieurs paragraphes, pour n'avoir qu'un champ par
+     page — et c'était l'erreur : on pouvait déplacer les vocaux et les
+     citations, mais pas ce qu'on avait écrit, et c'est justement ce qu'on veut
+     déplacer. On ne pouvait même pas fabriquer un second bloc de texte.
+     Les deux vont **ensemble** : sans le recollage, la page ne ferait que se
+     découper. Le recollage passe par `onKeyEvent` sur la touche d'effacement,
+     et il refuse d'avaler autre chose que du texte — effacer un enregistrement
+     d'un coup de touche serait le pire des raccourcis.
+     `PageBlocks.insertAt` coupe pareillement quand on pose une citation, un
+     trait ou un vocal au milieu du texte.
   2. **`note` est une projection, pas une deuxième source.** La recherche,
      l'export de l'année, les aperçus et le PDF lisent une page à plat et ne
      savent rien des blocs. `JournalBlocks.flatten` recompose ce texte à chaque
@@ -307,10 +313,12 @@ téléphone (Samsung S25, Android 15).
      test qui compte est l'aller-retour `split` → `flatten` : si le calcul se
      décale d'un retour à la ligne, tous les intervalles de mise en forme se
      décalent avec, et ne pointent plus sur les bons mots.
-  3. **Deux blocs de texte qui se touchent n'existent pas.** Rien ne les
-     sépare, donc rien ne les distingue : `PageBlocks.tidy` les recolle. C'est
-     ce qui fait qu'effacer une citation refait un seul paragraphe au lieu de
-     laisser une couture invisible.
+  3. **Un bloc de texte vide est une ligne blanche**, pas un déchet. Il ne se
+     jette donc plus (ni dans `PageBlocks.tidy`, ni dans `JournalBlocks.tidy`),
+     sinon deux paragraphes qu'on venait de séparer se recolleraient tout
+     seuls. Corollaire pour `flatten` : le séparateur est un **drapeau**, pas
+     un « est-ce que ça finit déjà par un retour à la ligne ? » — deux blocs
+     vides d'affilée doivent donner deux lignes vides.
   4. **Chaque bloc occupe un nombre entier de lignes du lignage.** Un vocal en
      fait deux (`VOICE_LINES`), un trait une. Sans ça, le texte qui suit un
      vocal ne retombe plus sur ses lignes — c'est exactement ce qui se voyait
@@ -337,14 +345,24 @@ téléphone (Samsung S25, Android 15).
      encore mesuré rendrait la condition vraie sans que rien ne bouge, et on
      tournerait pour toujours (le bug d'« Organiser ma journée »).
   **Une poignée qu'on ne voit pas est une poignée qui n'existe pas.** Chaque
-  bloc porte la sienne dans une marge à gauche (`BlockGutter`), très pâle au
-  repos et marquée sur le bloc courant : sans elle, une page en blocs ressemble
-  trait pour trait à une page qui n'en a pas, et rien ne dit qu'il y a quelque
-  chose à attraper. C'est le premier retour d'usage qu'on a eu sur la refonte,
-  et c'était le bon.
-  Un bloc de texte ne se déplace pas directement : l'appui maintenu y appartient
-  à la sélection de texte. Ce sont les autres qu'on attrape, et le texte
-  s'écarte autour.
+  bloc a la sienne dans une marge à gauche (`BlockGutter`) : sans elle, une
+  page en blocs ressemble trait pour trait à une page qui n'en a pas, et rien
+  ne dit qu'il y a quelque chose à attraper. Elle vaut aussi pour les
+  paragraphes — sur le texte lui-même, l'appui maintenu appartient à la
+  sélection.
+  Elle n'apparaît que sur le bloc **où l'on est**. Deuxième essai : la première
+  version la montrait pâle sur chaque bloc, pour dire que la page en est faite.
+  Ça le disait, mais une page de dix paragraphes devenait une colonne de points
+  gris à côté d'une colonne de texte — le décor prenait le pas sur ce qu'on
+  écrit. Une seule suffit, et elle désigne en plus ce qu'on va déplacer.
+  **Deux gestes, deux rôles** : on la maintient pour déplacer, on l'effleure
+  pour ouvrir `BlockMenu`. C'est le seul chemin vers « supprimer » pour un bloc
+  qui n'a rien d'autre — une citation vide, un paragraphe de trop — et sans lui
+  une citation posée par erreur restait sur la page pour toujours.
+  **Seul un vocal demande confirmation.** Supprimer son bloc efface le fichier
+  son, et aucune annulation ne le rendra ; tout le reste est dans l'historique,
+  donc une question de plus n'y protégerait rien. Confirmer partout aurait
+  surtout appris à répondre oui sans lire.
 - **Citations et traits, depuis la refonte en blocs** : le trait d'une citation
   est une **forme posée à côté de son texte** (`QuoteBlockView`), plus un dessin
   calculé depuis la mise en page. Trois choses en découlent, et ce sont les
@@ -643,6 +661,16 @@ téléphone (Samsung S25, Android 15).
   reprend exactement après. Attention : Compose refuse des `ParagraphStyle` qui
   se recouvrent, et rien n'empêche deux titres au même endroit — d'où le tri et
   le filtrage dans `headingParagraphs`.
+- **Réglages d'une photo** (`PhotoToolsBar`) : c'était un tas de pastilles
+  identiques sur trois rangées — quatre formes, un contour, un aimant, trois
+  profondeurs — sans rien qui dise lesquelles allaient ensemble ni lesquelles
+  s'excluaient, en blanc et violet du thème sur un papier ivoire. Les mêmes
+  règles que les cartes de « Ma journée » le remettent d'aplomb : **une
+  question, une réponse, une forme** (un choix parmi quatre est une piste
+  segmentée, un oui-ou-non est un interrupteur), **chaque question porte son
+  intitulé** (« Profondeur » était le seul à en avoir un, et c'est pour ça
+  qu'il était le seul compréhensible), et **les couleurs viennent du papier**,
+  comme la barre d'outils du journal.
 - **Autocollants** : `MediaShape.FREE` ne recadre ni ne rogne, donc un PNG
   détouré garde sa silhouette. Le contour blanc suit cette silhouette, pas le
   cadre : `StickerImage` redessine la même image huit fois autour, teintée en
@@ -672,6 +700,11 @@ de démarrer (« Timeout waiting for emulator to boot »), et le job échoue alo
 sans avoir lancé un seul test. Le workflow réessaie une fois. Devant un échec
 de ce job, vérifier d'abord si `adb` a seulement vu l'appareil : sans ça, ce
 n'est pas le code qui est en cause.
+
+Le workflow ne passe **pas** `--stacktrace` : il ajoutait trois cents lignes
+de pile Java après chaque échec, sous lesquelles les vraies erreurs de
+compilation devenaient introuvables. Les lignes qui comptent sont celles qui
+commencent par `e: file://…`, juste avant « BUILD FAILED ».
 
 Le SDK Android n'est pas toujours accessible depuis l'environnement de Claude
 (`dl.google.com` peut être bloqué). Dans ce cas, la compilation et les tests se

@@ -9,6 +9,11 @@ jobs:
   build:
     name: Build debug APK
     runs-on: ubuntu-latest
+    # Sans limite, un serveur qui se bloque garde le job six heures (le defaut
+    # de GitHub) et l'APK n'arrive jamais. C'est deja arrive : une compilation
+    # de deux minutes est restee accrochee plus d'une heure. Mieux vaut un
+    # echec rapide, qu'un nouveau push relance.
+    timeout-minutes: 30
     permissions:
       contents: read
 
@@ -31,9 +36,11 @@ jobs:
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Unit tests
+        timeout-minutes: 15
         run: ./gradlew --no-daemon --stacktrace testDebugUnitTest
 
       - name: Build debug APK
+        timeout-minutes: 15
         run: ./gradlew --no-daemon --stacktrace assembleDebug
 
       - name: Rename APK
@@ -51,6 +58,9 @@ jobs:
   instrumented:
     name: Emulator tests
     runs-on: ubuntu-latest
+    # Deux tentatives d'emulateur, dix minutes de demarrage chacune au pire :
+    # au-dela d'une heure, plus rien ne se passe.
+    timeout-minutes: 60
     permissions:
       contents: read
 

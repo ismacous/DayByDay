@@ -59,9 +59,21 @@ import java.io.File
 private val BUTTON_SIZE = 38.dp
 
 /** Les panneaux qui peuvent s'ouvrir sous la barre, a la place du clavier. */
+/**
+ * Les panneaux de la barre d'outils.
+ *
+ * Il n'y en avait qu'un, « Tous les outils », et c'etait le probleme : une
+ * seule longue liste ou l'alignement se trouvait derriere les titres, la
+ * taille, les blocs et les listes. On ne cherche pas de la meme facon « ajouter
+ * quelque chose » et « changer l'allure de ce qui est deja la » — les deux sont
+ * donc separes, comme dans n'importe quel editeur serieux.
+ */
 enum class ToolPanel(val label: String) {
-    /** Tout ce que l'editeur sait faire, range par famille, comme un menu. */
-    ALL("Tous les outils"),
+    /** Poser quelque chose de nouveau : une citation, un trait, une photo. */
+    INSERT("Insérer"),
+
+    /** Changer l'allure de ce qui est deja ecrit. */
+    FORMAT("Mise en forme"),
     COLORS("Couleur du texte"),
     HIGHLIGHTS("Surlignage"),
 }
@@ -140,8 +152,6 @@ fun JournalToolbar(
     /** Revient a la taille de base : « normale » est l'absence de style. */
     onClearSize: () -> Unit,
     onClearFont: () -> Unit,
-    /** Retire le fond d'une citation : « sans fond » est l'absence de style. */
-    onClearQuoteFill: () -> Unit,
     onList: (ListMarker) -> Unit,
     onAddPhoto: () -> Unit,
     /** Insere un `#` au curseur, et rouvre le clavier pour ecrire le mot. */
@@ -185,30 +195,34 @@ fun JournalToolbar(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // Sept boutons, plus dix. Chacun de ceux qui restent est soit
+                // une porte (inserer, mettre en forme), soit un geste qu'on
+                // fait sans arreter d'ecrire. Le reste est derriere l'une des
+                // deux portes, la ou on le cherchera.
                 GroupButton(
-                    label = "Tous les outils",
-                    open = openPanel == ToolPanel.ALL,
-                    marked = active.any {
-                        it.family == StyleFamily.HEADING || it.family == StyleFamily.FONT
-                    },
-                    onClick = { onTogglePanel(ToolPanel.ALL) },
+                    label = ToolPanel.INSERT.label,
+                    open = openPanel == ToolPanel.INSERT,
+                    marked = false,
+                    onClick = { onTogglePanel(ToolPanel.INSERT) },
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
                 }
 
-                ToolButton(selected = false, label = "Ajouter une photo", onClick = onAddPhoto) {
-                    Icon(
-                        painterResource(R.drawable.ic_photo),
-                        contentDescription = null,
-                        modifier = Modifier.size(19.dp),
-                    )
+                GroupButton(
+                    label = ToolPanel.FORMAT.label,
+                    open = openPanel == ToolPanel.FORMAT,
+                    marked = active.any {
+                        it.family == StyleFamily.HEADING ||
+                            it.family == StyleFamily.FONT ||
+                            it.family == StyleFamily.SIZE
+                    } || align != BlockAlign.START,
+                    onClick = { onTogglePanel(ToolPanel.FORMAT) },
+                ) {
+                    Text("Aa", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 }
 
-                // Le mot-cle n'est pas une mise en forme : c'est du texte, un
-                // `#` de plus dans la phrase. Il a quand meme son bouton, parce
-                // qu'une possibilite qu'on ne voit nulle part n'existe pas.
-                // Le micro est dans la rangee principale et pas dans le menu :
-                // un vocal se prend quand l'idee passe, pas apres deux appuis.
+                // Le micro reste dans la rangee : un vocal se prend quand
+                // l'idee passe, pas apres deux appuis.
                 ToolButton(
                     selected = recording,
                     label = if (recording) "Arrêter l'enregistrement" else "Enregistrer un vocal",
@@ -230,13 +244,11 @@ fun JournalToolbar(
                     }
                 }
 
-                ToolButton(selected = false, label = "Ajouter un mot-clé", onClick = onHashtag) {
-                    Text("#", fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
-                }
-
                 Separator()
 
-                TextStyleKind.marks.forEach { style ->
+                // Gras et italique seulement : souligne et barre sont rares, et
+                // ils encombraient une rangee qu'on regarde en ecrivant.
+                listOf(TextStyleKind.BOLD, TextStyleKind.ITALIC).forEach { style ->
                     ToolButton(
                         selected = style in active,
                         label = style.label,
@@ -286,7 +298,6 @@ fun JournalToolbar(
                     onClearHeading = onClearHeading,
                     onClearSize = onClearSize,
                     onClearFont = onClearFont,
-                    onClearQuoteFill = onClearQuoteFill,
                     onList = onList,
                     onAddPhoto = onAddPhoto,
                     photos = photos,
@@ -311,7 +322,6 @@ private fun ToolPanelContent(
     /** Revient a la taille de base : « normale » est l'absence de style. */
     onClearSize: () -> Unit,
     onClearFont: () -> Unit,
-    onClearQuoteFill: () -> Unit,
     onList: (ListMarker) -> Unit,
     onAddPhoto: () -> Unit,
     photos: List<MediaItem>,
@@ -331,7 +341,18 @@ private fun ToolPanelContent(
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         when (panel) {
-            ToolPanel.ALL -> AllToolsPanel(
+            ToolPanel.INSERT -> InsertPanel(
+                active = active,
+                onStyle = onStyle,
+                onList = onList,
+                onHashtag = onHashtag,
+                onAddPhoto = onAddPhoto,
+                photos = photos,
+                photoFile = photoFile,
+                onPickPhoto = onPickPhoto,
+            )
+
+            ToolPanel.FORMAT -> FormatPanel(
                 active = active,
                 onStyle = onStyle,
                 align = align,
@@ -339,12 +360,6 @@ private fun ToolPanelContent(
                 onClearHeading = onClearHeading,
                 onClearSize = onClearSize,
                 onClearFont = onClearFont,
-                onClearQuoteFill = onClearQuoteFill,
-                onList = onList,
-                onAddPhoto = onAddPhoto,
-                photos = photos,
-                photoFile = photoFile,
-                onPickPhoto = onPickPhoto,
             )
 
             ToolPanel.COLORS -> {
@@ -376,24 +391,56 @@ private fun ToolPanelContent(
  * sera — un titre en grand, une police dans sa propre police — pour choisir en
  * voyant plutot qu'en lisant un nom.
  */
+/**
+ * Changer l'allure de ce qui est deja ecrit.
+ *
+ * **L'alignement vient en premier**, et ce n'est pas un detail d'ordre : il
+ * etait au milieu de la seule et longue liste « Tous les outils », derriere les
+ * titres, la taille et les blocs. Ismael l'a trouve, mais en cherchant — et un
+ * reglage qu'on trouve en cherchant est un reglage mal range.
+ */
 @Composable
-private fun AllToolsPanel(
+private fun FormatPanel(
     active: Set<TextStyleKind>,
     onStyle: (TextStyleKind) -> Unit,
-    /** L'alignement du bloc courant, et de quoi en changer. */
     align: BlockAlign,
     onAlign: (BlockAlign) -> Unit,
     onClearHeading: () -> Unit,
-    /** Revient a la taille de base : « normale » est l'absence de style. */
     onClearSize: () -> Unit,
     onClearFont: () -> Unit,
-    onClearQuoteFill: () -> Unit,
-    onList: (ListMarker) -> Unit,
-    onAddPhoto: () -> Unit,
-    photos: List<MediaItem>,
-    photoFile: (MediaItem) -> File,
-    onPickPhoto: (MediaItem) -> Unit,
 ) {
+    SectionLabel("Alignement")
+    BlockAlign.entries.forEach { option ->
+        PanelRow(
+            label = option.label,
+            selected = align == option,
+            onClick = { onAlign(option) },
+        ) {
+            AlignPreview(option)
+        }
+    }
+
+    SectionLabel("Taille du texte")
+    // A part des titres : ici on grossit un morceau de phrase sans en faire un
+    // titre. Les deux ecarts restent modestes — une ligne du lignage fait
+    // vingt-huit points, et un texte plus haut sortirait de ses lignes.
+    TextStyleKind.sizes.forEach { style ->
+        PanelRow(
+            label = style.label,
+            selected = style in active,
+            onClick = { onStyle(style) },
+        ) {
+            Text("A", fontSize = if (style == TextStyleKind.SIZE_SMALL) 12.sp else 19.sp)
+        }
+    }
+    PanelRow(
+        label = "Taille normale",
+        selected = active.none { it.family == StyleFamily.SIZE },
+        onClick = onClearSize,
+    ) {
+        Text("A", fontSize = 16.sp)
+    }
+
     SectionLabel("Titres")
     TextStyleKind.headings.forEach { style ->
         PanelRow(
@@ -420,41 +467,57 @@ private fun AllToolsPanel(
         Text("A", fontSize = 16.sp)
     }
 
-    SectionLabel("Taille du texte")
-    // A part des titres : ici on grossit un morceau de phrase sans en faire un
-    // titre. Les deux ecarts restent modestes — une ligne du lignage fait
-    // vingt-huit points, et un texte plus haut sortirait de ses lignes.
-    TextStyleKind.sizes.forEach { style ->
+    // Souligne et barre ont quitte la rangee du bas : rares, ils encombraient
+    // une barre qu'on regarde en ecrivant. Ils sont ici, avec le reste de ce
+    // qui change l'allure du texte.
+    SectionLabel("Marques")
+    listOf(TextStyleKind.UNDERLINE, TextStyleKind.STRIKETHROUGH).forEach { style ->
         PanelRow(
             label = style.label,
             selected = style in active,
             onClick = { onStyle(style) },
-        ) {
-            Text(
-                "A",
-                fontSize = if (style == TextStyleKind.SIZE_SMALL) 12.sp else 19.sp,
-            )
-        }
+        ) { MarkGlyph(style) }
     }
+
+    SectionLabel("Police")
     PanelRow(
-        label = "Taille normale",
-        selected = active.none { it.family == StyleFamily.SIZE },
-        onClick = onClearSize,
+        label = "Police de la page",
+        selected = active.none { it.family == StyleFamily.FONT },
+        onClick = onClearFont,
     ) {
-        Text("A", fontSize = 16.sp)
+        Text("Aa", fontSize = 15.sp)
     }
-
-    SectionLabel("Alignement")
-    BlockAlign.entries.forEach { option ->
+    TextStyleKind.fonts.forEach { style ->
         PanelRow(
-            label = option.label,
-            selected = align == option,
-            onClick = { onAlign(option) },
+            label = style.label,
+            selected = style in active,
+            onClick = { onStyle(style) },
+            labelFont = style,
         ) {
-            AlignPreview(option)
+            Text("Aa", fontSize = 15.sp, fontFamily = style.fontFamily())
         }
     }
+}
 
+/**
+ * Poser quelque chose de nouveau dans la page.
+ *
+ * Les reglages d'une citation ne sont **plus** ici : ils apparaissent sous la
+ * citation elle-meme depuis qu'elle est un bloc. Les laisser aux deux endroits
+ * aurait fait deux chemins pour la meme chose, et allonge ce panneau pour tout
+ * le monde — y compris ceux qui n'ecrivent jamais de citation.
+ */
+@Composable
+private fun InsertPanel(
+    active: Set<TextStyleKind>,
+    onStyle: (TextStyleKind) -> Unit,
+    onList: (ListMarker) -> Unit,
+    onHashtag: () -> Unit,
+    onAddPhoto: () -> Unit,
+    photos: List<MediaItem>,
+    photoFile: (MediaItem) -> File,
+    onPickPhoto: (MediaItem) -> Unit,
+) {
     SectionLabel("Blocs")
     TextStyleKind.blocks.forEach { style ->
         PanelRow(
@@ -491,45 +554,6 @@ private fun AllToolsPanel(
         }
     }
 
-    // Les reglages de la citation n'apparaissent que quand le curseur est
-    // dedans : proposer la couleur d'un trait qui n'existe pas ne veut rien
-    // dire, et ca allongerait le menu pour tout le monde.
-    if (TextStyleKind.QUOTE in active) {
-        SectionLabel("Trait de la citation")
-        SwatchGrid(
-            styles = TextStyleKind.quoteBars,
-            active = active,
-            onStyle = onStyle,
-            highlighted = false,
-        )
-        SectionLabel("Fond de la citation")
-        TextStyleKind.quoteFills.forEach { style ->
-            PanelRow(
-                label = style.label,
-                selected = style in active,
-                onClick = { onStyle(style) },
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(20.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(
-                            paperAccent().copy(
-                                alpha = if (style == TextStyleKind.QUOTE_FILL_FULL) 0.30f else 0.12f
-                            )
-                        ),
-                )
-            }
-        }
-        PanelRow(
-            label = "Sans fond",
-            selected = active.none { it.family == StyleFamily.QUOTE_FILL },
-            onClick = { onClearQuoteFill() },
-        ) {
-            Text("—", fontSize = 15.sp)
-        }
-    }
-
     SectionLabel("Listes")
     ListMarker.entries.forEach { marker ->
         PanelRow(label = marker.label, selected = false, onClick = { onList(marker) }) {
@@ -537,26 +561,13 @@ private fun AllToolsPanel(
         }
     }
 
-    SectionLabel("Police")
-    PanelRow(
-        label = "Police par défaut",
-        selected = active.none { it.family == StyleFamily.FONT },
-        onClick = onClearFont,
-    ) {
-        Text("Aa", fontSize = 15.sp)
-    }
-    TextStyleKind.fonts.forEach { style ->
-        PanelRow(
-            label = style.label,
-            selected = style in active,
-            onClick = { onStyle(style) },
-            labelFont = style,
-        ) {
-            Text("Aa", fontSize = 15.sp, fontFamily = style.fontFamily())
-        }
-    }
-
     SectionLabel("Ajouter")
+    // Le mot-cle n'est pas une mise en forme : c'est du texte, un `#` de plus
+    // dans la phrase. Il a quand meme sa ligne, parce qu'une possibilite qu'on
+    // ne voit nulle part n'existe pas.
+    PanelRow(label = "Un mot-clé", selected = false, onClick = onHashtag) {
+        Text("#", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+    }
     PanelRow(label = "Une photo ou une vidéo", selected = false, onClick = onAddPhoto) {
         Icon(
             painterResource(R.drawable.ic_photo),
@@ -578,20 +589,7 @@ private fun AllToolsPanel(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             photos.forEach { photo ->
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(LocalPaperSurface.current)
-                        .clickable(onClickLabel = "Reprendre cette photo") { onPickPhoto(photo) },
-                ) {
-                    MediaImage(
-                        file = photoFile(photo),
-                        kind = photo.kind,
-                        modifier = Modifier.fillMaxSize(),
-                        maxSize = 256,
-                    )
-                }
+                PhotoThumb(photo = photo, file = photoFile(photo), onClick = { onPickPhoto(photo) })
             }
         }
     }

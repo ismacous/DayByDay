@@ -116,6 +116,8 @@ object Backup {
                     .put("medicalWith", day.medicalWith)
                     .put("medicalNote", day.medicalNote)
                     .put("jobApplications", day.jobApplications ?: JSONObject.NULL)
+                    .put("showered", day.showered ?: JSONObject.NULL)
+                    .put("brushMask", day.brushMask ?: JSONObject.NULL)
             )
         }
         root.put("days", daysJson)
@@ -402,6 +404,11 @@ object Backup {
                         medicalWith = item.optString("medicalWith", ""),
                         medicalNote = item.optString("medicalNote", ""),
                         jobApplications = item.optIntOrNull("jobApplications"),
+                        // Absents des sauvegardes d'avant la carte Hygiene : la
+                        // journee revient alors sans, ce qui est exactement ce
+                        // qu'elle etait.
+                        showered = if (item.isNull("showered")) null else item.getBoolean("showered"),
+                        brushMask = item.optIntOrNull("brushMask"),
                     )
                 }
 

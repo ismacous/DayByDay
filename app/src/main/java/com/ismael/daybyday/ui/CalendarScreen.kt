@@ -58,6 +58,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ismael.daybyday.data.DayCard
 import com.ismael.daybyday.data.DayColor
 import com.ismael.daybyday.data.DayEntry
 import com.ismael.daybyday.data.Stats
@@ -94,10 +95,13 @@ fun CalendarScreen(
     val todayEntry by remember { repository.observeDay(today) }
         .collectAsStateWithLifecycle(null)
 
+    // Les cartes masquees sortent du calcul des gestes : masquer une carte ne
+    // doit jamais faire perdre de points.
+    val hiddenCards = app.prefs.hiddenDayCards
     val monthEntries = entries.values.filter {
         YearMonth.from(LocalDate.ofEpochDay(it.epochDay)) == month
     }
-    val monthSummary = Stats.summarize(Dates.monthTitle(month), monthEntries, month.lengthOfMonth())
+    val monthSummary = Stats.summarize(Dates.monthTitle(month), monthEntries, month.lengthOfMonth(), hiddenCards)
 
     // Pas de barre d'application ici, et plus de titre non plus : il vit
     // au-dessus de la navigation pour survivre au changement d'onglet.
@@ -153,6 +157,7 @@ fun CalendarScreen(
                     today = today,
                     entries = entries,
                     mediaCounts = mediaCounts,
+                    hiddenCards = hiddenCards,
                     onDayClick = onDayClick,
                 )
             }
@@ -378,11 +383,12 @@ private fun WeekRow(
     today: LocalDate,
     entries: Map<Long, DayEntry>,
     mediaCounts: Map<Long, Int>,
+    hiddenCards: Set<DayCard>,
     onDayClick: (LocalDate) -> Unit,
 ) {
     val weekDays = (0..6).map { weekStart.plusDays(it.toLong()) }
     val weekEntries = weekDays.mapNotNull { entries[it.toEpochDay()] }
-    val weekSummary = Stats.summarize("Semaine", weekEntries, 7)
+    val weekSummary = Stats.summarize("Semaine", weekEntries, 7, hiddenCards)
 
     Row(
         modifier = Modifier.fillMaxWidth(),

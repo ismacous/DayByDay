@@ -44,7 +44,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ismael.daybyday.data.DayCard
 import com.ismael.daybyday.data.DayColor
+import com.ismael.daybyday.data.Deed
 import com.ismael.daybyday.data.DayEntry
 import com.ismael.daybyday.data.FactorInsight
 import com.ismael.daybyday.data.FoodLevel
@@ -77,15 +79,18 @@ fun StatsScreen(onOpenWeek: () -> Unit = {}) {
 
     val yearDays = allDays.filter { LocalDate.ofEpochDay(it.epochDay).year == year }
     val yearLength = if (LocalDate.of(year, 1, 1).isLeapYear) 366 else 365
-    val yearSummary = Stats.summarize("Année $year", yearDays, yearLength)
+    // Les cartes masquees sortent du calcul des gestes : masquer les
+    // traitements quand on n'en prend pas ne doit rien faire perdre.
+    val hiddenCards = LocalContext.current.dayByDayApp.prefs.hiddenDayCards
+    val yearSummary = Stats.summarize("Année $year", yearDays, yearLength, hiddenCards)
     val allTimeTotalDays = allDays.minOfOrNull { it.epochDay }
         ?.let { (today.toEpochDay() - it + 1).toInt() } ?: 0
-    val allTimeSummary = Stats.summarize("Depuis le début", allDays, allTimeTotalDays)
+    val allTimeSummary = Stats.summarize("Depuis le début", allDays, allTimeTotalDays, hiddenCards)
     val (currentStreak, longestStreak) = Stats.streaks(allDays, today)
 
     val insights = remember(allDays, tags, dayTags) { Stats.insights(allDays, tags, dayTags) }
 
-    val weekSummaries = remember(yearDays) { weeklySummaries(yearDays) }
+    val weekSummaries = remember(yearDays) { weeklySummaries(yearDays, hiddenCards) }
     val bestWeek = weekSummaries.filter { it.second.filledDays >= 3 }
         .maxByOrNull { it.second.average ?: -1.0 }
     val hardestWeek = weekSummaries.filter { it.second.filledDays >= 3 }
@@ -161,13 +166,13 @@ fun StatsScreen(onOpenWeek: () -> Unit = {}) {
                         modifier = Modifier.fillMaxWidth(),
                         contentAlignment = Alignment.Center,
                     ) {
+                        val note = yearSummary.note
                         ScoreRing(
-                            progress = ((yearSummary.average ?: 0.0) / DayColor.MAX_SCORE)
-                                .toFloat(),
-                            value = yearSummary.average?.let {
-                                String.format(Locale.FRANCE, "%.1f", outOfTen(it))
+                            progress = ((note.total ?: 0.0) / note.outOf).toFloat(),
+                            value = note.total?.let {
+                                String.format(Locale.FRANCE, "%.1f", it)
                             } ?: "—",
-                            caption = "sur 10",
+                            caption = "sur ${note.outOf}",
                         )
                     }
 
@@ -178,7 +183,7 @@ fun StatsScreen(onOpenWeek: () -> Unit = {}) {
                     // devine toujours quelque chose de plus complique que la
                     // verite.
                     Text(
-                        text = SCORE_CAPTION,
+                        text = "Ton ressenti, plus ce que tu as fait.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.75f),
                         textAlign = TextAlign.Center,
@@ -265,7 +270,7 @@ fun StatsScreen(onOpenWeek: () -> Unit = {}) {
                             height = 12,
                         )
                         Spacer(Modifier.width(10.dp))
-                        AverageChip(summary.average)
+                        NoteChip(summary.note)
                     }
                 }
             }
@@ -297,7 +302,7 @@ fun StatsScreen(onOpenWeek: () -> Unit = {}) {
                 StatLine("Série en cours", "$currentStreak jour(s)")
                 StatLine("Plus longue série", "$longestStreak jour(s)")
                 allTimeSummary.average?.let {
-                    StatLine("Moyenne depuis le début", formatAverage(it))
+                    StatLine("Moyenne depuis le début", formatNote(allTimeSummary.note))
                 }
             }
 
@@ -496,10 +501,10 @@ private fun WeightSparkline(
  * D'ou sort la note.
  *
  * Un chiffre seul laisse deviner ce qu'il compte, et on devine toujours
- * quelque chose de plus complique que la verite : ici, la note ne vient que de
- * la couleur des journees. Rien d'autre n'y entre — surtout pas les pas, le
- * sport ou l'argent, qui sont justement ce qu'on **compare** ensuite a la
- * couleur. Les faire entrer dans la note rendrait la comparaison circulaire.
+ * quelque chose de plus complique que la verite. Deux choses valent d'etre
+ * dites, et ce sont les deux moities de la note : le **ressenti** ne vient que
+ * de la couleur — rien de ce qu'on fait ne doit pouvoir la corriger — et les
+ * **actions** n'ajoutent que ce qui a ete fait, sans jamais rien retirer.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -508,6 +513,7 @@ private fun ScoreHelpSheet(onDismiss: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -515,8 +521,14 @@ private fun ScoreHelpSheet(onDismiss: () -> Unit) {
             Text("D'où vient cette note ?", style = MaterialTheme.typography.titleLarge)
 
             Text(
-                text = "Elle ne vient que d'une chose : la couleur que tu donnes à " +
-                    "tes journées. Chaque couleur vaut un nombre de points.",
+                text = "Elle a deux moitiés : comment tu t'es senti, et ce que tu as fait.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+
+            Text("Le ressenti — 10 points", style = MaterialTheme.typography.titleSmall)
+            Text(
+                text = "La couleur que tu donnes à tes journées, et elle seule. Rien de " +
+                    "ce que tu fais ne vient la corriger.",
                 style = MaterialTheme.typography.bodyMedium,
             )
 
@@ -534,7 +546,7 @@ private fun ScoreHelpSheet(onDismiss: () -> Unit) {
                     Text(
                         text = String.format(
                             Locale.FRANCE,
-                            "%.1f / 10",
+                            "%.1f",
                             outOfTen(color.score.toDouble()),
                         ),
                         style = MaterialTheme.typography.bodyMedium,
@@ -543,18 +555,43 @@ private fun ScoreHelpSheet(onDismiss: () -> Unit) {
                 }
             }
 
+            Text("Ce que tu as fait — 10 points", style = MaterialTheme.typography.titleSmall)
             Text(
-                text = "La note d'une semaine, d'un mois ou d'une année est la moyenne " +
-                    "de ces points. Les journées sans couleur ne comptent pas : elles " +
-                    "ne baissent pas ta note, elles n'y entrent simplement pas.",
+                text = "Chaque geste réussi ajoute des points. Un geste manqué n'en " +
+                    "retire jamais : une journée où tu n'as rien pu faire garde son " +
+                    "ressenti entier.",
                 style = MaterialTheme.typography.bodyMedium,
             )
 
+            Deed.entries.forEach { deed ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = deed.badge?.emoji.orEmpty(),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(deed.label, style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = deed.card.title,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
             Text(
-                text = "Rien d'autre n'y entre — ni tes pas, ni le sport, ni les repas, " +
-                    "ni l'argent. C'est fait exprès : ce sont eux qu'on compare à ta " +
-                    "note dans « Ce qui va avec tes bonnes journées ». S'ils la " +
-                    "fabriquaient aussi, la comparaison ne dirait plus rien.",
+                text = "Un geste appartient à une carte. Masquer une carte retire ses " +
+                    "gestes du calcul des deux côtés : tu ne perds rien à cacher les " +
+                    "traitements quand tu n'en prends pas, ni l'hygiène si elle ne " +
+                    "t'est pas utile.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Text(
+                text = "Les journées sans couleur ne comptent pas du tout : elles ne " +
+                    "baissent pas ta note, elles n'y entrent simplement pas.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -587,7 +624,7 @@ private fun WeekLine(label: String, weekStart: LocalDate, summary: PeriodSummary
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            AverageChip(summary.average)
+            NoteChip(summary.note)
         }
         Spacer(Modifier.height(6.dp))
         DistributionBar(summary)
@@ -595,10 +632,13 @@ private fun WeekLine(label: String, weekStart: LocalDate, summary: PeriodSummary
 }
 
 /** Regroupe les jours d'une annee par semaine (du lundi au dimanche). */
-private fun weeklySummaries(days: List<DayEntry>): List<Pair<LocalDate, PeriodSummary>> =
+private fun weeklySummaries(
+    days: List<DayEntry>,
+    hiddenCards: Set<DayCard>,
+): List<Pair<LocalDate, PeriodSummary>> =
     days.groupBy { entry ->
         val date = LocalDate.ofEpochDay(entry.epochDay)
         date.minusDays((date.dayOfWeek.value - 1).toLong())
     }.map { (weekStart, entries) ->
-        weekStart to Stats.summarize("Semaine", entries, 7)
+        weekStart to Stats.summarize("Semaine", entries, 7, hiddenCards)
     }.sortedBy { it.first }

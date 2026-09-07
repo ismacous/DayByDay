@@ -38,7 +38,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -155,7 +155,13 @@ fun BlockTextField(
         },
         modifier = modifier
             .fillMaxWidth()
-            .onKeyEvent { event ->
+            // `onPreviewKeyEvent` et non `onKeyEvent` : le champ de texte
+            // **consomme** la touche d'effacement avant que l'evenement ne
+            // remonte jusqu'a nous, donc en remontee on ne la voyait jamais.
+            // La passe « preview » descend depuis la racine et nous la donne en
+            // premier. C'est la raison pour laquelle effacer au debut d'une
+            // citation ne faisait rien.
+            .onPreviewKeyEvent { event ->
                 val atStart = value.selection.collapsed && value.selection.start == 0
                 if (event.type == KeyEventType.KeyDown &&
                     event.key == Key.Backspace &&

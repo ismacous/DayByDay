@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ismael.daybyday.data.DayCard
 import com.ismael.daybyday.data.DayEntry
 import com.ismael.daybyday.data.Stats
 import com.ismael.daybyday.dayByDayApp
@@ -61,10 +62,13 @@ fun YearScreen(
     val entries by remember(year) { repository.observeDaysBetween(start, end) }
         .collectAsStateWithLifecycle(emptyMap())
 
+    // Les cartes masquees sortent du calcul des gestes.
+    val hiddenCards = LocalContext.current.dayByDayApp.prefs.hiddenDayCards
     val yearSummary = Stats.summarize(
         year.toString(),
         entries.values,
         if (start.isLeapYear) 366 else 365,
+        hiddenCards,
     )
 
     Scaffold(
@@ -117,6 +121,7 @@ fun YearScreen(
                             month = YearMonth.of(year, monthValue),
                             entries = entries,
                             today = today,
+                            hiddenCards = hiddenCards,
                             onHeaderClick = { onMonthClick(YearMonth.of(year, monthValue)) },
                             onDayClick = onDayClick,
                             modifier = Modifier.weight(1f),
@@ -137,6 +142,7 @@ private fun MiniMonth(
     month: YearMonth,
     entries: Map<Long, DayEntry>,
     today: LocalDate,
+    hiddenCards: Set<DayCard>,
     onHeaderClick: () -> Unit,
     onDayClick: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
@@ -148,7 +154,12 @@ private fun MiniMonth(
 
     val monthEntries = (0 until month.lengthOfMonth())
         .mapNotNull { entries[first.plusDays(it.toLong()).toEpochDay()] }
-    val summary = Stats.summarize(Dates.monthTitle(month), monthEntries, month.lengthOfMonth())
+    val summary = Stats.summarize(
+        Dates.monthTitle(month),
+        monthEntries,
+        month.lengthOfMonth(),
+        hiddenCards,
+    )
 
     Card(
         modifier = modifier,
@@ -169,7 +180,7 @@ private fun MiniMonth(
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )
-                AverageChip(summary.average)
+                NoteChip(summary.note)
             }
 
             Spacer(Modifier.height(6.dp))

@@ -49,4 +49,10 @@ enum class Badge(
         "🎯",
     ),
     JOURNAL("journal", "Journée écrite", "Elle est gardée.", "✍️"),
+
+    // Google n'anime ni la douche, ni la brosse a dents, ni le savon : les deux
+    // signes sont donc detournes, comme la Terre pour « tu es sorti ». Des
+    // bulles disent « lave », des etincelles disent « ca brille ».
+    SHOWER("douche", "Douché", "Un vrai effort certains jours.", "🫧"),
+    TEETH("dents", "Trois brossages", "Matin, midi et soir.", "✨"),
 }

@@ -56,6 +56,7 @@ import com.airbnb.lottie.compose.rememberLottieComposition
 import com.ismael.daybyday.R
 import com.ismael.daybyday.data.DayCard
 import com.ismael.daybyday.data.DayColor
+import com.ismael.daybyday.data.Brushing
 import com.ismael.daybyday.data.Prayer
 import java.util.Locale
 
@@ -699,6 +700,161 @@ fun PrayerBeads(
                     textAlign = TextAlign.Center,
                 )
             }
+        }
+    }
+}
+
+/**
+ * Les trois brossages de dents, dans la meme forme que les prieres.
+ *
+ * Meme question, meme forme : trois oui-ou-non lies entre eux, qu'on coche au
+ * fil de la journee. Leur donner une autre apparence aurait fait croire a une
+ * autre mecanique — c'est exactement la regle « une question, une reponse, une
+ * forme », vue de l'autre cote.
+ */
+@Composable
+fun BrushingBeads(
+    mask: Int?,
+    tint: Color,
+    onToggle: (Brushing, Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val done = mask ?: 0
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Brushing.entries.forEach { brushing ->
+            val checked = done and brushing.bit != 0
+            val background by animateColorAsState(
+                targetValue = if (checked) tint else tint.copy(alpha = 0.10f),
+                animationSpec = tween(Motion.NORMAL),
+                label = "brossage",
+            )
+            val markScale by animateFloatAsState(
+                targetValue = if (checked) 1f else 0f,
+                animationSpec = Motion.softSpring(),
+                label = "coche",
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(18.dp))
+                    .clickable(onClickLabel = brushing.label) { onToggle(brushing, !checked) }
+                    .padding(vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(background)
+                        .border(
+                            1.5.dp,
+                            tint.copy(alpha = if (checked) 0f else 0.35f),
+                            CircleShape,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = null,
+                        tint = readableOn(tint),
+                        modifier = Modifier
+                            .size(22.dp)
+                            .graphicsLayer {
+                                // Lue dans la couche : la coche rebondit sans
+                                // rien faire remesurer.
+                                scaleX = markScale
+                                scaleY = markScale
+                                alpha = markScale
+                            },
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = brushing.label,
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp,
+                    fontWeight = if (checked) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (checked) tint else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Un seul oui, large, qu'on coche.
+ *
+ * Pas de « oui / non » a deux boutons : ne rien cocher **est** la reponse
+ * « non ». Deux boutons auraient demande de dire non a voix haute, et il y a
+ * des journees ou l'on n'a pas envie de le faire.
+ */
+@Composable
+fun BigCheck(
+    label: String,
+    hint: String,
+    checked: Boolean,
+    tint: Color,
+    onToggle: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val background by animateColorAsState(
+        targetValue = if (checked) tint.copy(alpha = 0.16f) else tint.copy(alpha = 0.05f),
+        animationSpec = tween(Motion.NORMAL),
+        label = "fond",
+    )
+    val markScale by animateFloatAsState(
+        targetValue = if (checked) 1f else 0f,
+        animationSpec = Motion.softSpring(),
+        label = "coche",
+    )
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(background)
+            .clickable(onClickLabel = label) { onToggle(!checked) }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(if (checked) tint else Color.Transparent)
+                .border(1.5.dp, tint.copy(alpha = if (checked) 0f else 0.4f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Default.Check,
+                contentDescription = null,
+                tint = readableOn(tint),
+                modifier = Modifier
+                    .size(20.dp)
+                    .graphicsLayer {
+                        scaleX = markScale
+                        scaleY = markScale
+                        alpha = markScale
+                    },
+            )
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = if (checked) FontWeight.SemiBold else FontWeight.Normal,
+            )
+            Text(
+                text = hint,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

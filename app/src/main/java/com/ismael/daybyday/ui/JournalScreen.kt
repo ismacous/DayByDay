@@ -597,13 +597,6 @@ fun JournalScreen(
         }
     }
 
-    /** Retire le fond d'une citation : « sans fond » est l'absence de style. */
-    fun clearQuoteFill() {
-        val key = focusedKey ?: return
-        history.record(snapshot(), structural = true)
-        blocks = blocks.map { if (it.key == key) it.copy(fill = null) else it }
-    }
-
     /** Revient a la taille de base : « normale » est l'absence de style. */
     fun clearSize() {
         val block = focusedBlock()
@@ -1383,7 +1376,6 @@ fun JournalScreen(
                     onClearHeading = { clearHeading() },
                     onClearSize = { clearSize() },
                     onClearFont = { clearFont() },
-                    onClearQuoteFill = { clearQuoteFill() },
                     onList = { marker ->
                         prefixLine(marker.marker)
                         showPanel(null)

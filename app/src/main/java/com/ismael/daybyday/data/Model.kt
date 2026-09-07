@@ -116,6 +116,26 @@ enum class Prayer(val key: Int, val label: String) {
     }
 }
 
+/**
+ * Les trois brossages de dents d'une journee.
+ *
+ * Meme forme que les prieres, et pour la meme raison : trois oui-ou-non
+ * rangees en **masque de bits** dans une seule colonne, plutot que trois
+ * colonnes. Les `bit` ne doivent jamais changer : c'est eux qui sont ecrits.
+ */
+enum class Brushing(val key: Int, val label: String) {
+    MORNING(0, "Matin"),
+    NOON(1, "Midi"),
+    EVENING(2, "Soir");
+
+    val bit: Int get() = 1 shl key
+
+    companion object {
+        /** Les trois faites : les trois bits a un. */
+        val ALL_DONE: Int = entries.fold(0) { mask, brushing -> mask or brushing.bit }
+    }
+}
+
 /** Les quatre moments d'une journee, pour nuancer une humeur qui bouge. */
 enum class DayPart(val key: Int, val label: String, val emoji: String) {
     MORNING(0, "Matin", "🌅"),
@@ -223,6 +243,14 @@ data class DayEntry(
      */
     val medicalWith: String = "",
     val medicalNote: String = "",
+    /**
+     * Douche prise. `null` et `false` veulent dire la meme chose a l'ecran —
+     * la case n'est pas cochee — mais `null` distingue « je n'ai pas repondu »
+     * de « non », comme partout ailleurs.
+     */
+    val showered: Boolean? = null,
+    /** Les trois brossages, en masque de bits (voir [Brushing]). */
+    val brushMask: Int? = null,
 ) {
     val color: DayColor? get() = DayColor.fromKey(colorKey)
 
@@ -236,6 +264,17 @@ data class DayEntry(
     }
 
     val prayersDone: Int get() = Prayer.entries.count { isPrayerDone(it) }
+
+    /** Ce brossage est-il coche ? */
+    fun isBrushingDone(brushing: Brushing): Boolean = (brushMask ?: 0) and brushing.bit != 0
+
+    /** Le masque une fois [brushing] coche ou decoche. */
+    fun withBrushing(brushing: Brushing, done: Boolean): Int {
+        val current = brushMask ?: 0
+        return if (done) current or brushing.bit else current and brushing.bit.inv()
+    }
+
+    val brushingsDone: Int get() = Brushing.entries.count { isBrushingDone(it) }
 
     val sport: SportLevel? get() = SportLevel.fromKey(sportLevel)
 
@@ -285,6 +324,7 @@ data class DayEntry(
             waterGlasses == null && mealsNote.isBlank() && snackNote.isBlank() &&
             medicalWith.isBlank() && medicalNote.isBlank() &&
             (prayerMask ?: 0) == 0 && jobApplications == null &&
+            showered != true && (brushMask ?: 0) == 0 &&
             filledParts.isEmpty()
 
     companion object {

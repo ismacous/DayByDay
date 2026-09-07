@@ -63,6 +63,7 @@ import com.ismael.daybyday.data.DayCard
 import com.ismael.daybyday.data.DayEntry
 import com.ismael.daybyday.data.DoseTaken
 import com.ismael.daybyday.data.DoseTime
+import com.ismael.daybyday.data.Brushing
 import com.ismael.daybyday.data.Prayer
 import com.ismael.daybyday.data.Treatment
 import java.util.Locale
@@ -407,6 +408,56 @@ fun PrayerCardBody(mask: Int?, tint: Color, onToggle: (Prayer, Boolean) -> Unit)
             count == 0 -> "Aucune prière cochée."
             count == Prayer.entries.size -> "Les cinq prières."
             else -> "$count sur ${Prayer.entries.size}."
+        },
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/**
+ * L'hygiene du jour : la douche, et les trois brossages.
+ *
+ * Deux gestes seulement, et c'est deliberé. Une carte d'hygiene qui demande
+ * dix choses devient une corvee — exactement ce dont on n'a pas besoin un jour
+ * noir, qui est justement le jour ou cette carte compte. Elle se masque comme
+ * les traitements pour qui n'en a pas l'usage.
+ */
+@Composable
+fun HygieneCardBody(
+    showered: Boolean?,
+    brushMask: Int?,
+    tint: Color,
+    onShower: (Boolean) -> Unit,
+    onBrushing: (Brushing, Boolean) -> Unit,
+) {
+    BigCheck(
+        label = "Douché",
+        hint = "Certains jours, c'est un vrai effort.",
+        checked = showered == true,
+        tint = tint,
+        onToggle = onShower,
+    )
+
+    Spacer(Modifier.height(16.dp))
+
+    Text(
+        text = "Brossage des dents",
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Spacer(Modifier.height(8.dp))
+    BrushingBeads(mask = brushMask, tint = tint, onToggle = onBrushing)
+
+    val count = Brushing.entries.count { (brushMask ?: 0) and it.bit != 0 }
+    Spacer(Modifier.height(12.dp))
+    TrackBar(progress = count / Brushing.entries.size.toFloat(), tint = tint)
+    Spacer(Modifier.height(8.dp))
+    Text(
+        text = when {
+            brushMask == null && showered == null -> "Rien de coché pour l'instant."
+            count == 0 -> "Aucun brossage coché."
+            count == Brushing.entries.size -> "Les trois brossages."
+            else -> "$count sur ${Brushing.entries.size}."
         },
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,

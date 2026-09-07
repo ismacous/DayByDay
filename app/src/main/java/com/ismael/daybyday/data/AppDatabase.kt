@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Version du schema. Affichee dans les reglages, a propos, pour savoir ce que
  * fait tourner le telephone en cas de probleme.
  */
-const val DATABASE_VERSION = 20
+const val DATABASE_VERSION = 21
 
 @Database(
     entities = [
@@ -587,6 +587,22 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * La carte Hygiene : la douche, et les trois brossages de dents.
+         *
+         * Les deux colonnes acceptent `null`, et ca compte : une journee
+         * d'avant cette version n'est pas une journee sans douche, c'est une
+         * journee dont on ne sait rien. C'est la meme regle que les prieres, et
+         * elle evite de faire dire a l'historique quelque chose qu'il n'a
+         * jamais dit.
+         */
+        val MIGRATION_20_21 = object : Migration(20, 21) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE day_entries ADD COLUMN showered INTEGER")
+                db.execSQL("ALTER TABLE day_entries ADD COLUMN brushMask INTEGER")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -616,6 +632,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_17_18,
                     MIGRATION_18_19,
                     MIGRATION_19_20,
+                    MIGRATION_20_21,
                 )
                 .build()
                 .also { instance = it }

@@ -103,6 +103,7 @@ import com.ismael.daybyday.data.MediaKind
 import com.ismael.daybyday.data.Memory
 import com.ismael.daybyday.data.MoneyCategory
 import com.ismael.daybyday.data.MoneyEntry
+import com.ismael.daybyday.data.Brushing
 import com.ismael.daybyday.data.Prayer
 import com.ismael.daybyday.data.RichText
 import com.ismael.daybyday.data.SportLevel
@@ -224,6 +225,8 @@ fun DayScreen(
     var medicalWith by remember { mutableStateOf("") }
     var medicalNote by remember { mutableStateOf("") }
     var prayerMask by remember { mutableStateOf<Int?>(null) }
+    var showered by remember { mutableStateOf<Boolean?>(null) }
+    var brushMask by remember { mutableStateOf<Int?>(null) }
     var jobApplications by remember { mutableStateOf<Int?>(null) }
     var editingTreatment by remember { mutableStateOf<Treatment?>(null) }
     var creatingTreatment by remember { mutableStateOf(false) }
@@ -309,6 +312,8 @@ fun DayScreen(
         partNight = parts[DayPart.NIGHT],
         colorManual = colorManual,
         prayerMask = prayerMask,
+        showered = showered,
+        brushMask = brushMask,
     )
 
     /** Applique la couleur d'un moment, puis recalcule la couleur du jour. */
@@ -340,6 +345,8 @@ fun DayScreen(
         medicalWith = entry?.medicalWith.orEmpty()
         medicalNote = entry?.medicalNote.orEmpty()
         prayerMask = entry?.prayerMask
+        showered = entry?.showered
+        brushMask = entry?.brushMask
         jobApplications = entry?.jobApplications
         expandedCards = emptySet()
         loadedFor = epochDay
@@ -613,6 +620,15 @@ fun DayScreen(
             ?.let { formatSignedMoney(it.sumOf { entry -> entry.amountCents }) }
         DayCard.PRAYER -> prayerMask?.let { mask ->
             "${Prayer.entries.count { mask and it.bit != 0 }} sur ${Prayer.entries.size}"
+        }
+        DayCard.HYGIENE -> {
+            val brushed = Brushing.entries.count { (brushMask ?: 0) and it.bit != 0 }
+            when {
+                showered == true && brushed > 0 -> "Douché · $brushed/${Brushing.entries.size}"
+                showered == true -> "Douché"
+                brushed > 0 -> "$brushed/${Brushing.entries.size} brossage(s)"
+                else -> null
+            }
         }
         DayCard.MEDIA -> mediaItems.size.takeIf { it > 0 }?.let { "$it fichier(s)" }
     }
@@ -1166,6 +1182,56 @@ fun DayScreen(
                                     captions = week.map { entry ->
                                         entry?.prayerMask?.let { mask ->
                                             "${Prayer.entries.count { mask and it.bit != 0 }}/5"
+                                        }
+                                    },
+                                    tint = tint,
+                                )
+                            }
+                        }
+                        DayCard.HYGIENE -> {
+                            HygieneCardBody(
+                                showered = showered,
+                                brushMask = brushMask,
+                                tint = tint,
+                                onShower = { done ->
+                                    // La fete se declenche au **passage**, pas
+                                    // a l'affichage : rouvrir la journee demain
+                                    // ne la rejouera pas.
+                                    val before = showered == true
+                                    showered = done
+                                    if (!before && done) celebration = Badge.SHOWER
+                                },
+                                onBrushing = { brushing, done ->
+                                    val before = brushMask ?: 0
+                                    val after = currentEntry(epochDay)
+                                        .withBrushing(brushing, done)
+                                    brushMask = after
+                                    if (before != Brushing.ALL_DONE &&
+                                        after == Brushing.ALL_DONE
+                                    ) {
+                                        celebration = Badge.TEETH
+                                    }
+                                },
+                            )
+                            CardWeek(
+                                card = card,
+                                tint = tint,
+                                expanded = card in expandedCards,
+                                onToggle = { expandedCards = expandedCards.toggle(card) },
+                            ) {
+                                MiniBars(
+                                    values = week.map { entry ->
+                                        entry?.brushMask?.let { mask ->
+                                            Brushing.entries
+                                                .count { mask and it.bit != 0 }
+                                                .toFloat()
+                                        }
+                                    },
+                                    labels = weekLabels,
+                                    captions = week.map { entry ->
+                                        entry?.brushMask?.let { mask ->
+                                            val n = Brushing.entries.count { mask and it.bit != 0 }
+                                            "$n/3"
                                         }
                                     },
                                     tint = tint,

@@ -11,7 +11,13 @@ data class PeriodSummary(
     val filledDays: Int,
     val totalDays: Int,
     val counts: Map<DayColor, Int>,
+    /** Gestes reussis sur la periode, et gestes qui etaient possibles. */
+    val deedsDone: Int = 0,
+    val deedsPossible: Int = 0,
 ) {
+    /** Le ressenti et les actions, reunis en une note (voir [Note]). */
+    val note: Note get() = Note(average, deedsDone, deedsPossible)
+
     val hasData: Boolean get() = filledDays > 0
 
     fun countOf(color: DayColor): Int = counts[color] ?: 0
@@ -61,16 +67,35 @@ object Stats {
 
     val WEEK_FIELDS: WeekFields = WeekFields.of(Locale.FRANCE)
 
-    fun summarize(label: String, entries: Collection<DayEntry>, totalDays: Int): PeriodSummary {
+    fun summarize(
+        label: String,
+        entries: Collection<DayEntry>,
+        totalDays: Int,
+        /**
+         * Les cartes masquees, pour savoir quels gestes etaient possibles.
+         * Vide par defaut : les appels qui ne s'interessent qu'aux couleurs
+         * n'ont pas a s'en soucier.
+         */
+        hiddenCards: Set<DayCard> = emptySet(),
+    ): PeriodSummary {
         val colored = entries.mapNotNull { it.color }
         val counts = DayColor.entries.associateWith { color -> colored.count { it == color } }
         val average = if (colored.isEmpty()) null else colored.sumOf { it.score }.toDouble() / colored.size
+
+        // Les gestes ne se comptent que sur les journees **notees**, comme la
+        // moyenne : une journee jamais ouverte n'a ni couleur ni geste, et la
+        // compter ferait baisser la part sans que personne n'ait rien manque.
+        val possible = Deed.possibleWith(hiddenCards)
+        val noted = entries.filter { it.colorKey != null }
+
         return PeriodSummary(
             label = label,
             average = average,
             filledDays = colored.size,
             totalDays = totalDays,
             counts = counts,
+            deedsDone = noted.sumOf { entry -> Deed.doneCount(entry, possible) },
+            deedsPossible = noted.size * possible.size,
         )
     }
 

@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ismael.daybyday.data.DayColor
+import com.ismael.daybyday.data.Note
 import com.ismael.daybyday.data.PeriodSummary
 import java.time.LocalDate
 import java.time.YearMonth
@@ -83,18 +84,23 @@ fun Context.findActivity(): Activity? {
  */
 fun outOfTen(average: Double): Double = average / DayColor.MAX_SCORE * 10.0
 
+/**
+ * Le **ressenti** seul, sur dix.
+ *
+ * Sert la ou l'on compare des couleurs entre elles — « les jours ou tu as
+ * bouge » contre les autres. Y melanger les gestes n'aurait aucun sens : on
+ * comparerait une chose a elle-meme.
+ */
 fun formatAverage(average: Double?): String =
     average?.let { String.format(Locale.FRANCE, "%.1f", outOfTen(it)) + " / 10" } ?: "—"
 
-/**
- * Ce que la note veut dire, en une phrase.
- *
- * Elle ne vient **que** de la couleur des journees : ni les pas, ni le sport,
- * ni l'argent n'y entrent, et c'est voulu — ce sont eux qu'on compare ensuite
- * a la couleur dans « Ce qui va avec tes bonnes journees », et les faire
- * entrer dans la note rendrait la comparaison circulaire.
- */
-const val SCORE_CAPTION = "La moyenne de la couleur de tes journées notées."
+/** La note complete : le ressenti plus les gestes. */
+fun formatNote(note: Note): String {
+    val total = note.total ?: return "—"
+    return String.format(Locale.FRANCE, "%.1f", total) + " / " + note.outOf
+}
+
+
 
 fun formatWeight(weightKg: Double?): String =
     weightKg?.let { String.format(Locale.FRANCE, "%.1f kg", it) } ?: "—"
@@ -154,6 +160,34 @@ private fun relativeLuminance(color: Color): Float {
         0.0722f * channel(color.blue)
 }
 
+/**
+ * La note d'une periode, sur la couleur du ressenti.
+ *
+ * Le **texte** est la note complete, gestes compris ; la **teinte** ne vient
+ * que du ressenti. C'est voulu : la couleur repond a « comment ca s'est
+ * passe ? », et une semaine noire ou l'on s'est beaucoup bouge ne doit pas
+ * s'afficher en vert.
+ */
+@Composable
+fun NoteChip(note: Note, modifier: Modifier = Modifier) {
+    val base = note.moodAverage?.let { DayColor.fromAverage(it) }
+    val fill = base ?: MaterialTheme.colorScheme.surfaceVariant
+    val textColor = if (base == null) MaterialTheme.colorScheme.onSurfaceVariant else readableOn(base)
+    Box(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(fill)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Text(
+            text = formatNote(note),
+            style = MaterialTheme.typography.labelLarge,
+            color = textColor,
+        )
+    }
+}
+
+/** Le ressenti seul : les moments d'une journee n'ont pas de gestes. */
 @Composable
 fun AverageChip(average: Double?, modifier: Modifier = Modifier) {
     // Pas de degrade ici : sur une pastille de deux centimetres, un degrade ne
@@ -296,7 +330,7 @@ fun SummaryCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            AverageChip(summary.average)
+            NoteChip(summary.note)
         }
         Spacer(Modifier.height(12.dp))
         DistributionBar(summary)

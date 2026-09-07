@@ -458,6 +458,10 @@ private fun badgePalette(badge: Badge): List<Color> = when (badge) {
     Badge.APPLICATION, Badge.WEEK_APPLICATIONS ->
         listOf(Color(0xFF9B90FF), Color(0xFF5B4DF0))
     Badge.JOURNAL -> listOf(Color(0xFFFFA9B8), Color(0xFFF2637F))
+    // Le bleu de l'eau pour la douche, l'ambre clair pour les dents : deux
+    // teintes de la palette des cartes, comme les autres.
+    Badge.SHOWER -> listOf(Color(0xFF9AE6F5), Color(0xFF1FA6A6))
+    Badge.TEETH -> listOf(Color(0xFFFFE7A3), Color(0xFFD4A017))
 }
 
 /**
@@ -475,6 +479,8 @@ private fun badgeAnimation(badge: Badge): Int = when (badge) {
     Badge.APPLICATION -> R.raw.badge_application
     Badge.WEEK_APPLICATIONS -> R.raw.badge_week
     Badge.JOURNAL -> R.raw.badge_journal
+    Badge.SHOWER -> R.raw.badge_shower
+    Badge.TEETH -> R.raw.badge_teeth
 }
 
 /** Combien de fois le signe rejoue pendant que la medaille est la. */

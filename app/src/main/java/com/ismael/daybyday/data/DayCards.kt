@@ -114,6 +114,15 @@ enum class DayCard(
         description = "Les rentrées et dépenses de cette journée.",
         canHoldMedia = true,
     ),
+    // Comme les traitements : une carte a part, qu'on masque quand elle ne
+    // concerne pas la periode qu'on traverse, et qu'on remet entiere le jour ou
+    // elle redevient utile. Se laver n'est un sujet que pour certains, et
+    // certains jours — mais ces jours-la, c'en est un vrai.
+    HYGIENE(
+        key = "hygiene",
+        title = "Hygiène",
+        description = "La douche, et les trois brossages de dents.",
+    ),
     PRAYER(
         key = "priere",
         title = "Prières",

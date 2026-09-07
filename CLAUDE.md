@@ -451,6 +451,33 @@ téléphone (Samsung S25, Android 15).
   application qui sonne quand même est une application qu'on désinstalle. Le
   son part en même temps que la vibration, au **passage** d'état comme
   l'animation, jamais à l'affichage.
+- **Vocaux** (`data/VoiceNote`, `ui/VoiceRecorder.kt`, `ui/VoiceNotes.kt`) : leur
+  **propre table**, pas un média de plus. Un vocal ne se pose pas sur la page,
+  ne se recadre pas, n'a ni forme ni inclinaison — et il a une durée, que rien
+  dans une photo ne porte. Le ranger avec les images aurait demandé de le
+  filtrer dans chaque endroit qui affiche un album, et il aurait fini en
+  vignette cassée dans l'un d'eux. Trois règles :
+  1. On enregistre **directement dans le fichier final** : un vocal de dix
+     minutes recopié à la fin, c'est dix minutes de risque pour rien.
+  2. La durée est **mesurée pendant**, jamais relue après — relire chaque
+     fichier pour afficher une liste serait absurde, et un fichier abîmé
+     rendrait toute la liste illisible au lieu d'une seule ligne.
+  3. Moins d'une demi-seconde : c'est un appui raté, pas un vocal, et le
+     fichier est jeté.
+  Deux endroits qu'il est facile d'oublier, et qui **perdent des données**
+  quand on les oublie : la sauvegarde (`Backup`, sinon un vocal disparaît à la
+  première restauration sans que rien ne le signale) et « est-ce que cette
+  journée est vide ? », qui décide de supprimer la ligne — d'où
+  `DayRepository.hasAttachments`, qui pose la question à un seul endroit.
+  Les pastilles vivent **sous le titre**, pas dans un panneau : un
+  enregistrement qu'on ne voit qu'en ouvrant un menu n'existe pas. La croix de
+  suppression est toujours visible — un appui long qu'on ne voit pas se
+  déclenche quand on ne l'attendait pas, et un vocal ne se relit pas en
+  diagonale comme une phrase.
+- **Icônes** : le projet n'embarque que le jeu **de base**
+  (`material-icons-core`). Beaucoup d'icônes courantes n'y sont pas (le micro,
+  par exemple) : on recopie alors le dessin dans `res/drawable/`, plutôt que
+  d'ajouter le jeu complet, qui pèse plusieurs mégaoctets pour une icône.
 - **Photos du journal** : elles sont **posées librement** sur la page, pas
   insérées dans le fil du texte. Écrire un paragraphe de plus ne les déplace
   pas — c'est voulu, et c'est l'inverse d'un traitement de texte. Trois

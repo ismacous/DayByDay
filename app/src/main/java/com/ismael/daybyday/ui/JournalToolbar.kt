@@ -293,6 +293,7 @@ fun JournalToolbar(
                     panel = openPanel,
                     active = active,
                     onStyle = onStyle,
+                    onHashtag = onHashtag,
                     align = align,
                     onAlign = onAlign,
                     onClearHeading = onClearHeading,
@@ -315,6 +316,7 @@ private fun ToolPanelContent(
     panel: ToolPanel,
     active: Set<TextStyleKind>,
     onStyle: (TextStyleKind) -> Unit,
+    onHashtag: () -> Unit,
     /** L'alignement du bloc courant, et de quoi en changer. */
     align: BlockAlign,
     onAlign: (BlockAlign) -> Unit,
@@ -589,7 +591,20 @@ private fun InsertPanel(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             photos.forEach { photo ->
-                PhotoThumb(photo = photo, file = photoFile(photo), onClick = { onPickPhoto(photo) })
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(LocalPaperSurface.current)
+                        .clickable(onClickLabel = "Reprendre cette photo") { onPickPhoto(photo) },
+                ) {
+                    MediaImage(
+                        file = photoFile(photo),
+                        kind = photo.kind,
+                        modifier = Modifier.fillMaxSize(),
+                        maxSize = 256,
+                    )
+                }
             }
         }
     }

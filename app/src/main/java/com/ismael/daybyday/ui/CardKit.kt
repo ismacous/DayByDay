@@ -125,6 +125,10 @@ fun cardStyle(card: DayCard): DayCardStyle = when (card) {
     DayCard.WORK -> DayCardStyle("💼", Indigo, IndigoGlow)
     DayCard.OUTSIDE -> DayCardStyle("🚪", Violet, VioletGlow)
     DayCard.MONEY -> DayCardStyle("💶", Sky, SkyGlow)
+    // Le turquoise, entre le sommeil et l'activite : la carte tombe entre les
+    // deux dans la disposition d'origine, et deux voisines n'ont jamais la
+    // meme teinte.
+    DayCard.HYGIENE -> DayCardStyle("🫧", Sky, SkyGlow)
     DayCard.PRAYER -> DayCardStyle("🕌", Amber, AmberGlow)
     DayCard.MEDIA -> DayCardStyle("📷", Rose, RoseGlow)
 }

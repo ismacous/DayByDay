@@ -39,9 +39,12 @@ import com.ismael.daybyday.data.Hashtag
 import com.ismael.daybyday.data.MediaItem
 import com.ismael.daybyday.data.MediaLayer
 import com.ismael.daybyday.data.MediaShape
+import com.ismael.daybyday.data.Placement
 import com.ismael.daybyday.data.StyleFamily
 import com.ismael.daybyday.data.TextSpan
 import com.ismael.daybyday.data.TextStyleKind
+import com.ismael.daybyday.data.VoiceNote
+import com.ismael.daybyday.data.Waveform
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -90,10 +93,13 @@ object PagePdf {
         body: String,
         spans: List<TextSpan>,
         photos: List<MediaItem>,
+        voiceNotes: List<VoiceNote>,
         photoFile: (MediaItem) -> File,
         paper: Color,
         ink: Color,
         lineColor: Color,
+        /** La couleur d'accent, pour le bouton de lecture des vocaux. */
+        accent: Color,
         ruled: Boolean,
         baseFont: FontFamily?,
         textSize: Int,
@@ -149,8 +155,11 @@ object PagePdf {
         // La page descend jusqu'au plus bas des deux : le texte, ou la photo la
         // plus basse. Une photo posee sous le dernier mot ne doit pas etre
         // coupee parce que le texte s'arretait avant elle.
-        val lowestPhoto = photos.filter { it.isPlaced }
-            .maxOfOrNull { (it.placedY ?: 0f) + it.displayHeight } ?: 0f
+        val lowestPhoto = maxOf(
+            photos.filter { it.isPlaced }
+                .maxOfOrNull { (it.placedY ?: 0f) + it.displayHeight } ?: 0f,
+            Placement.lowestVoiceEdge(voiceNotes),
+        )
         val contentHeight = maxOf(textTop + textHeight + topPadding, lowestPhoto + topPadding)
 
         val images = photos.filter { it.isPlaced }
@@ -197,6 +206,8 @@ object PagePdf {
                                     ink = ink,
                                     body = body,
                                     spans = spans,
+                                    voiceNotes = voiceNotes,
+                                    accent = accent,
                                 )
                             }
                         }
@@ -245,6 +256,8 @@ object PagePdf {
         ink: Color,
         body: String,
         spans: List<TextSpan>,
+        voiceNotes: List<VoiceNote>,
+        accent: Color,
     ) {
         drawRect(color = paper, topLeft = Offset.Zero, size = Size(width, height))
 
@@ -286,6 +299,52 @@ object PagePdf {
 
         images.filter { it.first.layer == MediaLayer.FRONT }
             .forEach { (item, image) -> drawPlaced(item, image) }
+
+        // Les vocaux ne s'ecoutent pas sur une feuille de papier, mais ils
+        // occupent une place dans la page : les retirer de l'export ferait
+        // deux mises en page differentes pour la meme journee.
+        voiceNotes.filter { it.isPlaced }.forEach { note ->
+            drawVoice(note, width, ink, accent)
+        }
+    }
+
+    /** Un vocal, dessine comme a l'ecran : le rond, la silhouette, la duree. */
+    private fun DrawScope.drawVoice(
+        note: VoiceNote,
+        pageWidth: Float,
+        ink: Color,
+        accent: Color,
+    ) {
+        val x = note.placedX ?: return
+        val y = note.placedY ?: return
+        val w = Placement.voiceWidth(note.wide, pageWidth)
+        val h = Placement.VOICE_HEIGHT
+
+        drawRoundRect(
+            color = ink.copy(alpha = 0.07f),
+            topLeft = Offset(x, y),
+            size = Size(w, h),
+            cornerRadius = CornerRadius(18f),
+        )
+        drawCircle(color = accent, radius = 19f, center = Offset(x + 8f + 19f, y + h / 2f))
+
+        val heights = Waveform.decode(note.waveform)
+        val waveLeft = x + 8f + 38f + 10f
+        val waveWidth = (w - (waveLeft - x) - 44f).coerceAtLeast(1f)
+        val step = waveWidth / heights.size
+        val barWidth = (step * 0.55f).coerceAtLeast(0.6f)
+        heights.forEachIndexed { index, value ->
+            val barHeight = ((h - 28f) * value).coerceAtLeast(barWidth)
+            drawRoundRect(
+                color = ink.copy(alpha = 0.28f),
+                topLeft = Offset(
+                    waveLeft + index * step + (step - barWidth) / 2f,
+                    y + (h - barHeight) / 2f,
+                ),
+                size = Size(barWidth, barHeight),
+                cornerRadius = CornerRadius(barWidth / 2f),
+            )
+        }
     }
 
     /**

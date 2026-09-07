@@ -5,6 +5,7 @@ import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.SystemClock
+import com.ismael.daybyday.data.Waveform
 import java.io.File
 
 /**
@@ -30,6 +31,17 @@ class VoiceRecorder {
     private var recorder: MediaRecorder? = null
     private var startedAt = 0L
 
+    /**
+     * Les mesures du micro pendant l'enregistrement, pour dessiner la
+     * silhouette du son.
+     *
+     * On les prend **au vol** : `getMaxAmplitude` rend le plus fort depuis le
+     * dernier appel, donc appeler regulierement donne l'enveloppe du son sans
+     * rien decoder. Les relire ensuite dans le fichier demanderait de le
+     * decoder en entier — plusieurs secondes pour un vocal de dix minutes.
+     */
+    private val samples = mutableListOf<Int>()
+
     val isRecording: Boolean get() = recorder != null
 
     /**
@@ -38,6 +50,7 @@ class VoiceRecorder {
      */
     fun start(context: Context, target: File): Boolean {
         stop()
+        samples.clear()
         target.parentFile?.mkdirs()
         val instance = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             MediaRecorder(context)
@@ -93,9 +106,21 @@ class VoiceRecorder {
         runCatching { instance.release() }
     }
 
-    /** La duree ecoulee depuis le debut, pour l'afficher pendant qu'on parle. */
-    fun elapsedMs(): Long =
-        if (recorder == null) 0L else SystemClock.elapsedRealtime() - startedAt
+    /**
+     * La duree ecoulee depuis le debut, **et** une mesure du micro au passage.
+     *
+     * Les deux ensemble parce qu'ils ont le meme rythme : l'ecran a besoin du
+     * chiffre qui defile, la forme d'onde a besoin d'un point regulier. Deux
+     * horloges pour ca en feraient une de trop.
+     */
+    fun tick(): Long {
+        val instance = recorder ?: return 0L
+        runCatching { samples += instance.maxAmplitude }
+        return SystemClock.elapsedRealtime() - startedAt
+    }
+
+    /** La silhouette du son qui vient d'etre enregistre. */
+    fun waveform(): String = Waveform.encode(samples)
 
     private companion object {
         const val MINIMUM_MS = 500L
@@ -143,6 +168,21 @@ class VoicePlayer {
             player = instance
             playingPath = key
         }.onFailure { stop() }
+    }
+
+    /**
+     * Ou en est la lecture, entre 0 et 1.
+     *
+     * Demande a l'ecran plutot que renvoye par un rappel : `MediaPlayer` ne
+     * previent de rien pendant qu'il joue, et une horloge qui ne tourne que
+     * pendant la lecture coute moins qu'un etat de plus a tenir a jour.
+     */
+    fun progress(): Float {
+        val instance = player ?: return 0f
+        return runCatching {
+            val total = instance.duration
+            if (total <= 0) 0f else (instance.currentPosition.toFloat() / total).coerceIn(0f, 1f)
+        }.getOrDefault(0f)
     }
 
     fun stop() {

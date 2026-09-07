@@ -332,18 +332,28 @@ fun PaperSettingsSheet(
                 // Le lien est du texte : colle dans une autre journee, il y
                 // devient un nom souligne sur lequel on appuie. Rien n'est
                 // enregistre nulle part, donc rien ne peut pointer dans le vide.
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(9.dp),
-                    verticalArrangement = Arrangement.spacedBy(9.dp),
-                ) {
-                    ChoicePill(selected = false, onClick = onCopyLink) { color ->
+                // Deux actions du meme rang : elles partagent la ligne en deux
+                // parts egales. Laissees a la taille de leur texte, l'une etait
+                // plus large que l'autre sans que rien ne le justifie — et deux
+                // boutons voisins de tailles differentes se lisent comme deux
+                // boutons d'importance differente.
+                Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                    ChoicePill(
+                        selected = false,
+                        onClick = onCopyLink,
+                        modifier = Modifier.weight(1f),
+                    ) { color ->
                         Text(
                             text = "Copier le lien",
                             style = MaterialTheme.typography.bodyLarge,
                             color = color,
                         )
                     }
-                    ChoicePill(selected = false, onClick = onExportPdf) { color ->
+                    ChoicePill(
+                        selected = false,
+                        onClick = onExportPdf,
+                        modifier = Modifier.weight(1f),
+                    ) { color ->
                         Text(
                             text = "Exporter en PDF",
                             style = MaterialTheme.typography.bodyLarge,
@@ -481,6 +491,7 @@ private fun SettingSwitch(
 private fun ChoicePill(
     selected: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     content: @Composable (Color) -> Unit,
 ) {
     val accent = MaterialTheme.colorScheme.primary
@@ -495,6 +506,7 @@ private fun ChoicePill(
         label = "encre",
     )
     Surface(
+        modifier = modifier,
         shape = RoundedCornerShape(14.dp),
         color = background,
         onClick = onClick,

@@ -81,6 +81,7 @@ import com.ismael.daybyday.data.MediaItem
 import com.ismael.daybyday.data.MediaLayer
 import com.ismael.daybyday.data.Placement
 import com.ismael.daybyday.data.PageLink
+import com.ismael.daybyday.data.VoiceNote
 import com.ismael.daybyday.data.RichText
 import com.ismael.daybyday.data.StyleFamily
 import com.ismael.daybyday.data.TextSpan
@@ -131,14 +132,14 @@ fun JournalScreen(
             if (!loaded) return@onDispose
             val (savedTitle, savedBody, savedSpans) = current.value
             app.appScope.launch {
-                val existing = repository.dayOnce(date)
-                    ?: com.ismael.daybyday.data.DayEntry(epochDay = date.toEpochDay())
-                repository.saveDay(
-                    existing.copy(
-                        title = savedTitle.trim(),
-                        note = savedBody,
-                        noteSpans = RichText.encode(savedSpans),
-                    )
+                // Seulement le journal : le reste de la journee est relu au
+                // moment d'ecrire, et « Ma journee » ne réécrit plus ces
+                // trois champs de son côté.
+                repository.saveJournal(
+                    date = date,
+                    title = savedTitle.trim(),
+                    note = savedBody,
+                    spans = RichText.encode(savedSpans),
                 )
             }
         }
@@ -235,6 +236,10 @@ fun JournalScreen(
     }
     var pageWidth by remember { mutableStateOf(0f) }
     var selectedPhotoId by remember { mutableStateOf<Long?>(null) }
+    // Un seul objet choisi a la fois : une photo **ou** un vocal. Les deux
+    // ouvrent leur propre barre de reglages en bas, et deux barres a la fois
+    // n'auraient nulle part ou tenir.
+    var selectedVoiceId by remember { mutableStateOf<Long?>(null) }
 
     val clipboard = LocalClipboardManager.current
 
@@ -276,6 +281,7 @@ fun JournalScreen(
         selectedPhotoId = id
         draft = null
         if (id != null) {
+            selectedVoiceId = null
             // On ne tape pas et on manipule une image : le clavier n'a plus
             // rien a faire la, et un panneau ouvert non plus.
             openPanel = null
@@ -440,12 +446,18 @@ fun JournalScreen(
     }
 
     // --- Les vocaux -------------------------------------------------------
-    val voiceNotes by remember(date) { repository.observeVoiceNotes(date) }
+    val storedVoice by remember(date) { repository.observeVoiceNotes(date) }
         .collectAsStateWithLifecycle(emptyList())
     val recorder = remember { VoiceRecorder() }
     val player = remember { VoicePlayer() }
     var recordingPath by remember { mutableStateOf<String?>(null) }
     var recordingMs by remember { mutableStateOf<Long?>(null) }
+    // La place d'un vocal pendant qu'un doigt le deplace : on n'ecrit pas dans
+    // la base a chaque image, comme pour les photos.
+    var voiceDraft by remember { mutableStateOf<VoiceNote?>(null) }
+    // L'avancee de la lecture. Dans un `State` et lue au dessin : lue pendant
+    // la composition, elle recomposerait la page vingt fois par seconde.
+    val playProgress = remember { mutableStateOf(0f) }
     // Le vocal en cours de lecture, tenu a part : `VoicePlayer` n'est pas un
     // etat que Compose observe, il faut donc le lui dire.
     var playingPath by remember { mutableStateOf<String?>(null) }
@@ -464,10 +476,22 @@ fun JournalScreen(
     // pour un chiffre que personne ne regarde le reste du temps.
     LaunchedEffect(recordingPath) {
         while (recordingPath != null) {
-            recordingMs = recorder.elapsedMs()
-            kotlinx.coroutines.delay(200)
+            // Le meme battement sert au chiffre qui defile et a la mesure du
+            // micro qui dessinera la forme d'onde.
+            recordingMs = recorder.tick()
+            kotlinx.coroutines.delay(100)
         }
         recordingMs = null
+    }
+
+    // L'horloge de la lecture : elle ne tourne que pendant, comme celle de
+    // l'enregistrement.
+    LaunchedEffect(playingPath) {
+        while (playingPath != null) {
+            playProgress.value = player.progress()
+            kotlinx.coroutines.delay(60)
+        }
+        playProgress.value = 0f
     }
 
     fun startRecording() {
@@ -490,7 +514,8 @@ fun JournalScreen(
             file.delete()
             return
         }
-        app.appScope.launch { repository.addVoiceNote(date, relativePath, duration) }
+        val shape = recorder.waveform()
+        app.appScope.launch { repository.addVoiceNote(date, relativePath, duration, shape) }
     }
 
     val askMicrophone = rememberLauncherForActivityResult(
@@ -511,7 +536,53 @@ fun JournalScreen(
         if (allowed) startRecording() else askMicrophone.launch(Manifest.permission.RECORD_AUDIO)
     }
 
+    val voiceNotes = storedVoice.map { note ->
+        if (note.id == voiceDraft?.id) voiceDraft ?: note else note
+    }
+    val selectedVoice = voiceNotes.firstOrNull { it.id == selectedVoiceId }
+
+    // Le vocal qu'un doigt vient de deplacer : on enregistre une fois les
+    // doigts immobiles, pas a chaque image.
+    val pendingVoice = voiceDraft
+    LaunchedEffect(pendingVoice) {
+        if (pendingVoice != null) {
+            kotlinx.coroutines.delay(350)
+            repository.updateVoiceNote(pendingVoice)
+        }
+    }
+
+    // Les vocaux qui n'ont pas encore de place — ceux d'avant cette version, et
+    // celui qu'on vient de dire — se rangent sous le debut du texte.
+    LaunchedEffect(storedVoice, pageWidth) {
+        if (pageWidth <= 0f) return@LaunchedEffect
+        storedVoice.filterNot { it.isPlaced }.forEachIndexed { index, note ->
+            repository.updateVoiceNote(
+                Placement.autoPlaceVoice(
+                    note = note,
+                    index = index,
+                    pageWidth = pageWidth,
+                    topY = Placement.topMargin + Placement.GRID * 2f,
+                )
+            )
+        }
+    }
+
+    fun selectVoice(id: Long?) {
+        selectedVoiceId = id
+        voiceDraft = null
+        if (id != null) {
+            selectPhoto(null)
+            openPanel = null
+            heldSelection = null
+            awaitingKeyboard = false
+            focusManager.clearFocus()
+        }
+    }
+
     // --- L'export PDF ---------------------------------------------------
+    // Lue ici, dans la composition : `PagePdf` travaille hors de Compose et ne
+    // peut pas aller chercher le theme lui-meme.
+    val accentForPdf = MaterialTheme.colorScheme.primary
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val exportPdf = rememberLauncherForActivityResult(
@@ -530,10 +601,12 @@ fun JournalScreen(
                         body = body.text,
                         spans = spans,
                         photos = journalMedia,
+                        voiceNotes = voiceNotes,
                         photoFile = { repository.media.file(it.relativePath) },
                         paper = paper,
                         ink = ink,
                         lineColor = JournalPaper.line(lineIndex),
+                        accent = accentForPdf,
                         ruled = ruled,
                         baseFont = baseFont,
                         textSize = textSize,
@@ -617,27 +690,9 @@ fun JournalScreen(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
 
-            VoiceNoteStrip(
-                notes = voiceNotes,
-                playing = playingPath,
-                recordingMs = recordingMs,
-                ink = ink,
-                onToggle = { note ->
-                    player.toggle(
-                        file = repository.media.file(note.relativePath),
-                        key = note.relativePath,
-                    ) { playingPath = null }
-                    playingPath = player.playing
-                },
-                onDelete = { note ->
-                    if (playingPath == note.relativePath) {
-                        player.stop()
-                        playingPath = null
-                    }
-                    app.appScope.launch { repository.deleteVoiceNote(note) }
-                },
-                onStopRecording = { stopRecording() },
-            )
+            recordingMs?.let { elapsed ->
+                RecordingBanner(elapsedMs = elapsed, onStop = { stopRecording() })
+            }
 
             // La page : le texte et les photos defilent ensemble, dans un seul
             // conteneur. Les positions des photos sont donc des positions dans
@@ -656,7 +711,12 @@ fun JournalScreen(
                 // basse : sans ca, une image posee en bas serait inatteignable.
                 val pageHeight = maxOf(
                     viewportHeight,
-                    (Placement.lowestEdge(journalMedia) + 160f).dp,
+                    (
+                        maxOf(
+                            Placement.lowestEdge(journalMedia),
+                            Placement.lowestVoiceEdge(voiceNotes),
+                        ) + 160f
+                        ).dp,
                 )
 
                 // Le curseur ne doit jamais passer sous le clavier. Le champ
@@ -709,7 +769,7 @@ fun JournalScreen(
                             modifier = Modifier.matchParentSize(),
                         )
                     }
-                    if (selectedPhoto != null && snapToGrid) {
+                    if ((selectedPhoto != null || selectedVoice != null) && snapToGrid) {
                         PhotoGrid(modifier = Modifier.matchParentSize())
                     }
 
@@ -836,8 +896,21 @@ fun JournalScreen(
                                             it.style.family == StyleFamily.COLOR &&
                                                 it.start <= quote.start && it.end >= quote.end
                                         }
+                                        // Le trait couvre le **paragraphe**, pas
+                                        // l'intervalle enregistre : une citation
+                                        // habille la ligne entiere (c'est ce que
+                                        // pose `headingParagraphs`), et l'intervalle
+                                        // peut ne porter que sur les premiers mots
+                                        // — le trait s'arretait alors a la
+                                        // premiere ligne d'une citation qui en
+                                        // fait trois.
+                                        val line = RichText.lineRange(
+                                            body.text,
+                                            quote.start,
+                                            (quote.end - 1).coerceAtLeast(quote.start),
+                                        )
                                         QuoteBar(
-                                            range = quote.start until quote.end,
+                                            range = line.first..maxOf(line.last, line.first),
                                             color = tint?.let { Color(it.style.argb) } ?: ink,
                                         )
                                     }
@@ -869,6 +942,30 @@ fun JournalScreen(
                                 onSelect = { selectPhoto(item.id) },
                             )
                         }
+
+                    // Les vocaux sont devant le texte : ce sont des objets qu'on
+                    // touche, pas un fond qu'on recouvre.
+                    voiceNotes.filter { it.isPlaced }.forEach { note ->
+                        PlacedVoiceNote(
+                            note = note,
+                            pageWidth = pageWidth,
+                            playing = playingPath == note.relativePath,
+                            progress = { playProgress.value },
+                            ink = ink,
+                            accent = MaterialTheme.colorScheme.primary,
+                            selected = selectedVoiceId == note.id,
+                            snapToGrid = snapToGrid,
+                            onPlay = {
+                                player.toggle(
+                                    file = repository.media.file(note.relativePath),
+                                    key = note.relativePath,
+                                ) { playingPath = null }
+                                playingPath = player.playing
+                            },
+                            onSelect = { selectVoice(note.id) },
+                            onMove = { voiceDraft = it },
+                        )
+                    }
 
                     // Le cadre de manipulation passe par-dessus tout, meme sur une
                     // photo de fond que le texte recouvre.
@@ -910,7 +1007,36 @@ fun JournalScreen(
                 )
             }
 
-            if (selectedPhoto != null) {
+            if (selectedVoice != null) {
+                val voice = selectedVoice
+                VoiceToolsBar(
+                    note = voice,
+                    onWide = { wide ->
+                        // La barre change de largeur autour de son centre :
+                        // elle reste ou on l'avait posee.
+                        val centre = (voice.placedX ?: 0f) +
+                            Placement.voiceWidth(voice.wide, pageWidth) / 2f
+                        val resized = voice.copy(wide = wide)
+                        val moved = Placement.applyVoice(
+                            note = resized,
+                            centreX = centre,
+                            centreY = (voice.placedY ?: 0f) + Placement.VOICE_HEIGHT / 2f,
+                            snapToGrid = snapToGrid,
+                            pageWidth = pageWidth,
+                        )
+                        voiceDraft = moved
+                    },
+                    onDelete = {
+                        selectVoice(null)
+                        if (playingPath == voice.relativePath) {
+                            player.stop()
+                            playingPath = null
+                        }
+                        app.appScope.launch { repository.deleteVoiceNote(voice) }
+                    },
+                    onDone = { selectVoice(null) },
+                )
+            } else if (selectedPhoto != null) {
                 val photo = selectedPhoto
                 PhotoToolsBar(
                     item = photo,

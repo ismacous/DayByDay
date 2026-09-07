@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Version du schema. Affichee dans les reglages, a propos, pour savoir ce que
  * fait tourner le telephone en cas de probleme.
  */
-const val DATABASE_VERSION = 16
+const val DATABASE_VERSION = 17
 
 @Database(
     entities = [
@@ -349,6 +349,22 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Les vocaux se posent sur la page, comme les photos, et portent la
+         * silhouette de leur son.
+         *
+         * Rangés en haut de la page, ils n'étaient qu'une liste ; posés dans le
+         * texte, ils font partie de la journée.
+         */
+        val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE voice_notes ADD COLUMN placedX REAL")
+                db.execSQL("ALTER TABLE voice_notes ADD COLUMN placedY REAL")
+                db.execSQL("ALTER TABLE voice_notes ADD COLUMN wide INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE voice_notes ADD COLUMN waveform TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -374,6 +390,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_13_14,
                     MIGRATION_14_15,
                     MIGRATION_15_16,
+                    MIGRATION_16_17,
                 )
                 .build()
                 .also { instance = it }

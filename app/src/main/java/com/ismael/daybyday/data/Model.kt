@@ -457,7 +457,31 @@ data class VoiceNote(
      */
     val durationMs: Long,
     val recordedAt: Long = System.currentTimeMillis(),
-)
+    /**
+     * Place sur la page, en points depuis son coin haut gauche — exactement
+     * comme une photo. `null` veut dire « jamais posé » : le vocal sera rangé
+     * automatiquement a la prochaine ouverture du journal.
+     */
+    val placedX: Float? = null,
+    val placedY: Float? = null,
+    /**
+     * Toute la largeur de la page, ou un peu plus de la moitie.
+     *
+     * Deux tailles et pas une largeur libre : une barre de lecture n'a pas de
+     * proportions a respecter comme une photo, et la tirer au doigt donnerait
+     * surtout des largeurs bancales. Deux choix nets valent mieux.
+     */
+    val wide: Boolean = true,
+    /**
+     * La silhouette du son, mesuree pendant l'enregistrement (voir [Waveform]).
+     * Vide pour les vocaux d'avant cette version : ils gardent une silhouette
+     * neutre plutot qu'une barre nue.
+     */
+    val waveform: String = "",
+) {
+    /** Posé sur la page, avec une place connue. */
+    val isPlaced: Boolean get() = placedX != null && placedY != null
+}
 
 /**
  * A quelle profondeur une photo est posee sur la page.

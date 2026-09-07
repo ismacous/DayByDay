@@ -129,6 +129,38 @@ class DayRepository(context: Context) {
         }
     }
 
+    /**
+     * Enregistre une journee **sans toucher au journal**.
+     *
+     * Le titre, le texte et sa mise en forme appartiennent a l'ecran du
+     * journal, et lui seul les ecrit ([saveJournal]). Sans cette separation,
+     * deux ecrans possedaient les memes champs, et le dernier a enregistrer
+     * gagnait : effacer une page dans le journal puis revenir a la journee
+     * remettait l'ancien texte, parce que « Ma journee » gardait sa propre
+     * copie et la reecrivait. Une page devenait impossible a vider.
+     */
+    suspend fun saveDayKeepingJournal(entry: DayEntry) {
+        val existing = dao.dayOnce(entry.epochDay)
+        saveDay(
+            entry.copy(
+                title = existing?.title.orEmpty(),
+                note = existing?.note.orEmpty(),
+                noteSpans = existing?.noteSpans.orEmpty(),
+            )
+        )
+    }
+
+    /**
+     * Enregistre **uniquement** le journal d'une journee : le reste de la ligne
+     * est relu au moment d'ecrire, donc rien de ce qui a ete coche ailleurs
+     * entre-temps n'est perdu.
+     */
+    suspend fun saveJournal(date: LocalDate, title: String, note: String, spans: String) {
+        val epochDay = date.toEpochDay()
+        val existing = dao.dayOnce(epochDay) ?: DayEntry(epochDay = epochDay)
+        saveDay(existing.copy(title = title, note = note, noteSpans = spans))
+    }
+
     /** Cree la ligne du jour si elle n'existe pas encore (media, etiquette...). */
     private suspend fun ensureDayExists(epochDay: Long) {
         if (dao.dayOnce(epochDay) == null) dao.upsertDay(DayEntry(epochDay = epochDay))
@@ -236,15 +268,26 @@ class DayRepository(context: Context) {
     suspend fun allVoiceNotes(): List<VoiceNote> = dao.allVoiceNotes()
 
     /** Ajoute un vocal deja enregistre a l'endroit rendu par [MediaFiles.newVoicePath]. */
-    suspend fun addVoiceNote(date: LocalDate, relativePath: String, durationMs: Long) {
+    suspend fun addVoiceNote(
+        date: LocalDate,
+        relativePath: String,
+        durationMs: Long,
+        waveform: String,
+    ) {
         dao.insertVoiceNote(
             VoiceNote(
                 epochDay = date.toEpochDay(),
                 relativePath = relativePath,
                 durationMs = durationMs,
+                waveform = waveform,
             )
         )
         ensureDayExists(date.toEpochDay())
+    }
+
+    /** Enregistre la nouvelle place ou la nouvelle taille d'un vocal. */
+    suspend fun updateVoiceNote(note: VoiceNote) {
+        dao.updateVoiceNote(note)
     }
 
     suspend fun deleteVoiceNote(note: VoiceNote) {

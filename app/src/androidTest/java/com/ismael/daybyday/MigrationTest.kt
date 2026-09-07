@@ -73,6 +73,7 @@ class MigrationTest {
                 AppDatabase.MIGRATION_13_14,
                 AppDatabase.MIGRATION_14_15,
                 AppDatabase.MIGRATION_15_16,
+                AppDatabase.MIGRATION_16_17,
             )
             .build()
 
@@ -137,6 +138,17 @@ class MigrationTest {
                     )
                 )
                 assertEquals(1, dao.voiceNotesForDay(20000).size)
+                // Un vocal qui vient d'etre enregistre n'a pas encore de place
+                // sur la page : il sera range a la prochaine ouverture du
+                // journal, exactement comme une photo.
+                val voice = dao.voiceNotesForDay(20000).first()
+                assertEquals(false, voice.isPlaced)
+                assertEquals(true, voice.wide)
+                assertEquals("", voice.waveform)
+                dao.updateVoiceNote(voice.copy(placedX = 14f, placedY = 28f, wide = false))
+                val moved = dao.voiceNotesForDay(20000).first()
+                assertEquals(true, moved.isPlaced)
+                assertEquals(false, moved.wide)
             }
         } finally {
             database.close()

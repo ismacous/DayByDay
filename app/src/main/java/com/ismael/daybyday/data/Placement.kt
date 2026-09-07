@@ -142,4 +142,60 @@ object Placement {
         items.filter { it.isPlaced }
             .maxOfOrNull { (it.placedY ?: 0f) + it.displayHeight }
             ?: 0f
+
+    // --- Vocaux -----------------------------------------------------------
+
+    /** La hauteur d'une barre de lecture, en points. Elle ne varie pas. */
+    const val VOICE_HEIGHT = 56f
+
+    /** La part de la page qu'occupe un vocal retreci. */
+    const val VOICE_NARROW_RATIO = 0.58f
+
+    /** La largeur d'un vocal sur une page de [pageWidth] points. */
+    fun voiceWidth(wide: Boolean, pageWidth: Float): Float {
+        val full = (pageWidth - GRID * 4f).coerceAtLeast(MIN_SIZE)
+        return if (wide) full else (full * VOICE_NARROW_RATIO).coerceAtLeast(MIN_SIZE)
+    }
+
+    /**
+     * Repose un vocal a partir du centre **brut** accumule pendant le geste.
+     *
+     * Meme regle que pour les photos, et pour la meme raison : repartir de la
+     * position deja aimantee ferait retomber chaque petit pas sur le meme point
+     * de grille, et le vocal semblerait colle.
+     */
+    fun applyVoice(
+        note: VoiceNote,
+        centreX: Float,
+        centreY: Float,
+        snapToGrid: Boolean,
+        pageWidth: Float,
+    ): VoiceNote {
+        val width = voiceWidth(note.wide, pageWidth)
+        val rawX = (centreX - width / 2f).coerceIn(0f, (pageWidth - width).coerceAtLeast(0f))
+        val rawY = (centreY - VOICE_HEIGHT / 2f).coerceAtLeast(0f)
+        return note.copy(
+            placedX = if (snapToGrid) snap(rawX) else rawX,
+            placedY = if (snapToGrid) snap(rawY) else rawY,
+        )
+    }
+
+    /**
+     * Donne une place aux vocaux qui n'en ont pas : ceux enregistres avant que
+     * le placement existe, et celui qu'on vient de dire. Ils se rangent les uns
+     * sous les autres sous le debut du texte, la ou on les verra.
+     */
+    fun autoPlaceVoice(note: VoiceNote, index: Int, pageWidth: Float, topY: Float): VoiceNote {
+        val width = voiceWidth(note.wide, pageWidth)
+        return note.copy(
+            placedX = snap(((pageWidth - width) / 2f).coerceAtLeast(0f)),
+            placedY = snap(topY + index * (VOICE_HEIGHT + GRID)),
+        )
+    }
+
+    /** Le bas du vocal le plus bas, pour que la page descende jusque la. */
+    fun lowestVoiceEdge(notes: List<VoiceNote>): Float =
+        notes.filter { it.isPlaced }
+            .maxOfOrNull { (it.placedY ?: 0f) + VOICE_HEIGHT }
+            ?: 0f
 }

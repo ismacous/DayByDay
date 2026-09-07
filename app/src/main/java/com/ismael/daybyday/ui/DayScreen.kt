@@ -197,9 +197,10 @@ fun DayScreen(
     var colorKey by remember { mutableStateOf<Int?>(null) }
     var colorManual by remember { mutableStateOf(false) }
     var parts by remember { mutableStateOf<Map<DayPart, Int>>(emptyMap()) }
-    var title by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
-    var noteSpansEncoded by remember { mutableStateOf("") }
+    // Le journal n'est plus recopie ici : il est **regarde**. « Ma journee » ne
+    // fait que l'afficher en apercu, l'ecran du journal est le seul a l'ecrire.
+    // Quand les deux en gardaient chacun une copie, le dernier a enregistrer
+    // gagnait — et effacer une page puis revenir remettait l'ancien texte.
     var sportLevel by remember { mutableStateOf<Int?>(null) }
     var foodLevel by remember { mutableStateOf<Int?>(null) }
     var wentOut by remember { mutableStateOf<Boolean?>(null) }
@@ -263,6 +264,14 @@ fun DayScreen(
     val dayMoney by remember(epochDay) { repository.observeMoneyBetween(date, date) }
         .collectAsStateWithLifecycle(emptyList())
 
+    // Le journal, **observe** et non recopie : l'apercu se met a jour a la
+    // seconde ou l'ecran du journal enregistre, sans attendre un rechargement.
+    val journalDay by remember(epochDay) { repository.observeDay(date) }
+        .collectAsStateWithLifecycle(null)
+    val title = journalDay?.title.orEmpty()
+    val note = journalDay?.note.orEmpty()
+    val noteSpansEncoded = journalDay?.noteSpans.orEmpty()
+
     // Les sept jours qui menent a celui-ci, pour le fond des cartes. Une seule
     // requete sert a tout le monde : sommeil, pas, prieres, candidatures.
     val weekDays by remember(epochDay) {
@@ -273,9 +282,12 @@ fun DayScreen(
     fun currentEntry(day: Long) = DayEntry(
         epochDay = day,
         colorKey = colorKey,
-        title = title.trim(),
-        note = note,
-        noteSpans = noteSpansEncoded,
+        // Ces trois champs sont ignores a l'enregistrement
+        // (`saveDayKeepingJournal` les relit dans la base) : ils ne sont la que
+        // parce que `DayEntry` les porte.
+        title = "",
+        note = "",
+        noteSpans = "",
         sportLevel = sportLevel,
         foodLevel = foodLevel,
         wentOut = wentOut,
@@ -313,9 +325,6 @@ fun DayScreen(
         parts = DayPart.entries.mapNotNull { part ->
             entry?.partColorKey(part)?.let { part to it }
         }.toMap()
-        title = entry?.title.orEmpty()
-        note = entry?.note.orEmpty()
-        noteSpansEncoded = entry?.noteSpans.orEmpty()
         sportLevel = entry?.sportLevel
         foodLevel = entry?.foodLevel
         wentOut = entry?.wentOut
@@ -393,14 +402,6 @@ fun DayScreen(
         }
     }
 
-    LaunchedEffect(epochDay, loadedFor, measuresTick) {
-        if (loadedFor != epochDay) return@LaunchedEffect
-        val entry = repository.dayOnce(LocalDate.ofEpochDay(epochDay)) ?: return@LaunchedEffect
-        title = entry.title
-        note = entry.note
-        noteSpansEncoded = entry.noteSpans
-    }
-
     // Relecture a chaque fois que l'ecran redevient visible, puis chaque
     // minute tant qu'on regarde la journee en cours. Rien ne tourne quand
     // l'application passe en arriere-plan.
@@ -421,9 +422,6 @@ fun DayScreen(
         colorKey,
         colorManual,
         parts,
-        title,
-        note,
-        noteSpansEncoded,
         sportLevel,
         foodLevel,
         wentOut,
@@ -441,7 +439,8 @@ fun DayScreen(
     ) {
         if (loadedFor != epochDay) return@LaunchedEffect
         delay(SAVE_DEBOUNCE_MS)
-        repository.saveDay(currentEntry(epochDay))
+        // Sans toucher au journal : c'est l'ecran du journal qui le possede.
+        repository.saveDayKeepingJournal(currentEntry(epochDay))
     }
 
     DisposableEffect(epochDay, loadedFor) {
@@ -453,7 +452,7 @@ fun DayScreen(
         onDispose {
             if (contentIsLoaded) {
                 val snapshot = currentEntry(dayOfThisEffect)
-                app.appScope.launch { repository.saveDay(snapshot) }
+                app.appScope.launch { repository.saveDayKeepingJournal(snapshot) }
             }
         }
     }

@@ -157,6 +157,9 @@ interface DayDao {
     @Insert
     suspend fun insertVoiceNote(note: VoiceNote): Long
 
+    @Update
+    suspend fun updateVoiceNote(note: VoiceNote)
+
     @Query("DELETE FROM voice_notes WHERE id = :id")
     suspend fun deleteVoiceNote(id: Long)
 

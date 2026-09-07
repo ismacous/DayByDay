@@ -214,6 +214,13 @@ object Backup {
                     .put("relativePath", note.relativePath)
                     .put("durationMs", note.durationMs)
                     .put("recordedAt", note.recordedAt)
+                    // La place sur la page et la silhouette du son font partie
+                    // de la page : sans elles, restaurer rendrait la mise en
+                    // page et les barres de lecture.
+                    .put("placedX", note.placedX ?: JSONObject.NULL)
+                    .put("placedY", note.placedY ?: JSONObject.NULL)
+                    .put("wide", note.wide)
+                    .put("waveform", note.waveform)
             )
         }
         root.put("voiceNotes", voiceJson)
@@ -405,6 +412,10 @@ object Backup {
                         relativePath = item.getString("relativePath"),
                         durationMs = item.optLong("durationMs", 0L),
                         recordedAt = item.optLong("recordedAt", System.currentTimeMillis()),
+                        placedX = item.optFloatOrNull("placedX"),
+                        placedY = item.optFloatOrNull("placedY"),
+                        wide = item.optBoolean("wide", true),
+                        waveform = item.optString("waveform", ""),
                     )
                 }
 

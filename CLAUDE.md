@@ -319,11 +319,29 @@ téléphone (Samsung S25, Android 15).
   jamais par un simple glissement : sur une page qui défile, un glissement
   appartient au défilement. La liste est réordonnée **pendant** le geste, donc
   le trou qui s'ouvre *est* l'indicateur de dépôt, et il n'y a rien à dessiner.
-  Deux pièges déjà rencontrés ailleurs et évités ici : le décalage se lit dans
-  `graphicsLayer` (lu pendant la composition, il remesurerait la page à chaque
-  image), et la boucle de réordonnancement s'arrête sur une hauteur nulle —
-  un bloc pas encore mesuré rendrait la condition vraie sans que rien ne bouge,
-  et on tournerait pour toujours (le bug d'« Organiser ma journée »).
+  Quatre pièges, dont deux qui ont rendu la première version inutilisable :
+  1. **La chaîne de modificateurs doit garder la même forme.** Le
+     `graphicsLayer` du bloc n'était posé que *pendant* le geste. L'ajouter au
+     démarrage changeait la forme de la chaîne, Compose recréait le détecteur
+     d'appui, et le geste en cours était **annulé aussitôt** : le bloc
+     sursautait puis restait sur place. La couche est donc posée en permanence
+     et ne fait que changer de valeurs. Règle générale : ne jamais
+     ajouter ni retirer un modificateur en réaction à un geste qui est en train
+     d'avoir lieu.
+  2. **Les fonctions passées à `pointerInput` passent par
+     `rememberUpdatedState`** — `pointerInput` n'installe son détecteur qu'une
+     fois et y fige ce qu'on lui a donné. Même piège que sur les photos.
+  3. Le décalage se lit dans `graphicsLayer` : lu pendant la composition, il
+     remesurerait la page à chaque image.
+  4. La boucle de réordonnancement s'arrête sur une hauteur nulle — un bloc pas
+     encore mesuré rendrait la condition vraie sans que rien ne bouge, et on
+     tournerait pour toujours (le bug d'« Organiser ma journée »).
+  **Une poignée qu'on ne voit pas est une poignée qui n'existe pas.** Chaque
+  bloc porte la sienne dans une marge à gauche (`BlockGutter`), très pâle au
+  repos et marquée sur le bloc courant : sans elle, une page en blocs ressemble
+  trait pour trait à une page qui n'en a pas, et rien ne dit qu'il y a quelque
+  chose à attraper. C'est le premier retour d'usage qu'on a eu sur la refonte,
+  et c'était le bon.
   Un bloc de texte ne se déplace pas directement : l'appui maintenu y appartient
   à la sélection de texte. Ce sont les autres qu'on attrape, et le texte
   s'écarte autour.
@@ -338,6 +356,13 @@ téléphone (Samsung S25, Android 15).
   réglages existaient déjà, rangés au fond d'un panneau qui ne s'ouvrait qu'au
   bon endroit, donc introuvables. Un trait de séparation est un bloc à lui seul
   (`RuleBlockView`), haut d'une ligne exactement.
+  **Le trait est posé en `matchParentSize`, pas comme une colonne du `Row`.**
+  Première version : un `Box` à gauche, en `fillMaxHeight()`. Il ne s'affichait
+  pas du tout, et la raison vaut pour toute la page : `fillMaxHeight` ne
+  remplit que si la hauteur **maximale est connue**, or une page qui défile a
+  une hauteur maximale infinie — le trait se retrouvait haut de zéro. Posé
+  par-dessus une boîte qui épouse la taille déjà calculée du texte, la
+  contrainte est finie et le trait a enfin une hauteur.
   Ce qui **n'a pas changé** : rien n'est écrit dans le texte. Un `>` devant
   chaque ligne, ou une rangée de tirets, se retrouverait dans la recherche,
   dans l'export de l'année et dans l'aperçu de la carte. Une citation reste

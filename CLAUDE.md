@@ -254,7 +254,7 @@ téléphone (Samsung S25, Android 15).
   accepte `null`, et ça compte — une journée d'avant cette version n'est pas une
   journée sans prière, c'est une journée dont on ne sait rien. Testé dans
   `PrayerTest`.
-- **Mots-clés** (`data/Hashtag.kt`, `ui/Hashtags.kt`, testé dans `HashtagTest`) :
+- **Mots-clés** (`data/Hashtag.kt`, `ui/JournalMarks.kt`, testé dans `HashtagTest`) :
   écrire `#mood` dans le journal en fait une étiquette, retrouvable partout.
   Le point qui décide de tout le reste : **ils ne sont enregistrés nulle part**.
   Un `#mood` est cinq caractères dans `note`, comme le reste du texte — donc la
@@ -281,6 +281,51 @@ téléphone (Samsung S25, Android 15).
      **dans le `drawBehind`**, et le modificateur se pose **après** la marge du
      champ : posé avant, tout est décalé de la marge. Ailleurs (aperçu d'une
      carte, où il n'y a pas de pastille), c'est le texte qui prend la couleur.
+- **Blocs du journal — citations et traits** (`StyleFamily.BLOCK`) : comme un
+  titre, ils prennent la ligne entière ; contrairement à un titre, ils ne
+  changent ni la taille ni la graisse — ils changent le **cadre**. Deux règles
+  qui expliquent le reste :
+  1. **Rien n'est écrit.** Le trait d'une citation et les traits de séparation
+     sont *dessinés* à partir de la mise en page, jamais insérés comme
+     caractères. Un `>` devant chaque ligne, ou une rangée de tirets, se
+     retrouverait dans la recherche, dans l'export de l'année et dans l'aperçu
+     de la carte, et il faudrait le retirer partout.
+  2. **Un trait vit sur une ligne vide qui existe vraiment.** Le style est posé
+     sur le saut de ligne lui-même, donc la ligne garde sa place dans le rythme
+     du lignage et le paragraphe suivant reprend exactement dessous.
+  La citation se décale (`TextIndent` sur `firstLine` **et** `restLine`, sinon
+  seule la première ligne s'écarte et le trait traverse le texte) et prend la
+  couleur posée sur son texte, l'encre de la page sinon. Les traits sont trois
+  formes fixes plutôt qu'une épaisseur et une longueur réglables : dans le fil
+  du texte, il n'y a pas de poignée à attraper. `applyStyle` traite les traits
+  **avant** le cas « il y a une sélection » : un trait s'insère toujours, il ne
+  se pose jamais sur du texte choisi.
+- **Liens entre pages** (`data/PageLink.kt`, testé dans `PageLinkTest`) : un
+  lien s'écrit `@07/09/2026` et se lit tel quel. Le remplacer à l'affichage par
+  « mardi 7 septembre » casserait `OffsetMapping.Identity`, donc le curseur —
+  la forme est donc choisie pour être lisible sans substitution. Une adresse de
+  courriel n'en devient pas un (`@` collé à un mot), et une date qui n'existe
+  pas reste du texte plutôt qu'un lien mort. L'appui est intercepté dans la
+  passe `Initial` et n'est consommé **que** s'il tombe vraiment sur le lien,
+  vérifié en ligne *et* en colonne : `getOffsetForPosition` répond toujours
+  quelque chose, même pour un doigt posé loin sous le texte, et sans ces deux
+  contrôles appuyer dans le vide ouvrirait un lien et le curseur ne se
+  poserait plus.
+- **Export PDF d'une page** (`ui/PagePdf.kt`) : la page est **redessinée**, pas
+  photographiée — une capture serait floue à l'impression, coupée à la hauteur
+  de l'écran, et sans texte. Deux choses le rendent simple, et trois pièges
+  valent d'être retenus :
+  1. Tout est mesuré dans une densité de **1**, donc un point de l'écran vaut
+     une unité du PDF : les placements de photos et la hauteur de ligne
+     s'utilisent tels quels. Une conversion oubliée quelque part est exactement
+     ce qui envoie une photo à dix centimètres de sa place.
+  2. Une page plus longue qu'une feuille n'est pas remise en page : c'est le
+     **même dessin** sur chaque feuille, décalé et rogné. Le texte et les
+     photos restent donc alignés entre eux d'une feuille à l'autre.
+  3. `DrawScope.scale` pivote par défaut autour du **centre**, et `size` reste
+     celle de la feuille entière quels que soient les décalages appliqués
+     autour — d'où le pivot explicite à l'origine et la largeur passée en
+     paramètre plutôt que lue dans `size`.
 - **Recherche** : elle croise le texte, la couleur, ce qu'on a fait et les
   étiquettes (`data/DaySearch.kt`, testé dans `DaySearchTest`). Deux règles de
   sens : plusieurs couleurs se lisent « ou », plusieurs étiquettes « et ». Et un

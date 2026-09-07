@@ -48,6 +48,21 @@ class MediaFiles(private val context: Context) {
         )
     }
 
+    /**
+     * Prepare un fichier vide pour un enregistrement vocal, et rend son chemin
+     * relatif.
+     *
+     * Le vocal est enregistre **directement** au bon endroit, pas dans un
+     * fichier temporaire recopie ensuite : un enregistrement de dix minutes
+     * recopie a la fin, c'est dix minutes de risque pour rien.
+     */
+    fun newVoicePath(epochDay: Long): String {
+        val date = LocalDate.ofEpochDay(epochDay)
+        val relativePath = "%04d/%02d/%s.m4a".format(date.year, date.monthValue, UUID.randomUUID())
+        File(root, relativePath).parentFile?.mkdirs()
+        return relativePath
+    }
+
     /** Ecrit un fichier venant d'une sauvegarde. */
     fun writeFrom(relativePath: String, input: InputStream) {
         val target = File(root, relativePath)

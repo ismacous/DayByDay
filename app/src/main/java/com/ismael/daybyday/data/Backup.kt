@@ -78,6 +78,7 @@ object Backup {
         val money = repository.allMoney()
         val treatments = repository.allTreatments()
         val doses = repository.allDoses()
+        val voiceNotes = repository.allVoiceNotes()
 
         val root = JSONObject()
         root.put("version", FORMAT_VERSION)
@@ -203,21 +204,36 @@ object Backup {
         }
         root.put("doses", dosesJson)
 
+        // Les vocaux comptent autant que les photos : les oublier ici, c'est
+        // les perdre a la premiere restauration, sans que rien ne le signale.
+        val voiceJson = JSONArray()
+        voiceNotes.forEach { note ->
+            voiceJson.put(
+                JSONObject()
+                    .put("epochDay", note.epochDay)
+                    .put("relativePath", note.relativePath)
+                    .put("durationMs", note.durationMs)
+                    .put("recordedAt", note.recordedAt)
+            )
+        }
+        root.put("voiceNotes", voiceJson)
+
         var copied = 0
         ZipOutputStream(output.buffered()).use { zip ->
             zip.putNextEntry(ZipEntry(JSON_NAME))
             zip.write(root.toString().toByteArray(Charsets.UTF_8))
             zip.closeEntry()
 
-            mediaItems.forEach { item ->
-                val file = repository.media.file(item.relativePath)
-                if (file.exists()) {
-                    zip.putNextEntry(ZipEntry(MEDIA_PREFIX + item.relativePath))
-                    file.inputStream().use { it.copyTo(zip) }
-                    zip.closeEntry()
-                    copied += 1
+            (mediaItems.map { it.relativePath } + voiceNotes.map { it.relativePath })
+                .forEach { relativePath ->
+                    val file = repository.media.file(relativePath)
+                    if (file.exists()) {
+                        zip.putNextEntry(ZipEntry(MEDIA_PREFIX + relativePath))
+                        file.inputStream().use { it.copyTo(zip) }
+                        zip.closeEntry()
+                        copied += 1
+                    }
                 }
-            }
         }
         return BackupSummary(days = days.size, mediaFiles = copied)
     }
@@ -378,6 +394,20 @@ object Backup {
                     )
                 }
 
+                // Absents des sauvegardes d'avant les vocaux : la journee
+                // revient alors sans, ce qui est exactement ce qu'elle etait.
+                val voiceNotes = mutableListOf<VoiceNote>()
+                val voiceJson = json.optJSONArray("voiceNotes") ?: JSONArray()
+                for (i in 0 until voiceJson.length()) {
+                    val item = voiceJson.getJSONObject(i)
+                    voiceNotes += VoiceNote(
+                        epochDay = item.getLong("epochDay"),
+                        relativePath = item.getString("relativePath"),
+                        durationMs = item.optLong("durationMs", 0L),
+                        recordedAt = item.optLong("recordedAt", System.currentTimeMillis()),
+                    )
+                }
+
                 val tags = mutableListOf<Tag>()
                 val tagsJson = json.optJSONArray("tags") ?: JSONArray()
                 for (i in 0 until tagsJson.length()) {
@@ -450,7 +480,9 @@ object Backup {
                     val relative = file.relativeTo(staging).path.replace(File.separatorChar, '/')
                     file.inputStream().use { repository.media.writeFrom(relative, it) }
                 }
-                repository.replaceAll(days, mediaItems, tags, links, money, treatments, doses)
+                repository.replaceAll(
+                    days, mediaItems, tags, links, money, treatments, doses, voiceNotes,
+                )
 
                 BackupSummary(days = days.size, mediaFiles = restoredFiles)
             } finally {

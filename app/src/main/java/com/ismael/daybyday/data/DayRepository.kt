@@ -121,7 +121,7 @@ class DayRepository(context: Context) {
      */
     suspend fun saveDay(entry: DayEntry) {
         val epochDay = entry.epochDay
-        val hasExtras = dao.tagCountForDay(epochDay) > 0 || dao.mediaForDay(epochDay).isNotEmpty()
+        val hasExtras = hasAttachments(epochDay)
         if (entry.isEmpty && !hasExtras) {
             dao.deleteDay(epochDay)
         } else {
@@ -179,9 +179,21 @@ class DayRepository(context: Context) {
 
     private suspend fun cleanUpIfEmpty(epochDay: Long) {
         val entry = dao.dayOnce(epochDay) ?: return
-        val hasExtras = dao.tagCountForDay(epochDay) > 0 || dao.mediaForDay(epochDay).isNotEmpty()
-        if (entry.isEmpty && !hasExtras) dao.deleteDay(epochDay)
+        if (entry.isEmpty && !hasAttachments(epochDay)) dao.deleteDay(epochDay)
     }
+
+    /**
+     * Ce qui rattache quelque chose a une journee sans etre dans sa ligne :
+     * etiquettes, photos, vocaux.
+     *
+     * Un seul endroit qui le dit, et c'est le but : la question se pose a deux
+     * moments differents, et en oublier un — c'etait le risque en ajoutant les
+     * vocaux — effacerait une journee qui ne contient qu'un enregistrement.
+     */
+    private suspend fun hasAttachments(epochDay: Long): Boolean =
+        dao.tagCountForDay(epochDay) > 0 ||
+            dao.mediaForDay(epochDay).isNotEmpty() ||
+            dao.voiceNotesForDay(epochDay).isNotEmpty()
 
     // --- Medias -----------------------------------------------------------
 
@@ -216,6 +228,31 @@ class DayRepository(context: Context) {
         cleanUpIfEmpty(item.epochDay)
     }
 
+    // --- Vocaux -----------------------------------------------------------
+
+    fun observeVoiceNotes(date: LocalDate): Flow<List<VoiceNote>> =
+        dao.observeVoiceNotes(date.toEpochDay())
+
+    suspend fun allVoiceNotes(): List<VoiceNote> = dao.allVoiceNotes()
+
+    /** Ajoute un vocal deja enregistre a l'endroit rendu par [MediaFiles.newVoicePath]. */
+    suspend fun addVoiceNote(date: LocalDate, relativePath: String, durationMs: Long) {
+        dao.insertVoiceNote(
+            VoiceNote(
+                epochDay = date.toEpochDay(),
+                relativePath = relativePath,
+                durationMs = durationMs,
+            )
+        )
+        ensureDayExists(date.toEpochDay())
+    }
+
+    suspend fun deleteVoiceNote(note: VoiceNote) {
+        dao.deleteVoiceNote(note.id)
+        media.delete(note.relativePath)
+        cleanUpIfEmpty(note.epochDay)
+    }
+
     // --- Argent -----------------------------------------------------------
 
     fun observeMoneyBetween(start: LocalDate, end: LocalDate): Flow<List<MoneyEntry>> =
@@ -247,6 +284,7 @@ class DayRepository(context: Context) {
     // --- Sauvegarde / remise a zero ---------------------------------------
 
     suspend fun clearEverything() {
+        dao.clearVoiceNotes()
         dao.deleteAllMedia()
         dao.deleteAllDayTags()
         dao.deleteAllMoney()
@@ -264,7 +302,9 @@ class DayRepository(context: Context) {
         money: List<MoneyEntry>,
         treatments: List<Treatment>,
         doses: List<DoseTaken>,
+        voiceNotes: List<VoiceNote> = emptyList(),
     ) {
+        dao.clearVoiceNotes()
         dao.deleteAllMedia()
         dao.deleteAllDayTags()
         dao.deleteAllMoney()
@@ -277,6 +317,7 @@ class DayRepository(context: Context) {
         }
         days.forEach { dao.upsertDay(it) }
         mediaItems.forEach { dao.insertMedia(it.copy(id = 0)) }
+        voiceNotes.forEach { dao.insertVoiceNote(it.copy(id = 0)) }
         links.forEach { dao.linkTag(it) }
         money.forEach { dao.upsertMoney(it.copy(id = 0)) }
         // Les identifiants des traitements sont conserves tels quels : les

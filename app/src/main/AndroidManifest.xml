@@ -18,6 +18,11 @@
     <!-- Uniquement pour le rappel quotidien local. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Les vocaux du journal. Le fichier est ecrit dans le dossier prive de
+         l'application, comme les photos : sans permission Internet, il ne peut
+         aller nulle part ailleurs. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <!-- Le rappel du soir est une **alarme a heure fixe**, pas une tache de
          fond : une tache periodique n'a pas d'heure, elle a une periode, et
          Android la place ou ca l'arrange. Ces deux permissions ne donnent

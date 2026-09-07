@@ -138,6 +138,9 @@ fun JournalToolbar(
     onAddPhoto: () -> Unit,
     /** Insere un `#` au curseur, et rouvre le clavier pour ecrire le mot. */
     onHashtag: () -> Unit,
+    /** Vrai pendant qu'un vocal s'enregistre : le bouton dit alors « arrêter ». */
+    recording: Boolean,
+    onRecord: () -> Unit,
     photos: List<MediaItem>,
     photoFile: (MediaItem) -> File,
     onPickPhoto: (MediaItem) -> Unit,
@@ -196,6 +199,29 @@ fun JournalToolbar(
                 // Le mot-cle n'est pas une mise en forme : c'est du texte, un
                 // `#` de plus dans la phrase. Il a quand meme son bouton, parce
                 // qu'une possibilite qu'on ne voit nulle part n'existe pas.
+                // Le micro est dans la rangee principale et pas dans le menu :
+                // un vocal se prend quand l'idee passe, pas apres deux appuis.
+                ToolButton(
+                    selected = recording,
+                    label = if (recording) "Arrêter l'enregistrement" else "Enregistrer un vocal",
+                    onClick = onRecord,
+                ) {
+                    if (recording) {
+                        Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(Color(0xFFE1483F)),
+                        )
+                    } else {
+                        Icon(
+                            painterResource(R.drawable.ic_mic),
+                            contentDescription = null,
+                            modifier = Modifier.size(19.dp),
+                        )
+                    }
+                }
+
                 ToolButton(selected = false, label = "Ajouter un mot-clé", onClick = onHashtag) {
                     Text("#", fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
                 }

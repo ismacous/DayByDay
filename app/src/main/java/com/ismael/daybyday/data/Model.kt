@@ -426,6 +426,40 @@ data class MediaItem(
 }
 
 /**
+ * Un enregistrement vocal rattache a une journee.
+ *
+ * Sa propre table, et pas un [MediaItem] de plus : un vocal n'est pas une
+ * photo. Il ne se pose pas sur la page, il ne se recadre pas, il n'a ni forme
+ * ni inclinaison — et il a une duree, que rien dans une photo ne porte. Le
+ * ranger avec les images aurait demande de le filtrer dans chaque endroit qui
+ * affiche un album, et il aurait fini par apparaitre en vignette cassee dans
+ * l'un d'eux.
+ *
+ * Le fichier vit au meme endroit que les photos (le dossier prive de
+ * l'application), donc la sauvegarde et l'effacement le traitent deja comme le
+ * reste.
+ */
+@Entity(
+    tableName = "voice_notes",
+    indices = [Index("epochDay")],
+)
+data class VoiceNote(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val epochDay: Long,
+    /** Chemin relatif au dossier "media", comme pour les photos. */
+    val relativePath: String,
+    /**
+     * La duree, mesuree a l'enregistrement.
+     *
+     * Enregistree plutot que relue dans le fichier : la relire demanderait
+     * d'ouvrir chaque vocal juste pour afficher une liste, et un fichier
+     * abime rendrait la liste illisible au lieu d'une seule ligne.
+     */
+    val durationMs: Long,
+    val recordedAt: Long = System.currentTimeMillis(),
+)
+
+/**
  * A quelle profondeur une photo est posee sur la page.
  *
  * Le texte s'ecrit entre [MIDDLE] et [FRONT] : une photo de fond se laisse

@@ -72,6 +72,7 @@ class MigrationTest {
                 AppDatabase.MIGRATION_12_13,
                 AppDatabase.MIGRATION_13_14,
                 AppDatabase.MIGRATION_14_15,
+                AppDatabase.MIGRATION_15_16,
             )
             .build()
 
@@ -124,6 +125,18 @@ class MigrationTest {
                 assertEquals(null, day?.jobApplications)
                 assertEquals("", day?.medicalNote)
                 assertEquals("", day?.medicalWith)
+                // La table des vocaux existe et repond, meme si aucune journee
+                // d'avant n'en contient : c'est ce qui prouve que la migration
+                // l'a bien creee, et pas seulement que Room ne s'est pas plaint.
+                assertEquals(0, dao.voiceNotesForDay(20000).size)
+                dao.insertVoiceNote(
+                    com.ismael.daybyday.data.VoiceNote(
+                        epochDay = 20000,
+                        relativePath = "2026/09/vocal.m4a",
+                        durationMs = 4200,
+                    )
+                )
+                assertEquals(1, dao.voiceNotesForDay(20000).size)
             }
         } finally {
             database.close()

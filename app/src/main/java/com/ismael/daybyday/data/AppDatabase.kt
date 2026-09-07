@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Version du schema. Affichee dans les reglages, a propos, pour savoir ce que
  * fait tourner le telephone en cas de probleme.
  */
-const val DATABASE_VERSION = 15
+const val DATABASE_VERSION = 16
 
 @Database(
     entities = [
@@ -22,6 +22,7 @@ const val DATABASE_VERSION = 15
         MoneyEntry::class,
         Treatment::class,
         DoseTaken::class,
+        VoiceNote::class,
     ],
     version = DATABASE_VERSION,
     exportSchema = true,
@@ -324,6 +325,30 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Les vocaux, dans leur propre table.
+         *
+         * Une table de plus plutot qu'une colonne dans les medias : un vocal
+         * n'a ni forme, ni inclinaison, ni place sur la page, mais il a une
+         * duree. Voir [VoiceNote].
+         */
+        val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `voice_notes` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`epochDay` INTEGER NOT NULL, " +
+                        "`relativePath` TEXT NOT NULL, " +
+                        "`durationMs` INTEGER NOT NULL, " +
+                        "`recordedAt` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_voice_notes_epochDay` " +
+                        "ON `voice_notes` (`epochDay`)"
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -348,6 +373,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_12_13,
                     MIGRATION_13_14,
                     MIGRATION_14_15,
+                    MIGRATION_15_16,
                 )
                 .build()
                 .also { instance = it }

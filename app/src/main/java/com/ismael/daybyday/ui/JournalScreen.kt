@@ -1,5 +1,7 @@
 package com.ismael.daybyday.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -70,6 +72,7 @@ import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -436,6 +439,78 @@ fun JournalScreen(
         )
     }
 
+    // --- Les vocaux -------------------------------------------------------
+    val voiceNotes by remember(date) { repository.observeVoiceNotes(date) }
+        .collectAsStateWithLifecycle(emptyList())
+    val recorder = remember { VoiceRecorder() }
+    val player = remember { VoicePlayer() }
+    var recordingPath by remember { mutableStateOf<String?>(null) }
+    var recordingMs by remember { mutableStateOf<Long?>(null) }
+    // Le vocal en cours de lecture, tenu a part : `VoicePlayer` n'est pas un
+    // etat que Compose observe, il faut donc le lui dire.
+    var playingPath by remember { mutableStateOf<String?>(null) }
+
+    // Le micro et le haut-parleur se rendent en quittant l'ecran. Sans ca, un
+    // enregistrement continue en fond et le telephone garde le micro ouvert.
+    DisposableEffect(Unit) {
+        onDispose {
+            recorder.cancel()
+            player.stop()
+        }
+    }
+
+    // L'horloge de l'enregistrement. Elle ne tourne que pendant : une horloge
+    // permanente ferait recomposer la page toutes les deux dixiemes de seconde
+    // pour un chiffre que personne ne regarde le reste du temps.
+    LaunchedEffect(recordingPath) {
+        while (recordingPath != null) {
+            recordingMs = recorder.elapsedMs()
+            kotlinx.coroutines.delay(200)
+        }
+        recordingMs = null
+    }
+
+    fun startRecording() {
+        val relativePath = repository.media.newVoicePath(date.toEpochDay())
+        if (recorder.start(context, repository.media.file(relativePath))) {
+            player.stop()
+            playingPath = null
+            recordingPath = relativePath
+        }
+    }
+
+    fun stopRecording() {
+        val relativePath = recordingPath ?: return
+        recordingPath = null
+        val duration = recorder.stop()
+        val file = repository.media.file(relativePath)
+        if (duration == null) {
+            // Trop court, ou le micro n'a rien ecrit : on ne garde pas un
+            // fichier qui ne contient rien.
+            file.delete()
+            return
+        }
+        app.appScope.launch { repository.addVoiceNote(date, relativePath, duration) }
+    }
+
+    val askMicrophone = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) startRecording()
+    }
+
+    fun recordOrAsk() {
+        if (recordingPath != null) {
+            stopRecording()
+            return
+        }
+        val allowed = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (allowed) startRecording() else askMicrophone.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
     // --- L'export PDF ---------------------------------------------------
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -541,6 +616,28 @@ fun JournalScreen(
             )
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+
+            VoiceNoteStrip(
+                notes = voiceNotes,
+                playing = playingPath,
+                recordingMs = recordingMs,
+                ink = ink,
+                onToggle = { note ->
+                    player.toggle(
+                        file = repository.media.file(note.relativePath),
+                        key = note.relativePath,
+                    ) { playingPath = null }
+                    playingPath = player.playing
+                },
+                onDelete = { note ->
+                    if (playingPath == note.relativePath) {
+                        player.stop()
+                        playingPath = null
+                    }
+                    app.appScope.launch { repository.deleteVoiceNote(note) }
+                },
+                onStopRecording = { stopRecording() },
+            )
 
             // La page : le texte et les photos defilent ensemble, dans un seul
             // conteneur. Les positions des photos sont donc des positions dans
@@ -856,6 +953,8 @@ fun JournalScreen(
                         prefixLine(marker.marker)
                         showPanel(null)
                     },
+                    recording = recordingPath != null,
+                    onRecord = { recordOrAsk() },
                     onHashtag = {
                         // Le panneau se referme et le clavier revient : on vient
                         // d'ouvrir un mot, il faut pouvoir l'ecrire.

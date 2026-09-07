@@ -143,6 +143,29 @@ interface DayDao {
     @Query("DELETE FROM media_items WHERE id = :id")
     suspend fun deleteMedia(id: Long)
 
+    // --- Vocaux -----------------------------------------------------------
+
+    @Query("SELECT * FROM voice_notes WHERE epochDay = :epochDay ORDER BY recordedAt, id")
+    fun observeVoiceNotes(epochDay: Long): Flow<List<VoiceNote>>
+
+    @Query("SELECT * FROM voice_notes WHERE epochDay = :epochDay ORDER BY recordedAt, id")
+    suspend fun voiceNotesForDay(epochDay: Long): List<VoiceNote>
+
+    @Query("SELECT * FROM voice_notes ORDER BY epochDay, recordedAt, id")
+    suspend fun allVoiceNotes(): List<VoiceNote>
+
+    @Insert
+    suspend fun insertVoiceNote(note: VoiceNote): Long
+
+    @Query("DELETE FROM voice_notes WHERE id = :id")
+    suspend fun deleteVoiceNote(id: Long)
+
+    @Query("SELECT COUNT(*) FROM voice_notes")
+    suspend fun countVoiceNotes(): Int
+
+    @Query("DELETE FROM voice_notes")
+    suspend fun clearVoiceNotes()
+
     // --- Traitements ------------------------------------------------------
 
     @Query("SELECT * FROM treatments ORDER BY sortOrder, name")

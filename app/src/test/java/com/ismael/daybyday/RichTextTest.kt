@@ -5,6 +5,7 @@ import com.ismael.daybyday.data.StyleFamily
 import com.ismael.daybyday.data.TextSpan
 import com.ismael.daybyday.data.TextStyleKind
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -266,7 +267,7 @@ class RichTextTest {
             TextStyleKind.entries.size,
             TextStyleKind.marks.size + TextStyleKind.headings.size +
                 TextStyleKind.colors.size + TextStyleKind.highlights.size +
-                TextStyleKind.fonts.size,
+                TextStyleKind.fonts.size + TextStyleKind.blocks.size,
         )
     }
 
@@ -283,6 +284,21 @@ class RichTextTest {
         assertEquals("cb", TextStyleKind.COLOR_BLUE.code)
         assertEquals("cv", TextStyleKind.COLOR_VIOLET.code)
         assertEquals("co", TextStyleKind.COLOR_ORANGE.code)
+    }
+
+    @Test
+    fun `une citation et un trait prennent la ligne entiere`() {
+        // Comme un titre : ni l'un ni l'autre ne se pose sur trois mots au
+        // milieu d'une phrase.
+        TextStyleKind.blocks.forEach { style ->
+            assertTrue(style.label, style.takesWholeLine)
+        }
+        assertTrue(TextStyleKind.RULE_THIN.isRule)
+        assertTrue(TextStyleKind.RULE_BOLD.isRule)
+        assertTrue(TextStyleKind.RULE_SHORT.isRule)
+        // La citation n'est pas un trait : elle habille du texte, elle ne le
+        // remplace pas.
+        assertFalse(TextStyleKind.QUOTE.isRule)
     }
 
     @Test

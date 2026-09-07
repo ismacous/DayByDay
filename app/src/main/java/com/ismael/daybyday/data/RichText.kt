@@ -98,7 +98,23 @@ enum class TextStyleKind(
      * ajoutés, pas de taille changée : ce qui est cité reste ce qui a été
      * écrit, c'est la marge qui dit qu'on cite.
      */
-    QUOTE("q", "Citation", StyleFamily.BLOCK);
+    QUOTE("q", "Citation", StyleFamily.BLOCK),
+
+    /**
+     * Les traits de separation : une ligne vide, et un trait dessine dessus.
+     *
+     * Trois formes plutot qu'une epaisseur et une longueur reglables au doigt :
+     * un trait dans le fil du texte n'a pas de poignee a attraper — il occupe
+     * une ligne, comme un paragraphe. Trois choix qu'on voit dans le menu
+     * valent mieux qu'un reglage qu'on ne sait pas ou saisir.
+     */
+    RULE_THIN("rt", "Trait fin", StyleFamily.BLOCK),
+    RULE_BOLD("rb", "Trait épais", StyleFamily.BLOCK),
+    RULE_SHORT("rs", "Trait court", StyleFamily.BLOCK);
+
+    /** Vrai pour les trois traits de separation. */
+    val isRule: Boolean
+        get() = this == RULE_THIN || this == RULE_BOLD || this == RULE_SHORT
 
     /**
      * Une citation, comme un titre, habille la ligne entiere : ni l'une ni

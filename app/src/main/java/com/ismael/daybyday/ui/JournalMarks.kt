@@ -8,8 +8,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ismael.daybyday.data.Hashtag
+import com.ismael.daybyday.data.TextStyleKind
 
 /**
  * Les mots-cles du journal, a l'ecran.
@@ -164,3 +166,63 @@ private val BAR_WIDTH = 3.dp
  * la bande deborderait nettement du texte qu'il accompagne.
  */
 private val BAR_INSET = 5.dp
+
+/**
+ * Les traits de separation, dessines sur leur ligne vide.
+ *
+ * Un trait n'est pas un caractere : c'est un style pose sur une ligne qui ne
+ * contient rien. La ligne existe donc vraiment dans le texte — elle garde sa
+ * place dans le rythme du lignage, et le paragraphe suivant reprend
+ * exactement dessous — mais rien n'est ecrit dedans. Un texte exporte ou
+ * cherche ne contient pas une rangee de tirets.
+ */
+fun Modifier.ruleLines(
+    layout: State<TextLayoutResult?>,
+    rules: () -> List<RuleLine>,
+): Modifier = drawBehind {
+    val result = layout.value ?: return@drawBehind
+    val length = result.layoutInput.text.length
+    if (length == 0) return@drawBehind
+
+    rules().forEach { rule ->
+        val offset = rule.at.coerceIn(0, length - 1)
+        val line = result.getLineForOffset(offset)
+        // Au milieu de sa bande : une ligne fait 28 points de haut, et un
+        // trait pose sur le bas toucherait le paragraphe suivant.
+        val y = (result.getLineTop(line) + result.getLineBottom(line)) / 2f
+        val thickness = rule.thickness.toPx()
+        val width = size.width * rule.widthFraction
+        val left = (size.width - width) / 2f
+        drawRoundRect(
+            color = rule.color,
+            topLeft = Offset(left, y - thickness / 2f),
+            size = Size(width, thickness),
+            cornerRadius = CornerRadius(thickness / 2f),
+        )
+    }
+}
+
+/** Un trait : la ligne qui le porte, son epaisseur, sa largeur et sa couleur. */
+data class RuleLine(
+    val at: Int,
+    val thickness: Dp,
+    val widthFraction: Float,
+    val color: Color,
+)
+
+/** L'epaisseur de chacune des trois formes. */
+fun ruleThickness(style: TextStyleKind): Dp = when (style) {
+    TextStyleKind.RULE_BOLD -> 3.dp
+    else -> 1.dp
+}
+
+/**
+ * La largeur de chacune des trois formes, en fraction de la page.
+ *
+ * Le trait court est **centre** : accroche a gauche, il ressemblerait a un
+ * paragraphe commence puis abandonne.
+ */
+fun ruleWidth(style: TextStyleKind): Float = when (style) {
+    TextStyleKind.RULE_SHORT -> 0.34f
+    else -> 1f
+}

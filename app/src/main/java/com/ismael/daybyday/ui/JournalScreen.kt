@@ -1,5 +1,6 @@
 package com.ismael.daybyday.ui
 
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,6 +37,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -45,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -99,7 +103,8 @@ fun JournalScreen(
     /** Ouvre la journee visee par un lien ecrit dans la page. */
     onOpenDay: (LocalDate) -> Unit = {},
 ) {
-    val app = LocalContext.current.dayByDayApp
+    val context = LocalContext.current
+    val app = context.dayByDayApp
     val repository = app.repository
 
     var title by remember { mutableStateOf(TextFieldValue("")) }
@@ -326,6 +331,27 @@ fun JournalScreen(
     val active = if (hasSelection) RichText.stylesOn(spans, start, end) else typing
 
     fun applyStyle(style: TextStyleKind) {
+        // Un trait de separation ne se pose pas sur du texte : il **est** une
+        // ligne, vide, qu'on insere. On l'ecrit donc, on lui pose son style, et
+        // on laisse le curseur sur la ligne d'apres, prêt a continuer.
+        if (style.isRule) {
+            val needsBreak = start > 0 && body.text.getOrNull(start - 1) != '\n'
+            val prefix = if (needsBreak) "\n" else ""
+            val updated = body.text.substring(0, start) + prefix + "\n" + body.text.substring(start)
+            val at = start + prefix.length
+            spans = RichText.applyAll(
+                RichText.adjust(spans, body.text, updated),
+                at,
+                at + 1,
+                setOf(style),
+            )
+            body = body.copy(
+                text = updated,
+                selection = TextRange((at + 1).coerceAtMost(updated.length)),
+            )
+            return
+        }
+
         if (hasSelection) {
             spans = RichText.toggle(spans, start, end, style)
             return
@@ -410,7 +436,47 @@ fun JournalScreen(
         )
     }
 
+    // --- L'export PDF ---------------------------------------------------
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val exportPdf = rememberLauncherForActivityResult(
+        // On laisse l'utilisateur choisir ou ranger le fichier, comme pour la
+        // sauvegarde : rien ne sort du telephone sans qu'il ait dit ou.
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch {
+                val result = runCatching {
+                    PagePdf.write(
+                        context = context,
+                        target = uri,
+                        date = date,
+                        title = title.text,
+                        body = body.text,
+                        spans = spans,
+                        photos = journalMedia,
+                        photoFile = { repository.media.file(it.relativePath) },
+                        paper = paper,
+                        ink = ink,
+                        lineColor = JournalPaper.line(lineIndex),
+                        ruled = ruled,
+                        baseFont = baseFont,
+                        textSize = textSize,
+                        pageWidth = pageWidth,
+                    )
+                }
+                snackbar.showSnackbar(
+                    result.fold(
+                        onSuccess = { if (it > 1) "Page exportée ($it feuilles)." else "Page exportée." },
+                        onFailure = { "Échec de l'export : ${it.message}" },
+                    )
+                )
+            }
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         // Le papier prend tout l'ecran. Une page teintee dans un cadre blanc
         // ne ressemblait a rien : c'est le carnet entier qui a une couleur,
         // pas une feuille posee dessus.
@@ -651,6 +717,18 @@ fun JournalScreen(
                             // doit etre celle du texte, sinon les pastilles
                             // sont decalees de toute la marge.
                             .openPageLinkOnTap(bodyLayout, { body.text }, onOpenDay)
+                            .ruleLines(bodyLayout) {
+                                spans.filter { it.style.isRule && !it.isEmpty }.map { rule ->
+                                    RuleLine(
+                                        at = rule.start,
+                                        thickness = ruleThickness(rule.style),
+                                        widthFraction = ruleWidth(rule.style),
+                                        // Le trait est de l'encre : on le trace
+                                        // avec le stylo qui a servi a ecrire.
+                                        color = ink.copy(alpha = 0.45f),
+                                    )
+                                }
+                            }
                             .quoteBars(bodyLayout) {
                                 // Relu au dessin : poser une citation ou en
                                 // changer la couleur ne doit pas remesurer la
@@ -723,6 +801,10 @@ fun JournalScreen(
                     onFont = { fontCode = it; prefs.journalFontCode = it },
                     onTextSize = { textSize = it; prefs.journalTextSize = it },
                     linkText = PageLink.format(date),
+                    onExportPdf = {
+                        showPaperSettings = false
+                        exportPdf.launch("DayByDay ${Dates.dayMedium(date)}.pdf")
+                    },
                     onCopyLink = {
                         clipboard.setText(AnnotatedString(PageLink.format(date)))
                         showPaperSettings = false

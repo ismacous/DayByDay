@@ -213,6 +213,8 @@ fun PaperSettingsSheet(
     onCopyLink: () -> Unit,
     /** Le lien lui-meme, montre en clair : on colle ce qu'on a vu. */
     linkText: String,
+    /** Enregistre la page en PDF, avec ses polices, ses couleurs et ses photos. */
+    onExportPdf: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -330,12 +332,24 @@ fun PaperSettingsSheet(
                 // Le lien est du texte : colle dans une autre journee, il y
                 // devient un nom souligne sur lequel on appuie. Rien n'est
                 // enregistre nulle part, donc rien ne peut pointer dans le vide.
-                ChoicePill(selected = false, onClick = onCopyLink) { color ->
-                    Text(
-                        text = "Copier le lien de cette page",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = color,
-                    )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(9.dp),
+                    verticalArrangement = Arrangement.spacedBy(9.dp),
+                ) {
+                    ChoicePill(selected = false, onClick = onCopyLink) { color ->
+                        Text(
+                            text = "Copier le lien",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = color,
+                        )
+                    }
+                    ChoicePill(selected = false, onClick = onExportPdf) { color ->
+                        Text(
+                            text = "Exporter en PDF",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = color,
+                        )
+                    }
                 }
             }
 

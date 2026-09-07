@@ -366,25 +366,38 @@ private fun AllToolsPanel(
         Text("A", fontSize = 16.sp)
     }
 
-    SectionLabel("Bloc")
+    SectionLabel("Blocs")
     TextStyleKind.blocks.forEach { style ->
         PanelRow(
             label = style.label,
-            selected = style in active,
+            // Un trait s'insere, il ne se coche pas : il n'y a rien a
+            // « decocher » sur une ligne qu'on vient de creer.
+            selected = !style.isRule && style in active,
             onClick = { onStyle(style) },
         ) {
-            // La ligne se montre telle qu'elle sera : un trait, puis du texte
-            // decale. On choisit en voyant, pas en lisant un nom.
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // Chaque ligne se montre telle qu'elle sera : un trait vertical
+            // suivi de texte pour la citation, le trait lui-meme pour les
+            // separations. On choisit en voyant, pas en lisant un nom.
+            if (style.isRule) {
                 Box(
                     modifier = Modifier
-                        .width(3.dp)
-                        .height(16.dp)
+                        .fillMaxWidth(ruleWidth(style))
+                        .height(ruleThickness(style))
                         .clip(RoundedCornerShape(2.dp))
-                        .background(paperAccent()),
+                        .background(paperFill(0.55f)),
                 )
-                Spacer(Modifier.width(5.dp))
-                Text("A", fontSize = 15.sp, fontStyle = FontStyle.Italic)
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .height(16.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(paperAccent()),
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text("A", fontSize = 15.sp, fontStyle = FontStyle.Italic)
+                }
             }
         }
     }

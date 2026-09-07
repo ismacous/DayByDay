@@ -17,8 +17,10 @@ class WaveformTest {
     @Test
     fun `le nombre de barres ne depend pas du nombre de mesures`() {
         listOf(1, 5, 200, 5000).forEach { count ->
-            val samples = List(count) { it % 1000 }
-            assertEquals(Waveform.BARS, Waveform.encode(samples).length)
+            // Jamais zéro : un silence complet ne rend rien du tout, et c'est
+            // voulu — c'est le test d'à côté qui le vérifie.
+            val samples = List(count) { it % 1000 + 1 }
+            assertEquals("$count mesures", Waveform.BARS, Waveform.encode(samples).length)
         }
     }
 

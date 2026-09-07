@@ -68,7 +68,9 @@ téléphone (Samsung S25, Android 15).
   (statistiques d'usage, calculées à partir des **événements** pour ne pas
   compter deux fois les périodes qui se chevauchent).
 - `work/` — rappel du soir, bilan du lundi matin, sauvegarde automatique.
-- `ui/` — écrans Compose. Navigation par onglets : Mois, Année, Bilan, Argent,
+- `ui/` — écrans Compose. La page du journal est une suite de **blocs**
+  (`PageBlocks`, `BlockViews`) ; le reste est classique.
+  Navigation par onglets : Mois, Année, Bilan, Argent,
   Réglages ; le journal d'une journée et la recherche s'ouvrent par-dessus.
 
 ## Points délicats déjà rencontrés
@@ -281,25 +283,78 @@ téléphone (Samsung S25, Android 15).
      **dans le `drawBehind`**, et le modificateur se pose **après** la marge du
      champ : posé avant, tout est décalé de la marge. Ailleurs (aperçu d'une
      carte, où il n'y a pas de pastille), c'est le texte qui prend la couleur.
-- **Blocs du journal — citations et traits** (`StyleFamily.BLOCK`) : comme un
-  titre, ils prennent la ligne entière ; contrairement à un titre, ils ne
-  changent ni la taille ni la graisse — ils changent le **cadre**. Deux règles
-  qui expliquent le reste :
-  1. **Rien n'est écrit.** Le trait d'une citation et les traits de séparation
-     sont *dessinés* à partir de la mise en page, jamais insérés comme
-     caractères. Un `>` devant chaque ligne, ou une rangée de tirets, se
-     retrouverait dans la recherche, dans l'export de l'année et dans l'aperçu
-     de la carte, et il faudrait le retirer partout.
-  2. **Un trait vit sur une ligne vide qui existe vraiment.** Le style est posé
-     sur le saut de ligne lui-même, donc la ligne garde sa place dans le rythme
-     du lignage et le paragraphe suivant reprend exactement dessous.
-  La citation se décale (`TextIndent` sur `firstLine` **et** `restLine`, sinon
-  seule la première ligne s'écarte et le trait traverse le texte) et prend la
-  couleur posée sur son texte, l'encre de la page sinon. Les traits sont trois
-  formes fixes plutôt qu'une épaisseur et une longueur réglables : dans le fil
-  du texte, il n'y a pas de poignée à attraper. `applyStyle` traite les traits
-  **avant** le cas « il y a une sélection » : un trait s'insère toujours, il ne
-  se pose jamais sur du texte choisi.
+- **La page du journal est une suite de blocs** (`data/JournalBlock.kt`,
+  `ui/PageBlocks.kt`, `ui/BlockViews.kt`, testé dans `JournalBlockTest`). Elle
+  était un seul long champ de texte, avec les vocaux rangés dessous et les
+  citations dessinées à partir de la mise en page. Trois conséquences, et
+  c'étaient les trois reproches : rien ne pouvait se glisser **entre** deux
+  paragraphes, il n'y avait rien à attraper pour déplacer quoi que ce soit, et
+  un trait de citation dessiné sur un intervalle de caractères n'appartenait à
+  personne — il s'arrêtait au premier mot. Un bloc, lui, est une chose : il a
+  une place, une hauteur, un bord, et on peut le prendre.
+  Quatre règles portent tout le reste :
+  1. **Un bloc de texte n'est pas un paragraphe.** C'est ce qui rend la chose
+     vivable : Entrée écrit un retour à la ligne comme partout, et une page
+     ordinaire n'a **qu'un seul champ** — donc le curseur, la sélection, les
+     mots-clés et les liens continuent de travailler comme avant. Un deuxième
+     bloc n'apparaît que quand on pose une citation, un trait ou un vocal au
+     milieu du texte : `PageBlocks.insertAt` coupe le bloc en deux et met
+     l'élément entre.
+  2. **`note` est une projection, pas une deuxième source.** La recherche,
+     l'export de l'année, les aperçus et le PDF lisent une page à plat et ne
+     savent rien des blocs. `JournalBlocks.flatten` recompose ce texte à chaque
+     enregistrement, **à un seul endroit** (`DayRepository.saveJournal`). Le
+     test qui compte est l'aller-retour `split` → `flatten` : si le calcul se
+     décale d'un retour à la ligne, tous les intervalles de mise en forme se
+     décalent avec, et ne pointent plus sur les bons mots.
+  3. **Deux blocs de texte qui se touchent n'existent pas.** Rien ne les
+     sépare, donc rien ne les distingue : `PageBlocks.tidy` les recolle. C'est
+     ce qui fait qu'effacer une citation refait un seul paragraphe au lieu de
+     laisser une couture invisible.
+  4. **Chaque bloc occupe un nombre entier de lignes du lignage.** Un vocal en
+     fait deux (`VOICE_LINES`), un trait une. Sans ça, le texte qui suit un
+     vocal ne retombe plus sur ses lignes — c'est exactement ce qui se voyait
+     avant la refonte.
+  Le déplacement se fait en **maintenant puis tirant** (`Modifier.blockDrag`),
+  jamais par un simple glissement : sur une page qui défile, un glissement
+  appartient au défilement. La liste est réordonnée **pendant** le geste, donc
+  le trou qui s'ouvre *est* l'indicateur de dépôt, et il n'y a rien à dessiner.
+  Deux pièges déjà rencontrés ailleurs et évités ici : le décalage se lit dans
+  `graphicsLayer` (lu pendant la composition, il remesurerait la page à chaque
+  image), et la boucle de réordonnancement s'arrête sur une hauteur nulle —
+  un bloc pas encore mesuré rendrait la condition vraie sans que rien ne bouge,
+  et on tournerait pour toujours (le bug d'« Organiser ma journée »).
+  Un bloc de texte ne se déplace pas directement : l'appui maintenu y appartient
+  à la sélection de texte. Ce sont les autres qu'on attrape, et le texte
+  s'écarte autour.
+- **Citations et traits, depuis la refonte en blocs** : le trait d'une citation
+  est une **forme posée à côté de son texte** (`QuoteBlockView`), plus un dessin
+  calculé depuis la mise en page. Trois choses en découlent, et ce sont les
+  trois qui manquaient : il fait toute la hauteur sans qu'on ait à la calculer,
+  il a sa **propre couleur** (trait bleu sur texte noir, `StyleFamily.QUOTE_BAR`
+  séparée de la couleur du texte), et il y a enfin quelque chose à attraper pour
+  déplacer la citation — c'est lui. Ses réglages (couleur, fond) apparaissent
+  **sous la citation** quand on écrit dedans (`QuotePalette`) : les mêmes
+  réglages existaient déjà, rangés au fond d'un panneau qui ne s'ouvrait qu'au
+  bon endroit, donc introuvables. Un trait de séparation est un bloc à lui seul
+  (`RuleBlockView`), haut d'une ligne exactement.
+  Ce qui **n'a pas changé** : rien n'est écrit dans le texte. Un `>` devant
+  chaque ligne, ou une rangée de tirets, se retrouverait dans la recherche,
+  dans l'export de l'année et dans l'aperçu de la carte. Une citation reste
+  exactement le texte qu'on a écrit, et son cadre vit à côté.
+  Dans le **texte à plat**, en revanche, citations et traits redeviennent des
+  intervalles (`TextStyleKind.QUOTE`, les `isRule` posés sur un saut de ligne
+  qui existe vraiment) : c'est ainsi que l'export PDF et les aperçus les
+  dessinent, eux qui ne connaissent pas les blocs.
+- **Annuler / refaire** (`ui/PageHistory.kt`) : ce qui est retenu est la **page
+  entière**, pas la différence. Une page fait quelques kilo-octets et
+  l'historique en garde soixante : c'est négligeable, et ça évite toute une
+  classe de bugs — un historique de différences doit savoir défaire chaque
+  opération à l'envers, et il suffit d'en oublier une (déplacer un bloc,
+  changer la couleur d'une citation) pour qu'« annuler » abîme la page au lieu
+  de la réparer. Tout ce qu'on tape n'est pas un pas : un pas se pose quand la
+  **structure** change, ou après un silence. Sinon annuler reculerait d'une
+  lettre.
 - **Liens entre pages** (`data/PageLink.kt`, testé dans `PageLinkTest`) : un
   lien s'écrit `@07/09/2026` et se lit tel quel. Le remplacer à l'affichage par
   « mardi 7 septembre » casserait `OffsetMapping.Identity`, donc le curseur —
@@ -451,8 +506,8 @@ téléphone (Samsung S25, Android 15).
   application qui sonne quand même est une application qu'on désinstalle. Le
   son part en même temps que la vibration, au **passage** d'état comme
   l'animation, jamais à l'affichage.
-- **Le journal a un seul propriétaire.** Le titre, le texte et sa mise en forme
-  sont écrits **uniquement** par l'écran du journal
+- **Le journal a un seul propriétaire.** Le titre, les blocs, et le texte à
+  plat qu'ils produisent sont écrits **uniquement** par l'écran du journal
   (`DayRepository.saveJournal`) ; « Ma journée » écrit tout **sauf** ces trois
   champs (`saveDayKeepingJournal`) et n'en garde plus de copie — il les
   observe. Avant, les deux écrans en avaient chacun une copie et les
@@ -479,12 +534,29 @@ téléphone (Samsung S25, Android 15).
   première restauration sans que rien ne le signale) et « est-ce que cette
   journée est vide ? », qui décide de supprimer la ligne — d'où
   `DayRepository.hasAttachments`, qui pose la question à un seul endroit.
-  Ils sont **posés dans la page**, comme les photos : maintenir puis tirer les
-  déplace, la grille les aligne, et deux tailles seulement (barre entière ou
-  rétrécie) — une barre de lecture n'a pas de proportions à respecter comme une
-  photo, et la tirer au doigt donnerait surtout des largeurs bancales. Rangés
-  en bande au-dessus du texte, ils n'étaient qu'une liste ; posés entre deux
+  Un vocal est un **bloc**, pas une image posée librement : il se range entre
+  deux paragraphes, jamais par-dessus le texte et jamais de travers. On le
+  déplace en maintenant le doigt puis en tirant, comme tous les blocs, et deux
+  largeurs seulement (barre entière ou rétrécie, par une poignée sur la barre)
+  — une barre de lecture n'a pas de proportions à respecter comme une photo, et
+  la tirer au doigt donnerait surtout des largeurs bancales. Rangés en bande
+  au-dessus du texte, ils n'étaient qu'une liste ; posés entre deux
   paragraphes, ils appartiennent à un moment.
+  **On enregistre à la place où le vocal se posera.** Le bloc est créé au
+  curseur au moment où le micro s'ouvre, à la forme et à la taille qu'aura la
+  barre finale, avec un bouton rouge à l'emplacement du bouton d'écoute
+  (`RecordingRow` et `VoiceNoteRow` partagent `VoiceShell`, et c'est le but :
+  rien ne bouge à l'écran quand l'enregistrement s'arrête). Un témoin en haut
+  de la page, puis un vocal qui apparaissait ailleurs et qu'il fallait
+  descendre à la main, était la pire des deux moitiés.
+  Le bloc de l'enregistrement en cours est un bloc vocal **sans son**
+  (`voiceId` nul) : il n'est jamais enregistré (`PageBlocks.toStored` l'écarte),
+  sinon fermer l'application au milieu d'une phrase laisserait une barre vide.
+  Et comme le vocal est écrit en base dès qu'on s'arrête alors que les blocs ne
+  le sont qu'en quittant l'écran, les deux peuvent diverger : un vocal sans
+  bloc se range à la fin à l'ouverture suivante, un bloc sans son s'en va
+  (`JournalBlocks.reconcile`). La page se répare plutôt que de payer une
+  écriture complète à chaque fois qu'on parle.
   La **silhouette du son** (`data/Waveform.kt`, testée) est mesurée pendant
   l'enregistrement : `getMaxAmplitude` rend le plus fort depuis le dernier
   appel, donc un point régulier suffit sans rien décoder. Elle est

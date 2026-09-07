@@ -213,9 +213,12 @@ object PageBlocks {
             },
         )
 
-        val out = blocks.take(index) + listOf(head, middle, tail) + blocks.drop(index + 1)
-        // `tidy` jette les moities vides — une citation prise au debut du
-        // paragraphe ne doit pas laisser un bloc vide devant elle.
+        // Les moities vides sont ecartees ici, pas par `tidy` : une citation
+        // prise au debut du paragraphe ne doit pas laisser un bloc vide devant
+        // elle, alors qu'ailleurs un bloc de texte vide est une ligne blanche
+        // qu'on garde.
+        val around = listOf(head, middle, tail).filterNot { it.isText && it.text.isEmpty() }
+        val out = blocks.take(index) + around + blocks.drop(index + 1)
         return tidy(out) to middle.key
     }
 
@@ -229,34 +232,72 @@ object PageBlocks {
     /**
      * Range la page apres un deplacement ou une suppression.
      *
-     * Deux blocs de texte qui se touchent n'ont aucune raison d'exister : rien
-     * ne les separe, donc rien ne les distingue. Ils sont recolles, et c'est ce
-     * qui fait qu'effacer une citation refait un seul paragraphe au lieu de
-     * laisser une couture invisible au milieu du texte. Un bloc de texte vide
-     * s'en va aussi — sauf s'il ne reste que lui, il faut bien un endroit ou
+     * Elle recollait les blocs de texte voisins, du temps ou un bloc de texte
+     * contenait plusieurs paragraphes. Ce n'est plus vrai : Entree cree un
+     * bloc, donc deux paragraphes cote a cote sont deux blocs **voulus**, et
+     * les recoller reviendrait a defaire ce que l'on vient de faire. Un bloc
+     * vide n'est pas jete non plus : c'est une ligne blanche.
+     *
+     * Il reste une chose a garantir : qu'il y ait toujours un endroit ou
      * ecrire.
      */
-    fun tidy(blocks: List<PageBlock>): List<PageBlock> {
-        val out = mutableListOf<PageBlock>()
-        blocks.forEach { block ->
-            val previous = out.lastOrNull()
-            if (block.isText && previous != null && previous.isText) {
-                val joined = previous.text + "\n" + block.text
-                val shift = previous.text.length + 1
-                out[out.lastIndex] = previous.copy(
-                    value = TextFieldValue(joined, TextRange(shift.coerceAtMost(joined.length))),
-                    spans = RichText.merge(
-                        previous.spans + block.spans.map {
-                            TextSpan(it.start + shift, it.end + shift, it.style)
-                        }
-                    ),
-                )
-            } else {
-                out += block
-            }
-        }
+    fun tidy(blocks: List<PageBlock>): List<PageBlock> = blocks.ifEmpty { listOf(text()) }
 
-        val kept = out.filterNot { it.isText && it.text.isEmpty() && out.size > 1 }
-        return kept.ifEmpty { listOf(text()) }
+    /**
+     * Entree : le paragraphe se coupe en deux, et le curseur passe au second.
+     *
+     * C'est le geste de Notion, et c'est ce qui manquait le plus : sans lui, on
+     * ne pouvait pas fabriquer un deuxieme paragraphe, donc pas en deplacer un
+     * seul. Tout ce qu'on ecrivait finissait dans un bloc unique qu'on ne
+     * pouvait bouger que d'un seul tenant.
+     */
+    fun splitAt(blocks: List<PageBlock>, key: Long, caret: Int): Pair<List<PageBlock>, Long?> {
+        val index = blocks.indexOfFirst { it.key == key }
+        val block = blocks.getOrNull(index) ?: return blocks to null
+        if (!block.isText) return blocks to null
+
+        val at = caret.coerceIn(0, block.text.length)
+        val head = block.copy(
+            value = TextFieldValue(block.text.substring(0, at), TextRange(at)),
+            spans = clip(block.spans, 0, at),
+        )
+        val tail = PageBlock(
+            key = newKey(),
+            kind = BlockKind.TEXT,
+            value = TextFieldValue(block.text.substring(at), TextRange(0)),
+            spans = clip(block.spans, at, block.text.length).map {
+                TextSpan(it.start - at, it.end - at, it.style)
+            },
+        )
+        return (blocks.take(index) + head + tail + blocks.drop(index + 1)) to tail.key
+    }
+
+    /**
+     * Effacer au tout debut d'un bloc : il rejoint celui d'au-dessus.
+     *
+     * C'est le seul moyen de **defaire** un Entree, et sans lui la page ne
+     * ferait que se decouper : on pourrait creer des paragraphes a l'infini
+     * sans jamais pouvoir en recoller deux.
+     *
+     * Le curseur se pose a la couture, pas au bout du texte : c'est la qu'on
+     * etait, et c'est de la qu'on veut continuer.
+     */
+    fun mergeBack(blocks: List<PageBlock>, key: Long): Pair<List<PageBlock>, Long?> {
+        val index = blocks.indexOfFirst { it.key == key }
+        if (index <= 0) return blocks to null
+        val block = blocks[index]
+        val previous = blocks[index - 1]
+        if (!block.isText || !previous.isText) return blocks to null
+
+        val at = previous.text.length
+        val merged = previous.copy(
+            value = TextFieldValue(previous.text + block.text, TextRange(at)),
+            spans = RichText.merge(
+                previous.spans + block.spans.map {
+                    TextSpan(it.start + at, it.end + at, it.style)
+                }
+            ),
+        )
+        return (blocks.take(index - 1) + merged + blocks.drop(index + 1)) to merged.key
     }
 }

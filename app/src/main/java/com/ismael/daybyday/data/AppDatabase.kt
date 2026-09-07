@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Version du schema. Affichee dans les reglages, a propos, pour savoir ce que
  * fait tourner le telephone en cas de probleme.
  */
-const val DATABASE_VERSION = 18
+const val DATABASE_VERSION = 19
 
 @Database(
     entities = [
@@ -468,6 +468,110 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Un bloc de texte par **paragraphe**.
+         *
+         * La 18 regroupait les paragraphes qui se suivaient dans un seul bloc :
+         * l'idee etait qu'une page ordinaire n'ait qu'un champ de texte, et
+         * qu'Entree reste un simple retour a la ligne. Le resultat etait une
+         * page ou l'on pouvait deplacer les vocaux et les citations, mais pas
+         * ce qu'on avait ecrit — et c'est justement ce qu'on voulait deplacer.
+         *
+         * Sans cette migration, la correction ne toucherait que les pages
+         * ecrites **apres** : celles deja decoupees resteraient d'un seul bloc,
+         * et Ismael verrait la moitie de ses pages se comporter autrement que
+         * l'autre.
+         */
+        val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                data class Row(
+                    val epochDay: Long,
+                    val kind: String,
+                    val text: String,
+                    val spans: String,
+                    val voiceId: Long?,
+                    val bar: String,
+                    val fill: String,
+                    val rule: String,
+                )
+
+                val rows = mutableListOf<Row>()
+                db.query(
+                    "SELECT epochDay, kindCode, text, spans, voiceId, barCode, fillCode, " +
+                        "ruleCode FROM journal_blocks ORDER BY epochDay, position, id"
+                ).use { c ->
+                    while (c.moveToNext()) {
+                        rows += Row(
+                            epochDay = c.getLong(0),
+                            kind = c.getString(1) ?: BlockKind.TEXT.code,
+                            text = c.getString(2) ?: "",
+                            spans = c.getString(3) ?: "",
+                            voiceId = if (c.isNull(4)) null else c.getLong(4),
+                            bar = c.getString(5) ?: "",
+                            fill = c.getString(6) ?: "",
+                            rule = c.getString(7) ?: "",
+                        )
+                    }
+                }
+
+                db.execSQL("DELETE FROM journal_blocks")
+
+                val positions = mutableMapOf<Long, Int>()
+                fun insert(
+                    epochDay: Long,
+                    kind: String,
+                    text: String,
+                    spans: String,
+                    voiceId: Long?,
+                    bar: String,
+                    fill: String,
+                    rule: String,
+                ) {
+                    val position = positions.getOrDefault(epochDay, 0)
+                    positions[epochDay] = position + 1
+                    db.execSQL(
+                        "INSERT INTO journal_blocks (epochDay, position, kindCode, text, " +
+                            "spans, voiceId, barCode, fillCode, ruleCode) " +
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        arrayOf(
+                            epochDay,
+                            position,
+                            kind,
+                            text,
+                            spans,
+                            voiceId,
+                            bar,
+                            fill,
+                            rule,
+                        ),
+                    )
+                }
+
+                rows.forEach { row ->
+                    if (row.kind != BlockKind.TEXT.code || !row.text.contains('\n')) {
+                        insert(
+                            row.epochDay, row.kind, row.text, row.spans,
+                            row.voiceId, row.bar, row.fill, row.rule,
+                        )
+                        return@forEach
+                    }
+                    // `split` sur le contenu du bloc : il n'y a la que du
+                    // texte, donc il rend exactement un bloc par ligne, avec la
+                    // mise en forme recalee sur chacune.
+                    JournalBlocks.split(
+                        text = row.text,
+                        spans = RichText.decode(row.spans, row.text.length),
+                        epochDay = row.epochDay,
+                    ).forEach { piece ->
+                        insert(
+                            row.epochDay, piece.kindCode, piece.text, piece.spans,
+                            null, piece.barCode, piece.fillCode, piece.ruleCode,
+                        )
+                    }
+                }
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -495,6 +599,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_15_16,
                     MIGRATION_16_17,
                     MIGRATION_17_18,
+                    MIGRATION_18_19,
                 )
                 .build()
                 .also { instance = it }

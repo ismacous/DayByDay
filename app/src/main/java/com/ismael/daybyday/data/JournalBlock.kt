@@ -104,9 +104,15 @@ object JournalBlocks {
     fun flatten(blocks: List<JournalBlock>): FlatPage {
         val out = StringBuilder()
         val spans = mutableListOf<TextSpan>()
+        // Un drapeau, et pas « est-ce que ca finit par un retour a la ligne ? ».
+        // Depuis qu'un paragraphe vide est un bloc a part entiere, deux blocs
+        // vides d'affilee doivent donner deux lignes vides — en regardant le
+        // dernier caractere, elles se seraient fondues en une seule.
+        var pending = false
 
         fun separate() {
-            if (out.isNotEmpty() && out.last() != '\n') out.append('\n')
+            if (pending) out.append('\n')
+            pending = false
         }
 
         blocks.forEach { block ->
@@ -118,8 +124,10 @@ object JournalBlocks {
                     val at = out.length
                     // Le trait vit sur une ligne vide qui existe vraiment : le
                     // style est pose sur le saut de ligne lui-meme, donc la
-                    // ligne garde sa place dans le rythme du lignage.
+                    // ligne garde sa place dans le rythme du lignage. Ce saut
+                    // termine deja sa ligne : le bloc suivant n'en ajoute pas.
                     out.append('\n')
+                    pending = false
                     TextStyleKind.fromCode(block.ruleCode)
                         ?.takeIf { it.isRule }
                         ?.let { spans += TextSpan(at, at + 1, it) }
@@ -140,6 +148,7 @@ object JournalBlocks {
                         styleOf(block.fillCode, StyleFamily.QUOTE_FILL)
                             ?.let { spans += TextSpan(at, to, it) }
                     }
+                    pending = true
                 }
             }
         }
@@ -148,36 +157,24 @@ object JournalBlocks {
     }
 
     /**
-     * Decoupe un texte plat en blocs.
+     * Decoupe un texte plat en blocs, **un par paragraphe**.
      *
      * C'est l'operation que fait la migration sur les pages deja ecrites : une
      * citation ecrite avant les blocs doit devenir un bloc, sinon on se
-     * retrouverait avec des citations qu'on peut deplacer et d'autres non —
-     * une regle a moitie appliquee se voit plus qu'une regle absente.
+     * retrouverait avec des citations qu'on peut deplacer et d'autres non — une
+     * regle a moitie appliquee se voit plus qu'une regle absente.
      *
-     * Les paragraphes ordinaires qui se suivent restent **ensemble** dans un
-     * seul bloc de texte : c'est ce qui fait qu'une page ordinaire n'a qu'un
-     * champ, et qu'ecrire n'a pas change.
+     * Un paragraphe par bloc, et pas un bloc pour tout le texte suivi : c'est
+     * ce qui permet de **remonter un paragraphe** sans toucher aux autres. La
+     * premiere version les regroupait pour n'avoir qu'un seul champ de texte
+     * par page ; le resultat etait une page ou l'on pouvait deplacer les vocaux
+     * et les citations, mais pas ce qu'on avait ecrit.
+     *
+     * Une ligne vide reste un bloc : c'est une ligne blanche voulue, et la
+     * jeter recollerait deux paragraphes que l'on avait separes.
      */
     fun split(text: String, spans: List<TextSpan>, epochDay: Long): List<JournalBlock> {
         val blocks = mutableListOf<JournalBlock>()
-        val pending = mutableListOf<String>()
-        var pendingStart = 0
-        val pendingSpans = mutableListOf<TextSpan>()
-
-        fun flushText() {
-            if (pending.isEmpty()) return
-            val joined = pending.joinToString("\n")
-            blocks += JournalBlock(
-                epochDay = epochDay,
-                position = blocks.size,
-                kindCode = BlockKind.TEXT.code,
-                text = joined,
-                spans = RichText.encode(pendingSpans.toList()),
-            )
-            pending.clear()
-            pendingSpans.clear()
-        }
 
         lines(text).forEach { line ->
             val from = line.first
@@ -189,65 +186,55 @@ object JournalBlocks {
                 it.style == TextStyleKind.QUOTE && it.start < maxOf(to, from + 1) && from < it.end
             }
 
-            when {
-                ruleHere != null -> {
-                    flushText()
-                    blocks += JournalBlock(
-                        epochDay = epochDay,
-                        position = blocks.size,
-                        kindCode = BlockKind.RULE.code,
-                        ruleCode = ruleHere.style.code,
-                    )
-                }
-
-                quoteHere != null && to > from -> {
-                    flushText()
-                    val inner = spans.mapNotNull { span ->
-                        if (span.style == TextStyleKind.QUOTE) return@mapNotNull null
-                        if (span.style.family == StyleFamily.QUOTE_BAR) return@mapNotNull null
-                        if (span.style.family == StyleFamily.QUOTE_FILL) return@mapNotNull null
-                        val s = maxOf(span.start, from)
-                        val e = minOf(span.end, to)
-                        if (e > s) TextSpan(s - from, e - from, span.style) else null
+            val inner = {
+                spans.mapNotNull { span ->
+                    when {
+                        span.style == TextStyleKind.QUOTE -> null
+                        span.style.family == StyleFamily.QUOTE_BAR -> null
+                        span.style.family == StyleFamily.QUOTE_FILL -> null
+                        span.style.isRule -> null
+                        else -> {
+                            val s = maxOf(span.start, from)
+                            val e = minOf(span.end, to)
+                            if (e > s) TextSpan(s - from, e - from, span.style) else null
+                        }
                     }
-                    blocks += JournalBlock(
-                        epochDay = epochDay,
-                        position = blocks.size,
-                        kindCode = BlockKind.QUOTE.code,
-                        text = text.substring(from, to),
-                        spans = RichText.encode(inner),
-                        barCode = spans.firstOrNull {
-                            it.style.family == StyleFamily.QUOTE_BAR && it.start < to && from < it.end
-                        }?.style?.code.orEmpty(),
-                        fillCode = spans.firstOrNull {
-                            it.style.family == StyleFamily.QUOTE_FILL && it.start < to && from < it.end
-                        }?.style?.code.orEmpty(),
-                    )
-                }
-
-                else -> {
-                    if (pending.isEmpty()) pendingStart = from
-                    // Le decalage du bloc : la ligne demarre a `from` dans le
-                    // texte plat, et a `from - pendingStart` dans le bloc — a
-                    // condition que les lignes accumulees se suivent, ce qui
-                    // est vrai puisqu'on vide des qu'autre chose s'intercale.
-                    val shift = pendingStart
-                    spans.forEach { span ->
-                        val s = maxOf(span.start, from)
-                        val e = minOf(span.end, to)
-                        if (e > s) pendingSpans += TextSpan(s - shift, e - shift, span.style)
-                    }
-                    pending += text.substring(from, to)
                 }
             }
-        }
-        flushText()
 
-        return if (blocks.isEmpty()) {
-            listOf(JournalBlock(epochDay = epochDay, position = 0))
-        } else {
-            blocks
+            blocks += when {
+                ruleHere != null -> JournalBlock(
+                    epochDay = epochDay,
+                    position = blocks.size,
+                    kindCode = BlockKind.RULE.code,
+                    ruleCode = ruleHere.style.code,
+                )
+
+                quoteHere != null && to > from -> JournalBlock(
+                    epochDay = epochDay,
+                    position = blocks.size,
+                    kindCode = BlockKind.QUOTE.code,
+                    text = text.substring(from, to),
+                    spans = RichText.encode(inner()),
+                    barCode = spans.firstOrNull {
+                        it.style.family == StyleFamily.QUOTE_BAR && it.start < to && from < it.end
+                    }?.style?.code.orEmpty(),
+                    fillCode = spans.firstOrNull {
+                        it.style.family == StyleFamily.QUOTE_FILL && it.start < to && from < it.end
+                    }?.style?.code.orEmpty(),
+                )
+
+                else -> JournalBlock(
+                    epochDay = epochDay,
+                    position = blocks.size,
+                    kindCode = BlockKind.TEXT.code,
+                    text = text.substring(from, to),
+                    spans = RichText.encode(inner()),
+                )
+            }
         }
+
+        return blocks.ifEmpty { listOf(JournalBlock(epochDay = epochDay, position = 0)) }
     }
 
     /**
@@ -310,18 +297,16 @@ object JournalBlocks {
     }
 
     /**
-     * Remet les rangs a plat apres un deplacement ou une suppression, et jette
-     * les blocs de texte vides.
+     * Remet les rangs a plat apres un deplacement ou une suppression.
      *
-     * Un bloc de texte vide n'est pas une ligne vide : une ligne vide est un
-     * `\n` **dans** un bloc. Un bloc vide, lui, ne vient que d'un decoupage
-     * qu'on vient de defaire, et le garder ajouterait un blanc que personne
-     * n'a demande. Une page qui n'aurait plus rien garde quand meme un bloc :
-     * il faut bien un endroit ou ecrire.
+     * Un bloc de texte vide n'est **pas** jete : depuis qu'Entree cree un bloc,
+     * un bloc vide est une ligne blanche que l'on a voulue, et la faire
+     * disparaitre recollerait deux paragraphes que l'on venait de separer. Une
+     * page qui n'aurait plus rien garde quand meme un bloc : il faut bien un
+     * endroit ou ecrire.
      */
     fun tidy(blocks: List<JournalBlock>, epochDay: Long): List<JournalBlock> {
-        val kept = blocks.filterNot { it.isEmptyText }
-        val list = kept.ifEmpty { listOf(JournalBlock(epochDay = epochDay, position = 0)) }
+        val list = blocks.ifEmpty { listOf(JournalBlock(epochDay = epochDay, position = 0)) }
         return list.mapIndexed { index, block -> block.copy(position = index, epochDay = epochDay) }
     }
 }

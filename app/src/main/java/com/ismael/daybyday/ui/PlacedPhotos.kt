@@ -9,9 +9,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,8 +19,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -244,14 +244,30 @@ fun PhotoGrid(modifier: Modifier = Modifier) {
 }
 
 /**
- * Les reglages de la photo choisie, a la place de la barre de mise en forme :
- * on ne fait qu'une chose a la fois, donc une seule barre a la fois.
+ * Les reglages d'une photo posee sur la page.
+ *
+ * C'etait un tas de pastilles : quatre formes, un contour, un aimant et trois
+ * profondeurs, tous de la meme taille et de la meme couleur, sur trois rangees
+ * qui se ressemblaient. Rien ne disait quelles pastilles allaient ensemble, ni
+ * lesquelles s'excluaient — et le blanc et le violet du theme tombaient sur un
+ * papier ivoire comme un morceau d'une autre application.
+ *
+ * Trois regles le remettent d'aplomb, et ce sont celles des cartes de « Ma
+ * journee » :
+ * 1. **Une question, une reponse, une forme.** Quatre formes qui s'excluent
+ *    sont un choix segmente, pas quatre pastilles ; un oui-ou-non est un
+ *    interrupteur, pas une pastille qui s'allume.
+ * 2. **Chaque question porte son intitule.** « Profondeur » etait le seul a en
+ *    avoir un, et c'est pour ca qu'il etait le seul comprehensible.
+ * 3. **Les couleurs viennent du papier**, comme la barre d'outils du journal :
+ *    sur l'ardoise, du blanc sur du sombre disparaissait.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PhotoToolsBar(
     item: MediaItem,
     snapToGrid: Boolean,
+    paper: Color,
+    ink: Color,
     onShape: (MediaShape) -> Unit,
     onOutline: (Boolean) -> Unit,
     onLayer: (MediaLayer) -> Unit,
@@ -259,103 +275,198 @@ fun PhotoToolsBar(
     onDelete: () -> Unit,
     onDone: () -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+    val surface = JournalPaper.shade(paper, 0.06f)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(surface)
+            .padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        PhotoSection(title = "Forme", ink = ink) {
+            PhotoSegmented(
+                labels = MediaShape.entries.map { it.label },
+                selected = MediaShape.entries.indexOf(item.shape),
+                paper = paper,
+                ink = ink,
+                onSelect = { onShape(MediaShape.entries[it]) },
+            )
+        }
+
+        if (item.shape == MediaShape.FREE) {
+            // Un contour blanc n'a de sens que sur un detourage : le proposer
+            // sur un rectangle, c'est proposer de border un bord.
+            PhotoSwitch(
+                label = "Contour blanc",
+                hint = "Detoure l'autocollant comme un sticker",
+                checked = item.stickerOutline,
+                ink = ink,
+                onChange = onOutline,
+            )
+        }
+
+        PhotoSection(
+            title = "Profondeur",
+            hint = "Le texte s'ecrit entre « au milieu » et « devant »",
+            ink = ink,
         ) {
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                MediaShape.entries.forEach { shape ->
-                    PhotoChip(
-                        label = shape.label,
-                        selected = item.shape == shape,
-                        onClick = { onShape(shape) },
-                    )
-                }
-                if (item.shape == MediaShape.FREE) {
-                    PhotoChip(
-                        label = if (item.stickerOutline) "Contour blanc" else "Sans contour",
-                        selected = item.stickerOutline,
-                        onClick = { onOutline(!item.stickerOutline) },
-                    )
-                }
-                PhotoChip(
-                    label = if (snapToGrid) "Aimant activé" else "Aimant coupé",
-                    selected = snapToGrid,
-                    onClick = { onSnap(!snapToGrid) },
-                )
-            }
+            PhotoSegmented(
+                labels = MediaLayer.entries.map { it.label },
+                selected = MediaLayer.entries.indexOf(item.layer),
+                paper = paper,
+                ink = ink,
+                onSelect = { onLayer(MediaLayer.entries[it]) },
+            )
+        }
 
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                // "Au fond" et "au milieu" sont toutes deux sous le texte :
-                // elles ne different que l'une par rapport a l'autre. Le dire
-                // vaut mieux que de laisser deviner.
+        PhotoSwitch(
+            label = "Aimant",
+            hint = "La photo se cale sur la grille de la page",
+            checked = snapToGrid,
+            ink = ink,
+            onChange = onSnap,
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Retirer de la page",
+                style = MaterialTheme.typography.labelLarge,
+                color = PHOTO_DELETE_RED,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .clickable(onClickLabel = "Retirer cette photo", onClick = onDelete)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = "Terminé",
+                style = MaterialTheme.typography.labelLarge,
+                color = readableOn(JournalPaper.shade(paper, 0.82f)),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(JournalPaper.shade(paper, 0.82f))
+                    .clickable(onClickLabel = "Terminé", onClick = onDone)
+                    .padding(horizontal = 22.dp, vertical = 10.dp),
+            )
+        }
+    }
+}
+
+/** Un intitule, sa precision au besoin, et la reponse dessous. */
+@Composable
+private fun PhotoSection(
+    title: String,
+    ink: Color,
+    hint: String? = null,
+    content: @Composable () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelMedium,
+            color = ink.copy(alpha = 0.7f),
+        )
+        if (hint != null) {
+            Text(
+                text = hint,
+                style = MaterialTheme.typography.labelSmall,
+                color = ink.copy(alpha = 0.45f),
+            )
+        }
+        content()
+    }
+}
+
+/**
+ * Un choix parmi plusieurs, dans une seule piste.
+ *
+ * La piste dit « une seule de ces reponses » avant meme qu'on lise les
+ * intitules — ce que des pastilles separees ne disent jamais.
+ */
+@Composable
+private fun PhotoSegmented(
+    labels: List<String>,
+    selected: Int,
+    paper: Color,
+    ink: Color,
+    onSelect: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(JournalPaper.shade(paper, 0.10f))
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        labels.forEachIndexed { index, label ->
+            val chosen = index == selected
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (chosen) paper else Color.Transparent)
+                    .clickable(onClickLabel = label) { onSelect(index) }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
                 Text(
-                    text = "Profondeur — le texte s'écrit entre « au milieu » et « devant »",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 4.dp),
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = ink.copy(alpha = if (chosen) 1f else 0.6f),
+                    maxLines = 1,
                 )
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    MediaLayer.entries.forEach { layer ->
-                        PhotoChip(
-                            label = layer.label,
-                            selected = item.layer == layer,
-                            onClick = { onLayer(layer) },
-                        )
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                PhotoChip(
-                    label = "Retirer de la page",
-                    selected = false,
-                    tint = MaterialTheme.colorScheme.error,
-                    onClick = onDelete,
-                )
-                PhotoChip(label = "Terminé", selected = true, onClick = onDone)
             }
         }
     }
 }
 
+/** Un oui-ou-non : un interrupteur, jamais une pastille qui s'allume. */
 @Composable
-private fun PhotoChip(
+private fun PhotoSwitch(
     label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    tint: Color = MaterialTheme.colorScheme.onSurface,
+    hint: String,
+    checked: Boolean,
+    ink: Color,
+    onChange: (Boolean) -> Unit,
 ) {
-    Text(
-        text = label,
-        style = MaterialTheme.typography.labelLarge,
-        color = if (selected) MaterialTheme.colorScheme.primary else tint,
+    Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                if (selected) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                } else {
-                    MaterialTheme.colorScheme.surface
-                }
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClickLabel = label) { onChange(!checked) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = ink,
             )
-            .clickable(onClickLabel = label, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 9.dp),
-    )
+            Text(
+                text = hint,
+                style = MaterialTheme.typography.labelSmall,
+                color = ink.copy(alpha = 0.45f),
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colorScheme.primary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+                uncheckedThumbColor = ink.copy(alpha = 0.5f),
+                uncheckedTrackColor = ink.copy(alpha = 0.10f),
+                uncheckedBorderColor = ink.copy(alpha = 0.20f),
+            ),
+        )
+    }
 }
+
+/** Le rouge de « ca s'efface », le meme que partout ailleurs. */
+private val PHOTO_DELETE_RED = Color(0xFFCF4238)

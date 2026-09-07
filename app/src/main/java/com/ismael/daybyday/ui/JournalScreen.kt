@@ -32,6 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -41,6 +42,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -367,9 +369,23 @@ fun JournalScreen(
             return
         }
 
+        val edit = RichText.diff(block.text, updated.text)
+
+        // Entree : le paragraphe se coupe en deux. C'est ce qui permet de
+        // fabriquer un deuxieme paragraphe, donc d'en deplacer un seul. On le
+        // reconnait au fait que **exactement** un retour a la ligne vient
+        // d'etre ecrit — coller un texte qui en contient plusieurs reste du
+        // texte colle.
+        if (updated.text.substring(edit.start, edit.newEnd) == "\n" && block.isText) {
+            history.record(snapshot(), structural = true)
+            val (split, next) = PageBlocks.splitAt(blocks, key, edit.start)
+            blocks = split
+            pendingFocus = next
+            return
+        }
+
         history.record(snapshot(), structural = false)
         val moved = RichText.adjust(block.spans, block.text, updated.text)
-        val edit = RichText.diff(block.text, updated.text)
         val spans = if (edit.newEnd > edit.start && typing.isNotEmpty()) {
             RichText.applyAll(moved, edit.start, edit.newEnd, typing)
         } else {
@@ -380,14 +396,35 @@ fun JournalScreen(
         }
     }
 
+    /**
+     * Effacer au tout debut d'un bloc : il rejoint celui d'au-dessus.
+     *
+     * Sans ca, la page ne ferait que se decouper : on pourrait creer des
+     * paragraphes a l'infini sans jamais pouvoir en recoller deux.
+     */
+    fun backspaceAtStart(key: Long): Boolean {
+        val index = blocks.indexOfFirst { it.key == key }
+        if (index <= 0) return false
+        val previous = blocks[index - 1]
+
+        // Au-dessus, autre chose que du texte — un vocal, un trait, une
+        // citation : on ne le happe pas dans le paragraphe. Effacer par
+        // megarde un enregistrement en tapant sur la touche d'effacement
+        // serait le pire des raccourcis.
+        if (!previous.isText) return false
+
+        history.record(snapshot(), structural = true)
+        val (merged, target) = PageBlocks.mergeBack(blocks, key)
+        if (target == null) return false
+        blocks = merged
+        pendingFocus = target
+        return true
+    }
+
     /** Pose un bloc au curseur, en coupant le paragraphe en deux s'il le faut. */
     fun insertBlock(inserted: PageBlock, focusIt: Boolean = false) {
         setBlocks(structural = true, updated = PageBlocks.insertAt(blocks, focusedKey, inserted))
         if (focusIt) pendingFocus = inserted.key
-    }
-
-    fun removeBlock(key: Long) {
-        setBlocks(structural = true, updated = PageBlocks.tidy(blocks.filterNot { it.key == key }))
     }
 
     val selection = heldSelection ?: focusedBlock()?.value?.selection ?: TextRange.Zero
@@ -724,6 +761,48 @@ fun JournalScreen(
             Manifest.permission.RECORD_AUDIO,
         ) == PackageManager.PERMISSION_GRANTED
         if (allowed) startRecording() else askMicrophone.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    // --- Supprimer un bloc ------------------------------------------------
+    /** Le bloc dont la poignee a ete effleuree : son petit menu est ouvert. */
+    var menuFor by remember { mutableStateOf<Long?>(null) }
+
+    /** Le vocal dont on demande confirmation avant d'effacer le son. */
+    var confirmDelete by remember { mutableStateOf<Long?>(null) }
+
+    fun deleteBlockNow(key: Long) {
+        val block = blocks.firstOrNull { it.key == key }
+        val note = block?.voiceId?.let { id -> voiceNotes.firstOrNull { it.id == id } }
+        if (note != null) {
+            if (playingPath == note.relativePath) {
+                player.stop()
+                playingPath = null
+            }
+            app.appScope.launch { repository.deleteVoiceNote(note) }
+        }
+        menuFor = null
+        confirmDelete = null
+        selectedBlock = null
+        setBlocks(structural = true, updated = PageBlocks.tidy(blocks.filterNot { it.key == key }))
+    }
+
+    /**
+     * Demande la suppression d'un bloc.
+     *
+     * Un paragraphe, une citation, un trait s'effacent tout de suite : ils sont
+     * dans « annuler », et rien n'est perdu. Un vocal, non — supprimer son bloc
+     * **efface le fichier son**, et aucune annulation ne le rendra. Il est le
+     * seul a demander confirmation, et c'est cette difference-la qui merite une
+     * question, pas le fait d'effacer quelque chose.
+     */
+    fun requestDeleteBlock(key: Long) {
+        val block = blocks.firstOrNull { it.key == key } ?: return
+        if (block.kind == BlockKind.VOICE && block.voiceId != null) {
+            menuFor = null
+            confirmDelete = key
+        } else {
+            deleteBlockNow(key)
+        }
     }
 
     // --- L'export PDF -----------------------------------------------------
@@ -1070,8 +1149,11 @@ fun JournalScreen(
                         onDrag = ::dragBy,
                         onDragEnd = ::endDrag,
                         onOpenDay = onOpenDay,
+                        onBackspaceAtStart = ::backspaceAtStart,
                         onSelectBlock = { selectedBlock = it },
-                        onDeleteBlock = ::removeBlock,
+                        onDeleteBlock = ::requestDeleteBlock,
+                        menuFor = menuFor,
+                        onMenu = { menuFor = it },
                         onQuoteBar = { key, style ->
                             history.record(snapshot(), structural = true)
                             blocks = blocks.map { if (it.key == key) it.copy(bar = style) else it }
@@ -1087,14 +1169,6 @@ fun JournalScreen(
                                 key = note.relativePath,
                             ) { playingPath = null }
                             playingPath = player.playing
-                        },
-                        onDeleteVoice = { note, key ->
-                            if (playingPath == note.relativePath) {
-                                player.stop()
-                                playingPath = null
-                            }
-                            removeBlock(key)
-                            app.appScope.launch { repository.deleteVoiceNote(note) }
                         },
                         onToggleVoiceWidth = { note ->
                             app.appScope.launch {
@@ -1151,6 +1225,26 @@ fun JournalScreen(
                 }
             }
 
+            confirmDelete?.let { key ->
+                AlertDialog(
+                    onDismissRequest = { confirmDelete = null },
+                    title = { Text("Supprimer ce vocal ?") },
+                    // On dit ce qui est irreversible, et rien de plus : c'est
+                    // le fichier son qui part, et « annuler » ne le ramenera
+                    // pas. Une question qui n'explique pas ce qu'elle protege
+                    // n'est qu'un clic de plus.
+                    text = { Text("L'enregistrement sera effacé du téléphone. On ne pourra pas le récupérer.") },
+                    confirmButton = {
+                        TextButton(onClick = { deleteBlockNow(key) }) {
+                            Text("Supprimer", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmDelete = null }) { Text("Garder") }
+                    },
+                )
+            }
+
             if (showPaperSettings) {
                 PaperSettingsSheet(
                     ruled = ruled,
@@ -1183,6 +1277,12 @@ fun JournalScreen(
                 PhotoToolsBar(
                     item = photo,
                     snapToGrid = snapToGrid,
+                    // Le panneau vit **sur** la page : il prend ses couleurs du
+                    // papier, comme la barre d'outils du journal. Le blanc et
+                    // le violet du theme tombaient sur un papier ivoire comme
+                    // un morceau d'une autre application.
+                    paper = paper,
+                    ink = ink,
                     onShape = { changePhoto(photo.copy(shapeKey = it.key)) },
                     onOutline = { changePhoto(photo.copy(stickerOutline = it)) },
                     onLayer = { changePhoto(photo.copy(layerKey = it.key)) },
@@ -1289,13 +1389,15 @@ private fun PageColumn(
     onDrag: (Float) -> Unit,
     onDragEnd: () -> Unit,
     onOpenDay: (LocalDate) -> Unit,
+    onBackspaceAtStart: (Long) -> Boolean,
     onSelectBlock: (Long?) -> Unit,
     onDeleteBlock: (Long) -> Unit,
+    menuFor: Long?,
+    onMenu: (Long?) -> Unit,
     onQuoteBar: (Long, TextStyleKind?) -> Unit,
     onQuoteFill: (Long, TextStyleKind?) -> Unit,
     onStopRecording: () -> Unit,
     onPlayVoice: (VoiceNote) -> Unit,
-    onDeleteVoice: (VoiceNote, Long) -> Unit,
     onToggleVoiceWidth: (VoiceNote) -> Unit,
     onTapBelow: () -> Unit,
 ) {
@@ -1359,12 +1461,23 @@ private fun PageColumn(
                         // rend le systeme visible, et sans elle une page en
                         // blocs ressemble trait pour trait a une page qui n'en
                         // a pas.
-                        BlockGutter(
-                            current = current,
-                            ink = style.ink,
-                            lineHeight = lineHeight,
-                            dragModifier = grip,
-                        )
+                        Box {
+                            BlockGutter(
+                                current = current,
+                                ink = style.ink,
+                                lineHeight = lineHeight,
+                                dragModifier = grip,
+                                onTap = { onMenu(block.key) },
+                            )
+                            if (menuFor == block.key) {
+                                BlockMenu(
+                                    paper = style.paper,
+                                    ink = style.ink,
+                                    onDelete = { onDeleteBlock(block.key) },
+                                    onDismiss = { onMenu(null) },
+                                )
+                            }
+                        }
 
                         Box(modifier = Modifier.weight(1f)) {
                             when (block.kind) {
@@ -1381,6 +1494,7 @@ private fun PageColumn(
                                     onLayout = { layout.value = it },
                                     onFocus = { onFocused(block.key, it) },
                                     onOpenDay = onOpenDay,
+                                    onBackspaceAtStart = { onBackspaceAtStart(block.key) },
                                     modifier = Modifier
                                         .focusRequester(focusRequester)
                                         .testTag("day-note-field"),
@@ -1468,7 +1582,7 @@ private fun PageColumn(
                                                 )
                                             },
                                             onPlay = { onPlayVoice(note) },
-                                            onDelete = { onDeleteVoice(note, block.key) },
+                                            onDelete = { onDeleteBlock(block.key) },
                                             onToggleWidth = { onToggleVoiceWidth(note) },
                                             dragModifier = grip,
                                         )

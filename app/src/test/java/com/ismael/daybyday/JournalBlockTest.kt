@@ -120,13 +120,33 @@ class JournalBlockTest {
     // --- Le decoupage ------------------------------------------------------
 
     @Test
-    fun `des paragraphes ordinaires ne font qu'un seul bloc`() {
-        // C'est ce qui fait qu'ecrire n'a pas change : une page ordinaire n'a
-        // qu'un champ, et Entree reste un simple retour a la ligne.
+    fun `chaque paragraphe est un bloc`() {
+        // C'est ce qui permet de remonter un paragraphe sans toucher aux
+        // autres. La premiere version les regroupait : on pouvait deplacer les
+        // vocaux et les citations, mais pas ce qu'on avait ecrit.
         val blocks = JournalBlocks.split("un\ndeux\ntrois", emptyList(), day)
 
-        assertEquals(1, blocks.size)
-        assertEquals("un\ndeux\ntrois", blocks.first().text)
+        assertEquals(listOf("un", "deux", "trois"), blocks.map { it.text })
+        assertTrue(blocks.all { it.kind == BlockKind.TEXT })
+    }
+
+    @Test
+    fun `une ligne blanche reste un bloc`() {
+        // Une ligne vide est voulue : la jeter recollerait deux paragraphes
+        // qu'on avait separes.
+        val blocks = JournalBlocks.split("un\n\ndeux", emptyList(), day)
+
+        assertEquals(listOf("un", "", "deux"), blocks.map { it.text })
+        assertEquals("un\n\ndeux", JournalBlocks.flatten(blocks).text)
+    }
+
+    @Test
+    fun `deux blocs vides font deux lignes blanches`() {
+        // Le piege du separateur : en regardant « est-ce que ca finit deja par
+        // un retour a la ligne ? », les deux lignes n'en faisaient plus qu'une.
+        val flat = JournalBlocks.flatten(listOf(text("a"), text(""), text(""), text("b")))
+
+        assertEquals("a\n\n\nb", flat.text)
     }
 
     @Test
@@ -173,6 +193,9 @@ class JournalBlockTest {
         val flat = JournalBlocks.flatten(blocks)
 
         assertEquals(text, flat.text)
+        // Cinq lignes dans le texte, cinq blocs : un par paragraphe, plus le
+        // trait qui occupe la sienne.
+        assertEquals(5, blocks.size)
         val bold = flat.spans.single { it.style == TextStyleKind.BOLD }
         assertEquals("premier", flat.text.substring(bold.start, bold.end))
         assertTrue(flat.spans.any { it.style == TextStyleKind.RULE_BOLD })
@@ -219,14 +242,17 @@ class JournalBlockTest {
     }
 
     @Test
-    fun `ranger jette les blocs de texte vides mais jamais le dernier`() {
+    fun `ranger garde les lignes blanches et remet les rangs a plat`() {
         val out = JournalBlocks.tidy(listOf(text(""), quote("citation"), text("")), day)
 
-        assertEquals(1, out.size)
-        assertEquals(BlockKind.QUOTE, out.first().kind)
+        // Les blocs vides ne sont plus jetes : ce sont des lignes blanches.
+        assertEquals(3, out.size)
+        assertEquals(listOf(0, 1, 2), out.map { it.position })
 
-        val alone = JournalBlocks.tidy(listOf(text("")), day)
-        assertEquals(1, alone.size)
-        assertNull(alone.first().voiceId)
+        // Et une page qui n'aurait plus rien garde un endroit ou ecrire.
+        val vide = JournalBlocks.tidy(emptyList(), day)
+        assertEquals(1, vide.size)
+        assertEquals(BlockKind.TEXT, vide.first().kind)
+        assertNull(vide.first().voiceId)
     }
 }

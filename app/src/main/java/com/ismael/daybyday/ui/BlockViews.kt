@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,12 +28,18 @@ import androidx.compose.runtime.State
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
@@ -40,9 +49,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import com.ismael.daybyday.data.TextSpan
 import com.ismael.daybyday.data.TextStyleKind
 import java.time.LocalDate
@@ -84,6 +96,12 @@ fun BlockTextField(
     onLayout: (TextLayoutResult) -> Unit,
     onFocus: (Boolean) -> Unit,
     onOpenDay: (LocalDate) -> Unit,
+    /**
+     * Effacer alors que le curseur est au tout debut : le bloc rejoint celui
+     * d'au-dessus. Rend `true` s'il l'a fait, et l'appui est alors consomme —
+     * sinon le champ effacerait en plus un caractere qui n'existe pas.
+     */
+    onBackspaceAtStart: () -> Boolean = { false },
     modifier: Modifier = Modifier,
 ) {
     val textStyle = MaterialTheme.typography.bodyLarge.copy(
@@ -128,6 +146,17 @@ fun BlockTextField(
         },
         modifier = modifier
             .fillMaxWidth()
+            .onKeyEvent { event ->
+                val atStart = value.selection.collapsed && value.selection.start == 0
+                if (event.type == KeyEventType.KeyDown &&
+                    event.key == Key.Backspace &&
+                    atStart
+                ) {
+                    onBackspaceAtStart()
+                } else {
+                    false
+                }
+            }
             .openPageLinkOnTap(layout, { value.text }, onOpenDay)
             .hashtagChips(layout, style.textSize.toFloat())
             .onFocusChanged { onFocus(it.isFocused) }
@@ -378,11 +407,17 @@ private fun FillDot(
 /**
  * La poignee d'un bloc, dans la marge de gauche.
  *
- * Elle est **toujours la**, tres pale, et se marque sur le bloc ou l'on est.
- * C'est ce qui rend le systeme lisible : sans elle, une page en blocs
- * ressemble trait pour trait a une page qui n'en a pas, et rien ne dit qu'il y
- * a quelque chose a attraper. Une poignee qu'on ne voit pas est une poignee qui
- * n'existe pas.
+ * Elle n'apparait que sur le bloc **ou l'on est**. Premiere version : une
+ * poignee pale sur chacun, pour montrer que la page est faite de blocs. Ca le
+ * montrait, mais une page de dix paragraphes devenait une colonne de points
+ * gris a cote d'une colonne de texte — le decor prenait le pas sur ce qu'on
+ * ecrit. Une seule poignee suffit a dire la meme chose, et elle designe en
+ * plus ce qu'on va deplacer.
+ *
+ * Deux gestes, deux roles : **on la maintient pour deplacer le bloc, on
+ * l'effleure pour ouvrir ce qu'on peut en faire.** C'est la seule facon
+ * d'atteindre « supprimer » sur un bloc qui n'a rien d'autre — une citation
+ * vide, un paragraphe de trop.
  *
  * Elle est haute d'une ligne et calee en haut du bloc : elle designe le debut
  * du bloc, pas son milieu — un paragraphe de dix lignes aurait sinon sa
@@ -394,17 +429,22 @@ fun BlockGutter(
     ink: Color,
     lineHeight: Dp,
     dragModifier: Modifier,
+    onTap: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val tint = ink.copy(alpha = if (current) 0.55f else 0.14f)
-
     Box(
         modifier = modifier
             .width(GUTTER_WIDTH)
             .height(lineHeight)
-            .then(dragModifier),
+            .then(dragModifier)
+            .clickable(
+                enabled = current,
+                onClickLabel = "Ce que tu peux faire de ce bloc",
+                onClick = onTap,
+            ),
         contentAlignment = Alignment.Center,
     ) {
+        if (!current) return@Box
         Canvas(modifier = Modifier.size(GRIP_WIDTH, GRIP_HEIGHT)) {
             // Six points : le signe universel de « ca se deplace ». Dessine
             // plutot qu'importe — six cercles ne valent pas le jeu complet des
@@ -415,7 +455,7 @@ fun BlockGutter(
             repeat(3) { row ->
                 repeat(2) { column ->
                     drawCircle(
-                        color = tint,
+                        color = ink.copy(alpha = 0.5f),
                         radius = radius,
                         center = Offset(radius + column * columnGap, radius + row * rowGap),
                     )
@@ -425,11 +465,54 @@ fun BlockGutter(
     }
 }
 
-/** La largeur de la marge qui porte les poignees. */
-val GUTTER_WIDTH = 24.dp
+/**
+ * Ce qu'on peut faire d'un bloc.
+ *
+ * Un panneau minuscule, pose sous la poignee. Il n'y a qu'une action, et c'est
+ * voulu : « supprimer » est la seule chose qui manquait vraiment — tout le
+ * reste (deplacer, ecrire, changer la couleur d'une citation) se fait deja sur
+ * le bloc lui-meme, et l'amener ici l'aurait eloigne de ce qu'il change.
+ */
+@Composable
+fun BlockMenu(
+    paper: Color,
+    ink: Color,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Popup(
+        alignment = Alignment.TopStart,
+        offset = IntOffset(0, 0),
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        Row(
+            modifier = Modifier
+                .shadow(10.dp, RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(14.dp))
+                .background(JournalPaper.shade(paper, 0.05f))
+                .clickable(onClickLabel = "Supprimer ce bloc", onClick = onDelete)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(9.dp),
+        ) {
+            Icon(
+                Icons.Default.Clear,
+                contentDescription = null,
+                tint = DELETE_RED,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                text = "Supprimer",
+                style = MaterialTheme.typography.labelLarge,
+                color = DELETE_RED,
+            )
+        }
+    }
+}
 
-private val GRIP_WIDTH = 10.dp
-private val GRIP_HEIGHT = 16.dp
+/** Le rouge de « ca s'efface ». Fixe, comme celui de l'enregistrement. */
+private val DELETE_RED = Color(0xFFCF4238)
 
 /**
  * Deplacer un bloc : on maintient le doigt, puis on tire.

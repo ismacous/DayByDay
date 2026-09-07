@@ -129,7 +129,7 @@ private const val CHIP_ALPHA = 0.18f
  */
 fun Modifier.quoteBars(
     layout: State<TextLayoutResult?>,
-    /** Les citations et la couleur de chacune, relues a chaque dessin. */
+    /** Les citations et l'habillage de chacune, relus a chaque dessin. */
     quotes: () -> List<QuoteBar>,
 ): Modifier = drawBehind {
     val result = layout.value ?: return@drawBehind
@@ -143,19 +143,41 @@ fun Modifier.quoteBars(
         val end = quote.range.last.coerceIn(start, length - 1)
         val firstLine = result.getLineForOffset(start)
         val lastLine = result.getLineForOffset(end)
+        val left = result.getLineLeft(firstLine)
         val top = result.getLineTop(firstLine)
         val bottom = result.getLineBottom(lastLine)
+
+        // Le fond d'abord, le trait par-dessus : le trait doit rester net sur
+        // son bord, pas se fondre dans le panneau.
+        quote.fill?.let { fill ->
+            drawRoundRect(
+                color = fill,
+                topLeft = Offset(left, top),
+                size = Size((size.width - left).coerceAtLeast(0f), bottom - top),
+                cornerRadius = CornerRadius(FILL_RADIUS.toPx()),
+            )
+        }
         drawRoundRect(
             color = quote.color,
-            topLeft = Offset(result.getLineLeft(firstLine), top + BAR_INSET.toPx()),
+            topLeft = Offset(left, top + BAR_INSET.toPx()),
             size = Size(width, (bottom - top - 2 * BAR_INSET.toPx()).coerceAtLeast(width)),
             cornerRadius = radius,
         )
     }
 }
 
-/** Une citation : l'intervalle qu'elle couvre, et la couleur de son trait. */
-data class QuoteBar(val range: IntRange, val color: Color)
+/**
+ * Une citation : l'intervalle qu'elle couvre, la couleur de son trait, et le
+ * fond derriere elle s'il y en a un.
+ *
+ * La couleur du trait est **independante** de celle du texte : on veut pouvoir
+ * mettre un trait bleu sur une citation ecrite en noir. Les deux venaient du
+ * meme endroit, donc changer l'un changeait l'autre.
+ */
+data class QuoteBar(val range: IntRange, val color: Color, val fill: Color? = null)
+
+/** Le fond suit le trait de loin : c'est un panneau, pas un surlignage. */
+private val FILL_RADIUS = 10.dp
 
 /** Assez large pour se voir, assez fin pour ne pas devenir une barre. */
 private val BAR_WIDTH = 3.dp

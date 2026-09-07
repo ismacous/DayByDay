@@ -141,10 +141,38 @@ fun buildAnnotatedStringWithSpans(
     text = text,
     spanStyles = spans
         .filter { it.start < text.length && it.end <= text.length && !it.isEmpty }
-        .map { AnnotatedString.Range(it.style.toSpanStyle(), it.start, it.end) } +
+        .map { span ->
+            // Un style de bloc habille le **paragraphe**, pas l'intervalle
+            // enregistre. Sans ca, écrire par-dessus l'exemple posé à
+            // l'insertion laissait l'italique de la citation sur le premier
+            // mot seulement — le décalage, lui, portait déjà sur tout le
+            // paragraphe, et les deux ne disaient plus la même chose.
+            val range = if (span.style.takesWholeLine) {
+                blockRange(text, span)
+            } else {
+                span.start to span.end
+            }
+            AnnotatedString.Range(span.style.toSpanStyle(), range.first, range.second)
+        } +
         hashtagSpans(text, hashtagColors) + linkSpans(text),
     paragraphStyles = if (rhythm == null) emptyList() else headingParagraphs(text, spans, rhythm),
 )
+
+/**
+ * Le paragraphe qu'un style de bloc habille vraiment.
+ *
+ * Un seul calcul, partagé par la mise en forme du texte et par les décorations
+ * dessinées derrière (le trait d'une citation, son fond) : c'est ce qui garantit
+ * qu'ils couvrent exactement la même chose.
+ */
+fun blockRange(text: String, span: TextSpan): Pair<Int, Int> {
+    if (text.isEmpty()) return span.start to span.end
+    val from = span.start.coerceIn(0, text.length - 1)
+    val line = RichText.lineRange(text, from, (span.end - 1).coerceIn(from, text.length - 1))
+    var end = (line.last + 1).coerceAtMost(text.length)
+    if (text.getOrNull(end) == '\n') end += 1
+    return line.first to maxOf(end, line.first)
+}
 
 /**
  * Les mots-cles, mis en valeur.
@@ -205,15 +233,17 @@ private fun headingParagraphs(
     if (text.isEmpty()) return emptyList()
 
     val wanted = spans
+        // La couleur du trait et le fond n'ouvrent pas de paragraphe : ils ne
+        // changent ni le rythme ni le décalage, ils se dessinent derrière.
         .filter { it.style.takesWholeLine && !it.isEmpty }
+        .filter { it.style.family != StyleFamily.QUOTE_BAR }
+        .filter { it.style.family != StyleFamily.QUOTE_FILL }
+        // Le style de bloc et sa décoration partagent le même calcul de
+        // paragraphe : voir `blockRange`. Le retour à la ligne y est inclus,
+        // sinon Compose ouvre un paragraphe vide juste après.
         .mapNotNull { span ->
-            val from = span.start.coerceIn(0, text.length - 1)
-            val line = RichText.lineRange(text, from, (span.end - 1).coerceIn(from, text.length - 1))
-            var end = (line.last + 1).coerceAtMost(text.length)
-            // Le retour a la ligne appartient au paragraphe du titre, sinon
-            // Compose ouvre un paragraphe vide juste apres.
-            if (text.getOrNull(end) == '\n') end += 1
-            if (end > line.first) Triple(line.first, end, span.style) else null
+            val (from, to) = blockRange(text, span)
+            if (to > from) Triple(from, to, span.style) else null
         }
         .sortedBy { it.first }
 

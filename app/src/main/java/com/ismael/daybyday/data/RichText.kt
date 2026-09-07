@@ -38,6 +38,18 @@ enum class StyleFamily {
      * il ne change ni la taille ni la graisse — il change le **cadre**.
      */
     BLOCK,
+
+    /**
+     * La couleur du trait d'une citation.
+     *
+     * A part de la couleur du **texte** : on veut pouvoir mettre un trait bleu
+     * sur une citation ecrite en noir. Les deux vivaient au meme endroit, donc
+     * changer l'un changeait l'autre.
+     */
+    QUOTE_BAR,
+
+    /** Le fond d'une citation : rien, leger, ou plein. */
+    QUOTE_FILL,
 }
 
 /**
@@ -110,7 +122,22 @@ enum class TextStyleKind(
      */
     RULE_THIN("rt", "Trait fin", StyleFamily.BLOCK),
     RULE_BOLD("rb", "Trait épais", StyleFamily.BLOCK),
-    RULE_SHORT("rs", "Trait court", StyleFamily.BLOCK);
+    RULE_SHORT("rs", "Trait court", StyleFamily.BLOCK),
+
+    // La couleur du trait d'une citation. Ce sont les six teintes de
+    // l'application, les memes que les cartes et les mots-cles : une septieme
+    // couleur inventee ici se verrait tout de suite.
+    QUOTE_INDIGO("qi", "Indigo", StyleFamily.QUOTE_BAR, 0xFF5B4DF0),
+    QUOTE_VIOLET("qv", "Violet", StyleFamily.QUOTE_BAR, 0xFF8B5CF6),
+    QUOTE_MINT("qm", "Vert", StyleFamily.QUOTE_BAR, 0xFF10B981),
+    QUOTE_AMBER("qa", "Ambre", StyleFamily.QUOTE_BAR, 0xFFF59E0B),
+    QUOTE_ROSE("qr", "Rose", StyleFamily.QUOTE_BAR, 0xFFF2637F),
+    QUOTE_SKY("qs", "Bleu", StyleFamily.QUOTE_BAR, 0xFF2E9BF0),
+
+    // Le fond de la citation. Son absence vaut « pas de fond » : c'est le cas
+    // le plus courant, et il ne merite pas d'etre enregistre.
+    QUOTE_FILL_SOFT("qfs", "Fond léger", StyleFamily.QUOTE_FILL),
+    QUOTE_FILL_FULL("qff", "Fond plein", StyleFamily.QUOTE_FILL);
 
     /** Vrai pour les trois traits de separation. */
     val isRule: Boolean
@@ -121,7 +148,10 @@ enum class TextStyleKind(
      * l'autre ne se posent sur trois mots au milieu d'une phrase.
      */
     val takesWholeLine: Boolean
-        get() = family == StyleFamily.HEADING || family == StyleFamily.BLOCK
+        get() = family == StyleFamily.HEADING ||
+            family == StyleFamily.BLOCK ||
+            family == StyleFamily.QUOTE_BAR ||
+            family == StyleFamily.QUOTE_FILL
 
     companion object {
         fun fromCode(code: String): TextStyleKind? = entries.firstOrNull { it.code == code }
@@ -139,6 +169,10 @@ enum class TextStyleKind(
         val fonts: List<TextStyleKind> get() = of(StyleFamily.FONT)
 
         val blocks: List<TextStyleKind> get() = of(StyleFamily.BLOCK)
+
+        val quoteBars: List<TextStyleKind> get() = of(StyleFamily.QUOTE_BAR)
+
+        val quoteFills: List<TextStyleKind> get() = of(StyleFamily.QUOTE_FILL)
     }
 }
 

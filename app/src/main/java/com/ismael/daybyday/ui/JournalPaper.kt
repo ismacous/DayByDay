@@ -111,6 +111,23 @@ object JournalPaper {
      * passe en clair. On regarde la luminosite plutot que de tenir une
      * deuxieme liste a jour.
      */
+    /**
+     * Une teinte du papier, poussee vers son encre.
+     *
+     * Toujours **opaque** : un fond translucide laisse passer le lignage et les
+     * photos, et ce qui est pose dessus ne se lit plus pareil selon l'endroit
+     * de la page ou il se trouve. Un objet pose sur le papier a sa propre
+     * surface.
+     */
+    fun shade(paper: Color, amount: Float): Color {
+        val target = ink(paper)
+        return Color(
+            red = paper.red + (target.red - paper.red) * amount,
+            green = paper.green + (target.green - paper.green) * amount,
+            blue = paper.blue + (target.blue - paper.blue) * amount,
+        )
+    }
+
     fun ink(paper: Color): Color =
         if (paper.red + paper.green + paper.blue > 1.5f) Color(0xFF1B1B1B) else Color(0xFFECEFF3)
 

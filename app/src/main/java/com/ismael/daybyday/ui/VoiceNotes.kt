@@ -7,33 +7,27 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,126 +36,68 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import com.ismael.daybyday.data.Placement
 import com.ismael.daybyday.data.VoiceNote
 import com.ismael.daybyday.data.Waveform
 
 /**
- * Les vocaux sur la page du journal.
+ * Un vocal, dans le fil de la page.
  *
- * Ils sont **posés dans la page**, comme les photos, et pas rangés en bande au
- * dessus du texte. La raison est la même que pour les photos : sur un carnet,
- * on colle une chose à un endroit parce que c'est là qu'elle se rattache à ce
- * qu'on écrit. Une bande en haut de page range les vocaux ; les poser dans le
- * texte les raccroche à un moment.
- */
-
-/**
- * Un vocal posé : la barre de lecture.
+ * Il n'est **pas** posé librement comme une photo : un enregistrement n'est pas
+ * une image qu'on colle de travers dans un coin, c'est un morceau de la
+ * journée. Il se range donc sous le texte, dans l'ordre où il a été dit, et
+ * garde la largeur de la page.
  *
- * Trois zones, une par geste, et c'est ce qui permet à un seul objet de tout
- * faire sans menu : le rond joue, le reste de la barre choisit le vocal (et
- * ouvre ses réglages), et un appui maintenu le déplace.
+ * Ses couleurs viennent du **papier**, pas du thème : le rond de lecture est
+ * une teinte sombre de la page, opaque, et la barre une teinte à peine
+ * marquée. Une pastille violette du thème sur un papier ivoire ressemble à un
+ * bouton posé par une autre application.
  */
 @Composable
-fun PlacedVoiceNote(
+fun VoiceNoteRow(
     note: VoiceNote,
-    pageWidth: Float,
     playing: Boolean,
     /** Où en est la lecture, entre 0 et 1. Ignoré quand le vocal ne joue pas. */
     progress: () -> Float,
-    ink: Color,
-    accent: Color,
-    selected: Boolean,
-    snapToGrid: Boolean,
+    paper: Color,
     onPlay: () -> Unit,
-    onSelect: () -> Unit,
-    onMove: (VoiceNote) -> Unit,
+    onDelete: () -> Unit,
 ) {
-    if (!note.isPlaced) return
-    val density = LocalDensity.current
-    val width = Placement.voiceWidth(note.wide, pageWidth)
-
-    // Relus a chaque evenement, jamais figes dans le detecteur : un
-    // `pointerInput` n'installe son detecteur qu'une fois, et chaque evenement
-    // n'apporte que le deplacement depuis le precedent. Fige, le vocal
-    // repartirait de sa place d'origine a chaque image.
-    val live = rememberUpdatedState(note)
-    val liveSnap = rememberUpdatedState(snapToGrid)
-    val livePageWidth = rememberUpdatedState(pageWidth)
-
-    var centreX by remember(note.id) { mutableStateOf((note.placedX ?: 0f) + width / 2f) }
-    var centreY by remember(note.id) {
-        mutableStateOf((note.placedY ?: 0f) + Placement.VOICE_HEIGHT / 2f)
-    }
+    val ink = JournalPaper.ink(paper)
+    val surface = JournalPaper.shade(paper, 0.07f)
+    val button = JournalPaper.shade(paper, 0.78f)
 
     Row(
         modifier = Modifier
-            .offset(x = (note.placedX ?: 0f).dp, y = (note.placedY ?: 0f).dp)
-            .width(width.dp)
-            .height(Placement.VOICE_HEIGHT.dp)
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 5.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(ink.copy(alpha = 0.07f))
-            .then(
-                if (selected) {
-                    Modifier.border(2.dp, accent, RoundedCornerShape(18.dp))
-                } else {
-                    Modifier
-                }
-            )
-            .clickable(onClickLabel = "Réglages du vocal", onClick = onSelect)
-            .pointerInput(note.id) {
-                // Maintenir puis tirer : un simple glissement ferait defiler la
-                // page, et c'est ce qu'on veut quand on lit.
-                detectDragGesturesAfterLongPress(
-                    onDragStart = {
-                        centreX = (live.value.placedX ?: 0f) +
-                            Placement.voiceWidth(live.value.wide, livePageWidth.value) / 2f
-                        centreY = (live.value.placedY ?: 0f) + Placement.VOICE_HEIGHT / 2f
-                    },
-                ) { change, drag ->
-                    change.consume()
-                    centreX += with(density) { drag.x.toDp().value }
-                    centreY += with(density) { drag.y.toDp().value }
-                    onMove(
-                        Placement.applyVoice(
-                            note = live.value,
-                            centreX = centreX,
-                            centreY = centreY,
-                            snapToGrid = liveSnap.value,
-                            pageWidth = livePageWidth.value,
-                        )
-                    )
-                }
-            }
-            .padding(horizontal = 8.dp),
+            .background(surface)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
-                .size(38.dp)
+                .size(40.dp)
                 .clip(CircleShape)
-                .background(accent)
+                .background(button)
                 .clickable(onClickLabel = if (playing) "Arrêter" else "Écouter", onClick = onPlay),
             contentAlignment = Alignment.Center,
         ) {
             if (playing) {
-                // Le jeu d'icones de base n'a pas de « arreter » : un carre le
-                // dit aussi bien, et c'est le signe que tout le monde connait.
+                // Le jeu d'icônes de base n'a pas de « arrêter » : un carré le
+                // dit aussi bien, et c'est le signe que tout le monde connaît.
                 Box(
                     modifier = Modifier
-                        .size(12.dp)
+                        .size(13.dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(readableOn(accent)),
+                        .background(readableOn(button)),
                 )
             } else {
                 Icon(
                     Icons.Default.PlayArrow,
                     contentDescription = null,
-                    tint = readableOn(accent),
+                    tint = readableOn(button),
                     modifier = Modifier.size(22.dp),
                 )
             }
@@ -173,11 +109,10 @@ fun PlacedVoiceNote(
             waveform = note.waveform,
             played = { if (playing) progress() else 0f },
             ink = ink,
-            accent = accent,
+            accent = button,
             modifier = Modifier
                 .weight(1f)
-                .fillMaxHeight()
-                .padding(vertical = 14.dp),
+                .height(26.dp),
         )
 
         Spacer(Modifier.width(10.dp))
@@ -187,6 +122,21 @@ fun PlacedVoiceNote(
             style = MaterialTheme.typography.labelMedium,
             color = ink.copy(alpha = 0.75f),
         )
+
+        Box(
+            modifier = Modifier
+                .size(30.dp)
+                .clip(CircleShape)
+                .clickable(onClickLabel = "Supprimer ce vocal", onClick = onDelete),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Default.Clear,
+                contentDescription = null,
+                tint = ink.copy(alpha = 0.45f),
+                modifier = Modifier.size(16.dp),
+            )
+        }
     }
 }
 
@@ -288,46 +238,6 @@ fun RecordingBanner(elapsedMs: Long, onStop: () -> Unit) {
             style = MaterialTheme.typography.labelMedium,
             color = RECORD_RED.copy(alpha = 0.75f),
         )
-    }
-}
-
-/**
- * Les réglages du vocal choisi, à la place de la barre de mise en forme : on ne
- * fait qu'une chose à la fois, donc une seule barre à la fois. Même règle que
- * pour les photos.
- */
-@Composable
-fun VoiceToolsBar(
-    note: VoiceNote,
-    onWide: (Boolean) -> Unit,
-    onDelete: () -> Unit,
-    onDone: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        SoftChip(
-            label = "Barre entière",
-            selected = note.wide,
-            onClick = { onWide(true) },
-        )
-        SoftChip(
-            label = "Rétrécie",
-            selected = !note.wide,
-            onClick = { onWide(false) },
-        )
-        Spacer(Modifier.weight(1f))
-        SoftChip(
-            label = "Supprimer",
-            selected = false,
-            accent = RECORD_RED,
-            onClick = onDelete,
-        )
-        SoftChip(label = "Terminé", selected = true, onClick = onDone)
     }
 }
 

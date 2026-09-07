@@ -155,12 +155,16 @@ object PagePdf {
         // La page descend jusqu'au plus bas des deux : le texte, ou la photo la
         // plus basse. Une photo posee sous le dernier mot ne doit pas etre
         // coupee parce que le texte s'arretait avant elle.
-        val lowestPhoto = maxOf(
-            photos.filter { it.isPlaced }
-                .maxOfOrNull { (it.placedY ?: 0f) + it.displayHeight } ?: 0f,
-            Placement.lowestVoiceEdge(voiceNotes),
+        val lowestPhoto = photos.filter { it.isPlaced }
+            .maxOfOrNull { (it.placedY ?: 0f) + it.displayHeight } ?: 0f
+        // Les vocaux se rangent sous le texte, comme a l'ecran : ils ne sont
+        // pas poses a une hauteur choisie, ils suivent.
+        val voiceTop = textTop + textHeight + 8f
+        val voiceHeight = voiceNotes.size * (Placement.VOICE_HEIGHT + 10f)
+        val contentHeight = maxOf(
+            voiceTop + voiceHeight + topPadding,
+            lowestPhoto + topPadding,
         )
-        val contentHeight = maxOf(textTop + textHeight + topPadding, lowestPhoto + topPadding)
 
         val images = photos.filter { it.isPlaced }
             .mapNotNull { item -> decode(photoFile(item))?.let { item to it } }
@@ -207,6 +211,7 @@ object PagePdf {
                                     body = body,
                                     spans = spans,
                                     voiceNotes = voiceNotes,
+                                    voiceTop = voiceTop,
                                     accent = accent,
                                 )
                             }
@@ -257,6 +262,7 @@ object PagePdf {
         body: String,
         spans: List<TextSpan>,
         voiceNotes: List<VoiceNote>,
+        voiceTop: Float,
         accent: Color,
     ) {
         drawRect(color = paper, topLeft = Offset.Zero, size = Size(width, height))
@@ -303,21 +309,28 @@ object PagePdf {
         // Les vocaux ne s'ecoutent pas sur une feuille de papier, mais ils
         // occupent une place dans la page : les retirer de l'export ferait
         // deux mises en page differentes pour la meme journee.
-        voiceNotes.filter { it.isPlaced }.forEach { note ->
-            drawVoice(note, width, ink, accent)
+        voiceNotes.forEachIndexed { index, note ->
+            drawVoice(
+                note = note,
+                x = sidePadding,
+                y = voiceTop + index * (Placement.VOICE_HEIGHT + 10f),
+                barWidth = width - 2 * sidePadding,
+                ink = ink,
+                accent = accent,
+            )
         }
     }
 
     /** Un vocal, dessine comme a l'ecran : le rond, la silhouette, la duree. */
     private fun DrawScope.drawVoice(
         note: VoiceNote,
-        pageWidth: Float,
+        x: Float,
+        y: Float,
+        barWidth: Float,
         ink: Color,
         accent: Color,
     ) {
-        val x = note.placedX ?: return
-        val y = note.placedY ?: return
-        val w = Placement.voiceWidth(note.wide, pageWidth)
+        val w = barWidth
         val h = Placement.VOICE_HEIGHT
 
         drawRoundRect(

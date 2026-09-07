@@ -231,15 +231,12 @@ fun JournalScreen(
     // pastilles des mots-cles la lisent **au dessin**, et il leur faut donc
     // l'objet, pas sa valeur du moment.
     val bodyLayout = remember { mutableStateOf<TextLayoutResult?>(null) }
+    var bodyFocused by remember { mutableStateOf(false) }
     val textTopPadding = remember(density) {
         with(density) { JournalPaper.TOP_PADDING.toPx() }
     }
     var pageWidth by remember { mutableStateOf(0f) }
     var selectedPhotoId by remember { mutableStateOf<Long?>(null) }
-    // Un seul objet choisi a la fois : une photo **ou** un vocal. Les deux
-    // ouvrent leur propre barre de reglages en bas, et deux barres a la fois
-    // n'auraient nulle part ou tenir.
-    var selectedVoiceId by remember { mutableStateOf<Long?>(null) }
 
     val clipboard = LocalClipboardManager.current
 
@@ -281,7 +278,6 @@ fun JournalScreen(
         selectedPhotoId = id
         draft = null
         if (id != null) {
-            selectedVoiceId = null
             // On ne tape pas et on manipule une image : le clavier n'a plus
             // rien a faire la, et un panneau ouvert non plus.
             openPanel = null
@@ -340,6 +336,17 @@ fun JournalScreen(
     val active = if (hasSelection) RichText.stylesOn(spans, start, end) else typing
 
     fun applyStyle(style: TextStyleKind) {
+        // La couleur du trait d'une citation et son fond habillent le
+        // **paragraphe ou est le curseur**, sans rien inserer : ce ne sont pas
+        // des blocs qu'on pose, ce sont des reglages du bloc qui est deja la.
+        if (style.family == StyleFamily.QUOTE_BAR || style.family == StyleFamily.QUOTE_FILL) {
+            val line = RichText.lineRange(body.text, start, maxOf(end - 1, start))
+            val to = maxOf(line.last + 1, line.first + 1).coerceAtMost(body.text.length)
+            if (to <= line.first) return
+            spans = RichText.toggle(spans, line.first, to, style)
+            return
+        }
+
         // Un trait de separation ne se pose pas sur du texte : il **est** une
         // ligne, vide, qu'on insere. On l'ecrit donc, on lui pose son style, et
         // on laisse le curseur sur la ligne d'apres, prêt a continuer.
@@ -404,6 +411,13 @@ fun JournalScreen(
         spans = RichText.clearFamily(spans, from, to, StyleFamily.HEADING)
     }
 
+    /** Retire le fond d'une citation : « sans fond » est l'absence de style. */
+    fun clearQuoteFill() {
+        val line = RichText.lineRange(body.text, start, maxOf(end - 1, start))
+        val to = maxOf(line.last + 1, line.first + 1).coerceAtMost(body.text.length)
+        spans = RichText.clearFamily(spans, line.first, to, StyleFamily.QUOTE_FILL)
+    }
+
     /** Revient a la police d'origine sur la selection, ou pour la suite tapee. */
     fun clearFont() {
         if (hasSelection) {
@@ -445,6 +459,11 @@ fun JournalScreen(
         )
     }
 
+    // Les messages du bas de l'ecran. Declares avant les vocaux : c'est eux
+    // qui s'en servent pour dire qu'un micro est pris.
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
     // --- Les vocaux -------------------------------------------------------
     val storedVoice by remember(date) { repository.observeVoiceNotes(date) }
         .collectAsStateWithLifecycle(emptyList())
@@ -452,9 +471,6 @@ fun JournalScreen(
     val player = remember { VoicePlayer() }
     var recordingPath by remember { mutableStateOf<String?>(null) }
     var recordingMs by remember { mutableStateOf<Long?>(null) }
-    // La place d'un vocal pendant qu'un doigt le deplace : on n'ecrit pas dans
-    // la base a chaque image, comme pour les photos.
-    var voiceDraft by remember { mutableStateOf<VoiceNote?>(null) }
     // L'avancee de la lecture. Dans un `State` et lue au dessin : lue pendant
     // la composition, elle recomposerait la page vingt fois par seconde.
     val playProgress = remember { mutableStateOf(0f) }
@@ -496,10 +512,20 @@ fun JournalScreen(
 
     fun startRecording() {
         val relativePath = repository.media.newVoicePath(date.toEpochDay())
-        if (recorder.start(context, repository.media.file(relativePath))) {
-            player.stop()
-            playingPath = null
-            recordingPath = relativePath
+        when (recorder.start(context, repository.media.file(relativePath))) {
+            RecordStart.OK -> {
+                player.stop()
+                playingPath = null
+                recordingPath = relativePath
+            }
+            // Pendant un appel, `MediaRecorder` demarre sans broncher et
+            // enregistre du silence : mieux vaut refuser et le dire.
+            RecordStart.BUSY -> scope.launch {
+                snackbar.showSnackbar("Le micro est déjà pris — un appel en cours ?")
+            }
+            RecordStart.FAILED -> scope.launch {
+                snackbar.showSnackbar("Impossible d'ouvrir le micro.")
+            }
         }
     }
 
@@ -507,11 +533,16 @@ fun JournalScreen(
         val relativePath = recordingPath ?: return
         recordingPath = null
         val duration = recorder.stop()
+        val heard = recorder.heardSomething()
         val file = repository.media.file(relativePath)
-        if (duration == null) {
-            // Trop court, ou le micro n'a rien ecrit : on ne garde pas un
-            // fichier qui ne contient rien.
+        if (duration == null || !heard) {
+            // Trop court, ou le micro n'a rien entendu : on ne garde pas un
+            // vocal qui ne contient rien. Un enregistrement vide qui a l'air
+            // reussi est pire qu'un refus.
             file.delete()
+            if (duration != null) {
+                scope.launch { snackbar.showSnackbar("Rien n'a été entendu — vocal non gardé.") }
+            }
             return
         }
         val shape = recorder.waveform()
@@ -536,55 +567,12 @@ fun JournalScreen(
         if (allowed) startRecording() else askMicrophone.launch(Manifest.permission.RECORD_AUDIO)
     }
 
-    val voiceNotes = storedVoice.map { note ->
-        if (note.id == voiceDraft?.id) voiceDraft ?: note else note
-    }
-    val selectedVoice = voiceNotes.firstOrNull { it.id == selectedVoiceId }
-
-    // Le vocal qu'un doigt vient de deplacer : on enregistre une fois les
-    // doigts immobiles, pas a chaque image.
-    val pendingVoice = voiceDraft
-    LaunchedEffect(pendingVoice) {
-        if (pendingVoice != null) {
-            kotlinx.coroutines.delay(350)
-            repository.updateVoiceNote(pendingVoice)
-        }
-    }
-
-    // Les vocaux qui n'ont pas encore de place — ceux d'avant cette version, et
-    // celui qu'on vient de dire — se rangent sous le debut du texte.
-    LaunchedEffect(storedVoice, pageWidth) {
-        if (pageWidth <= 0f) return@LaunchedEffect
-        storedVoice.filterNot { it.isPlaced }.forEachIndexed { index, note ->
-            repository.updateVoiceNote(
-                Placement.autoPlaceVoice(
-                    note = note,
-                    index = index,
-                    pageWidth = pageWidth,
-                    topY = Placement.topMargin + Placement.GRID * 2f,
-                )
-            )
-        }
-    }
-
-    fun selectVoice(id: Long?) {
-        selectedVoiceId = id
-        voiceDraft = null
-        if (id != null) {
-            selectPhoto(null)
-            openPanel = null
-            heldSelection = null
-            awaitingKeyboard = false
-            focusManager.clearFocus()
-        }
-    }
+    val voiceNotes = storedVoice
 
     // --- L'export PDF ---------------------------------------------------
     // Lue ici, dans la composition : `PagePdf` travaille hors de Compose et ne
     // peut pas aller chercher le theme lui-meme.
     val accentForPdf = MaterialTheme.colorScheme.primary
-    val snackbar = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     val exportPdf = rememberLauncherForActivityResult(
         // On laisse l'utilisateur choisir ou ranger le fichier, comme pour la
         // sauvegarde : rien ne sort du telephone sans qu'il ait dit ou.
@@ -709,14 +697,13 @@ fun JournalScreen(
 
                 // La page descend au moins jusqu'au bas de la photo la plus
                 // basse : sans ca, une image posee en bas serait inatteignable.
+                // Seules les photos comptent ici : elles sont posees a une
+                // hauteur donnee, donc la page doit descendre jusqu'a elles.
+                // Les vocaux, eux, sont dans le fil et ajoutent leur propre
+                // hauteur sous le texte.
                 val pageHeight = maxOf(
                     viewportHeight,
-                    (
-                        maxOf(
-                            Placement.lowestEdge(journalMedia),
-                            Placement.lowestVoiceEdge(voiceNotes),
-                        ) + 160f
-                        ).dp,
+                    (Placement.lowestEdge(journalMedia) + 160f).dp,
                 )
 
                 // Le curseur ne doit jamais passer sous le clavier. Le champ
@@ -725,7 +712,11 @@ fun JournalScreen(
                 // calcule donc nous-memes ou est le curseur, et on amene la
                 // page a lui — avec une marge, pour qu'on voie aussi la ligne
                 // qui suit et non le curseur colle au bord.
-                LaunchedEffect(body.selection, bodyLayout.value, viewportHeight) {
+                LaunchedEffect(body.selection, bodyLayout.value, viewportHeight, bodyFocused) {
+                    // Seulement quand on ecrit vraiment. Perdre le focus remet
+                    // la selection a zero, et la page remontait alors d'un coup
+                    // tout en haut — il suffisait d'appuyer sur un vocal.
+                    if (!bodyFocused) return@LaunchedEffect
                     val layout = bodyLayout.value ?: return@LaunchedEffect
                     val caret = body.selection.end
                         .coerceIn(0, layout.layoutInput.text.length)
@@ -769,9 +760,15 @@ fun JournalScreen(
                             modifier = Modifier.matchParentSize(),
                         )
                     }
-                    if ((selectedPhoto != null || selectedVoice != null) && snapToGrid) {
+                    if (selectedPhoto != null && snapToGrid) {
                         PhotoGrid(modifier = Modifier.matchParentSize())
                     }
+
+                    // La page proprement dite, puis les vocaux dessous. Les
+                    // deux dans une colonne, et le lignage derriere les deux :
+                    // un vocal est pose sur le papier, pas a cote de la feuille.
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                    Box(modifier = Modifier.fillMaxWidth()) {
 
                     // Sous le texte : le fond, puis le milieu.
                     journalMedia
@@ -892,9 +889,17 @@ fun JournalScreen(
                                 // page entiere.
                                 spans.filter { it.style == TextStyleKind.QUOTE && !it.isEmpty }
                                     .map { quote ->
+                                        // La couleur du trait est la sienne, pas
+                                        // celle du texte : un trait bleu sur une
+                                        // citation ecrite en noir doit etre
+                                        // possible.
                                         val tint = spans.firstOrNull {
-                                            it.style.family == StyleFamily.COLOR &&
-                                                it.start <= quote.start && it.end >= quote.end
+                                            it.style.family == StyleFamily.QUOTE_BAR &&
+                                                overlaps(it, quote)
+                                        }
+                                        val fill = spans.firstOrNull {
+                                            it.style.family == StyleFamily.QUOTE_FILL &&
+                                                overlaps(it, quote)
                                         }
                                         // Le trait couvre le **paragraphe**, pas
                                         // l'intervalle enregistre : une citation
@@ -904,20 +909,25 @@ fun JournalScreen(
                                         // — le trait s'arretait alors a la
                                         // premiere ligne d'une citation qui en
                                         // fait trois.
-                                        val line = RichText.lineRange(
-                                            body.text,
-                                            quote.start,
-                                            (quote.end - 1).coerceAtLeast(quote.start),
-                                        )
+                                        val (from, to) = blockRange(body.text, quote)
+                                        val barColor = tint?.let { Color(it.style.argb) } ?: ink
                                         QuoteBar(
-                                            range = line.first..maxOf(line.last, line.first),
-                                            color = tint?.let { Color(it.style.argb) } ?: ink,
+                                            range = from..maxOf(to - 1, from),
+                                            color = barColor,
+                                            fill = when (fill?.style) {
+                                                TextStyleKind.QUOTE_FILL_SOFT ->
+                                                    barColor.copy(alpha = 0.08f)
+                                                TextStyleKind.QUOTE_FILL_FULL ->
+                                                    barColor.copy(alpha = 0.18f)
+                                                else -> null
+                                            },
                                         )
                                     }
                             }
                             .hashtagChips(bodyLayout, textSize.toFloat())
                             .focusRequester(bodyFocus)
                             .onFocusChanged { state ->
+                                bodyFocused = state.isFocused
                                 // Retourner ecrire referme le panneau : sinon il reste
                                 // sous le clavier qui remonte, et les deux s'empilent.
                                 // C'est l'appui de l'utilisateur qui decide du curseur,
@@ -943,30 +953,6 @@ fun JournalScreen(
                             )
                         }
 
-                    // Les vocaux sont devant le texte : ce sont des objets qu'on
-                    // touche, pas un fond qu'on recouvre.
-                    voiceNotes.filter { it.isPlaced }.forEach { note ->
-                        PlacedVoiceNote(
-                            note = note,
-                            pageWidth = pageWidth,
-                            playing = playingPath == note.relativePath,
-                            progress = { playProgress.value },
-                            ink = ink,
-                            accent = MaterialTheme.colorScheme.primary,
-                            selected = selectedVoiceId == note.id,
-                            snapToGrid = snapToGrid,
-                            onPlay = {
-                                player.toggle(
-                                    file = repository.media.file(note.relativePath),
-                                    key = note.relativePath,
-                                ) { playingPath = null }
-                                playingPath = player.playing
-                            },
-                            onSelect = { selectVoice(note.id) },
-                            onMove = { voiceDraft = it },
-                        )
-                    }
-
                     // Le cadre de manipulation passe par-dessus tout, meme sur une
                     // photo de fond que le texte recouvre.
                     selectedPhoto?.let { photo ->
@@ -976,6 +962,36 @@ fun JournalScreen(
                             snapToGrid = snapToGrid,
                             onChange = { draft = it },
                         )
+                    }
+                    }
+
+                    // Les vocaux, dans l'ordre ou ils ont ete dits. Ils ne se
+                    // posent pas librement comme les photos : un enregistrement
+                    // n'est pas un objet qu'on colle de travers, c'est un
+                    // morceau de la journee, et il se range a la suite.
+                    voiceNotes.forEach { note ->
+                        VoiceNoteRow(
+                            note = note,
+                            playing = playingPath == note.relativePath,
+                            progress = { playProgress.value },
+                            paper = paper,
+                            onPlay = {
+                                player.toggle(
+                                    file = repository.media.file(note.relativePath),
+                                    key = note.relativePath,
+                                ) { playingPath = null }
+                                playingPath = player.playing
+                            },
+                            onDelete = {
+                                if (playingPath == note.relativePath) {
+                                    player.stop()
+                                    playingPath = null
+                                }
+                                app.appScope.launch { repository.deleteVoiceNote(note) }
+                            },
+                        )
+                    }
+                    if (voiceNotes.isNotEmpty()) Spacer(Modifier.height(24.dp))
                     }
                 }
             }
@@ -1007,36 +1023,7 @@ fun JournalScreen(
                 )
             }
 
-            if (selectedVoice != null) {
-                val voice = selectedVoice
-                VoiceToolsBar(
-                    note = voice,
-                    onWide = { wide ->
-                        // La barre change de largeur autour de son centre :
-                        // elle reste ou on l'avait posee.
-                        val centre = (voice.placedX ?: 0f) +
-                            Placement.voiceWidth(voice.wide, pageWidth) / 2f
-                        val resized = voice.copy(wide = wide)
-                        val moved = Placement.applyVoice(
-                            note = resized,
-                            centreX = centre,
-                            centreY = (voice.placedY ?: 0f) + Placement.VOICE_HEIGHT / 2f,
-                            snapToGrid = snapToGrid,
-                            pageWidth = pageWidth,
-                        )
-                        voiceDraft = moved
-                    },
-                    onDelete = {
-                        selectVoice(null)
-                        if (playingPath == voice.relativePath) {
-                            player.stop()
-                            playingPath = null
-                        }
-                        app.appScope.launch { repository.deleteVoiceNote(voice) }
-                    },
-                    onDone = { selectVoice(null) },
-                )
-            } else if (selectedPhoto != null) {
+            if (selectedPhoto != null) {
                 val photo = selectedPhoto
                 PhotoToolsBar(
                     item = photo,
@@ -1075,6 +1062,7 @@ fun JournalScreen(
                     },
                     onClearHeading = { clearHeading() },
                     onClearFont = { clearFont() },
+                    onClearQuoteFill = { clearQuoteFill() },
                     onList = { marker ->
                         prefixLine(marker.marker)
                         showPanel(null)
@@ -1162,6 +1150,16 @@ fun JournalPreview(
         }
     }
 }
+
+/**
+ * Deux intervalles qui se touchent.
+ *
+ * La couleur du trait d'une citation et son fond sont poses sur le meme
+ * paragraphe qu'elle, mais rien ne garantit que les bornes enregistrees soient
+ * identiques au caractere pres — l'un a pu etre pose avant que le texte ne
+ * s'allonge. Se chevaucher suffit donc a dire « c'est la meme citation ».
+ */
+private fun overlaps(a: TextSpan, b: TextSpan): Boolean = a.start < b.end && b.start < a.end
 
 /**
  * L'air garde entre le curseur et le bord de la page quand elle defile toute

@@ -1,6 +1,7 @@
 package com.ismael.daybyday.ui
 
 import android.content.Context
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.os.Build
@@ -45,12 +46,29 @@ class VoiceRecorder {
     val isRecording: Boolean get() = recorder != null
 
     /**
-     * Demarre l'enregistrement vers [target]. Rend faux si le micro n'a pas
-     * pu s'ouvrir — un autre enregistrement en cours, un appel telephonique.
+     * Demarre l'enregistrement vers [target].
+     *
+     * On **demande d'abord si le micro est libre**, au lieu de se contenter du
+     * resultat de `MediaRecorder`. Pendant un appel, celui-ci demarre sans
+     * broncher et enregistre du silence : le vocal existe, il dure dix
+     * secondes, et il ne contient rien. Un enregistrement vide qui a l'air
+     * reussi est pire qu'un refus.
      */
-    fun start(context: Context, target: File): Boolean {
+    fun start(context: Context, target: File): RecordStart {
         stop()
         samples.clear()
+
+        val audio = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        if (audio != null) {
+            // Hors du mode normal, le telephone est en communication : le micro
+            // appartient a l'appel.
+            if (audio.mode != AudioManager.MODE_NORMAL) return RecordStart.BUSY
+            val takenByAnother = runCatching {
+                audio.activeRecordingConfigurations.isNotEmpty()
+            }.getOrDefault(false)
+            if (takenByAnother) return RecordStart.BUSY
+        }
+
         target.parentFile?.mkdirs()
         val instance = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             MediaRecorder(context)
@@ -71,11 +89,11 @@ class VoiceRecorder {
             instance.start()
             recorder = instance
             startedAt = SystemClock.elapsedRealtime()
-            true
+            RecordStart.OK
         }.getOrElse {
             runCatching { instance.release() }
             target.delete()
-            false
+            RecordStart.FAILED
         }
     }
 
@@ -122,9 +140,37 @@ class VoiceRecorder {
     /** La silhouette du son qui vient d'etre enregistre. */
     fun waveform(): String = Waveform.encode(samples)
 
+    /**
+     * Le silence qui ne compte pas.
+     *
+     * Meme micro libre, un vocal peut ne rien contenir : on l'a lance dans un
+     * endroit muet, ou le systeme a coupe la source. La plus forte mesure du
+     * micro le dit, et c'est gratuit — on les a deja prises pour la forme
+     * d'onde.
+     */
+    fun heardSomething(): Boolean = samples.any { it > SILENCE }
+
     private companion object {
         const val MINIMUM_MS = 500L
+
+        /**
+         * En dessous, c'est du bruit de fond. Un micro ouvert dans une piece
+         * calme rend toujours quelques centaines ; zero absolu n'arrive que
+         * quand la source est coupee.
+         */
+        const val SILENCE = 400
     }
+}
+
+/** Ce qui s'est passe quand on a demande a enregistrer. */
+enum class RecordStart {
+    OK,
+
+    /** Le micro est pris : un appel en cours, ou une autre application. */
+    BUSY,
+
+    /** Le telephone a refuse pour une autre raison. */
+    FAILED,
 }
 
 /**

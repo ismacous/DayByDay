@@ -134,6 +134,8 @@ fun JournalToolbar(
     onStyle: (TextStyleKind) -> Unit,
     onClearHeading: () -> Unit,
     onClearFont: () -> Unit,
+    /** Retire le fond d'une citation : « sans fond » est l'absence de style. */
+    onClearQuoteFill: () -> Unit,
     onList: (ListMarker) -> Unit,
     onAddPhoto: () -> Unit,
     /** Insere un `#` au curseur, et rouvre le clavier pour ecrire le mot. */
@@ -275,6 +277,7 @@ fun JournalToolbar(
                     onStyle = onStyle,
                     onClearHeading = onClearHeading,
                     onClearFont = onClearFont,
+                    onClearQuoteFill = onClearQuoteFill,
                     onList = onList,
                     onAddPhoto = onAddPhoto,
                     photos = photos,
@@ -294,6 +297,7 @@ private fun ToolPanelContent(
     onStyle: (TextStyleKind) -> Unit,
     onClearHeading: () -> Unit,
     onClearFont: () -> Unit,
+    onClearQuoteFill: () -> Unit,
     onList: (ListMarker) -> Unit,
     onAddPhoto: () -> Unit,
     photos: List<MediaItem>,
@@ -318,6 +322,7 @@ private fun ToolPanelContent(
                 onStyle = onStyle,
                 onClearHeading = onClearHeading,
                 onClearFont = onClearFont,
+                onClearQuoteFill = onClearQuoteFill,
                 onList = onList,
                 onAddPhoto = onAddPhoto,
                 photos = photos,
@@ -360,6 +365,7 @@ private fun AllToolsPanel(
     onStyle: (TextStyleKind) -> Unit,
     onClearHeading: () -> Unit,
     onClearFont: () -> Unit,
+    onClearQuoteFill: () -> Unit,
     onList: (ListMarker) -> Unit,
     onAddPhoto: () -> Unit,
     photos: List<MediaItem>,
@@ -425,6 +431,45 @@ private fun AllToolsPanel(
                     Text("A", fontSize = 15.sp, fontStyle = FontStyle.Italic)
                 }
             }
+        }
+    }
+
+    // Les reglages de la citation n'apparaissent que quand le curseur est
+    // dedans : proposer la couleur d'un trait qui n'existe pas ne veut rien
+    // dire, et ca allongerait le menu pour tout le monde.
+    if (TextStyleKind.QUOTE in active) {
+        SectionLabel("Trait de la citation")
+        SwatchGrid(
+            styles = TextStyleKind.quoteBars,
+            active = active,
+            onStyle = onStyle,
+            highlighted = false,
+        )
+        SectionLabel("Fond de la citation")
+        TextStyleKind.quoteFills.forEach { style ->
+            PanelRow(
+                label = style.label,
+                selected = style in active,
+                onClick = { onStyle(style) },
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(
+                            paperAccent().copy(
+                                alpha = if (style == TextStyleKind.QUOTE_FILL_FULL) 0.30f else 0.12f
+                            )
+                        ),
+                )
+            }
+        }
+        PanelRow(
+            label = "Sans fond",
+            selected = active.none { it.family == StyleFamily.QUOTE_FILL },
+            onClick = { onClearQuoteFill() },
+        ) {
+            Text("—", fontSize = 15.sp)
         }
     }
 

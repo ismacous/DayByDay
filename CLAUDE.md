@@ -451,6 +451,16 @@ téléphone (Samsung S25, Android 15).
   application qui sonne quand même est une application qu'on désinstalle. Le
   son part en même temps que la vibration, au **passage** d'état comme
   l'animation, jamais à l'affichage.
+- **Le journal a un seul propriétaire.** Le titre, le texte et sa mise en forme
+  sont écrits **uniquement** par l'écran du journal
+  (`DayRepository.saveJournal`) ; « Ma journée » écrit tout **sauf** ces trois
+  champs (`saveDayKeepingJournal`) et n'en garde plus de copie — il les
+  observe. Avant, les deux écrans en avaient chacun une copie et les
+  réécrivaient : le dernier à enregistrer gagnait, et ce n'était pas celui qui
+  avait édité. Effacer une page puis revenir à la journée remettait l'ancien
+  texte, donc **une page était impossible à vider**. La correction est une
+  séparation de propriété, pas un correctif d'ordre : aucun ordre
+  d'enregistrement ne peut plus faire perdre ce qu'on vient d'écrire.
 - **Vocaux** (`data/VoiceNote`, `ui/VoiceRecorder.kt`, `ui/VoiceNotes.kt`) : leur
   **propre table**, pas un média de plus. Un vocal ne se pose pas sur la page,
   ne se recadre pas, n'a ni forme ni inclinaison — et il a une durée, que rien
@@ -469,11 +479,25 @@ téléphone (Samsung S25, Android 15).
   première restauration sans que rien ne le signale) et « est-ce que cette
   journée est vide ? », qui décide de supprimer la ligne — d'où
   `DayRepository.hasAttachments`, qui pose la question à un seul endroit.
-  Les pastilles vivent **sous le titre**, pas dans un panneau : un
-  enregistrement qu'on ne voit qu'en ouvrant un menu n'existe pas. La croix de
-  suppression est toujours visible — un appui long qu'on ne voit pas se
-  déclenche quand on ne l'attendait pas, et un vocal ne se relit pas en
-  diagonale comme une phrase.
+  Ils sont **posés dans la page**, comme les photos : maintenir puis tirer les
+  déplace, la grille les aligne, et deux tailles seulement (barre entière ou
+  rétrécie) — une barre de lecture n'a pas de proportions à respecter comme une
+  photo, et la tirer au doigt donnerait surtout des largeurs bancales. Rangés
+  en bande au-dessus du texte, ils n'étaient qu'une liste ; posés entre deux
+  paragraphes, ils appartiennent à un moment.
+  La **silhouette du son** (`data/Waveform.kt`, testée) est mesurée pendant
+  l'enregistrement : `getMaxAmplitude` rend le plus fort depuis le dernier
+  appel, donc un point régulier suffit sans rien décoder. Elle est
+  **normalisée** — la plus haute barre vaut toujours le maximum, donc un vocal
+  chuchoté se voit autant qu'un vocal crié : on ne dessine pas un volume, on
+  dessine un rythme. Le sous-échantillonnage garde le **plus fort** de chaque
+  tranche et non la moyenne, qui aplatit tout jusqu'à une ligne droite. Un
+  vocal sans mesure (ceux d'avant) garde une silhouette neutre : une barre de
+  lecture sans barres ne ressemble à rien.
+  Les barres sont **dessinées**, jamais composées : cinquante-six petites vues
+  à remesurer à chaque image de la lecture, pour des rectangles de deux points
+  de large. L'avancée de la lecture est lue **dans le dessin**, comme toute
+  valeur qui change à chaque image.
 - **Icônes** : le projet n'embarque que le jeu **de base**
   (`material-icons-core`). Beaucoup d'icônes courantes n'y sont pas (le micro,
   par exemple) : on recopie alors le dessin dans `res/drawable/`, plutôt que

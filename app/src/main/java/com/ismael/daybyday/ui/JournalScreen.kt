@@ -211,7 +211,6 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
     // La mise en page du texte, et de quoi convertir des points en pixels : les
     // deux servent a savoir ou se trouve le curseur dans la page.
     var bodyLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
-    val density = LocalDensity.current
     val textTopPadding = remember(density) {
         with(density) { JournalPaper.TOP_PADDING.toPx() }
     }

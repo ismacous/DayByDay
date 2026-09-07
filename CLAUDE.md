@@ -431,6 +431,36 @@ téléphone (Samsung S25, Android 15).
   lettre**. Normaliser la chaîne entière puis jeter les accents la raccourcit,
   et l'extrait affiché autour du mot trouvé serait décalé d'autant de lettres
   accentuées qu'il y a avant lui.
+- **La note est sur dix, mais elle est stockée sur trois.** Les quatre couleurs
+  valent 0, 1, 2 et 3 (`DayColor.score`) — c'est ce qui est enregistré depuis la
+  version 1, et ça ne bouge pas. La conversion en note sur dix se fait **à
+  l'affichage seulement** (`outOfTen`, `formatAverage`) : « 1,7 sur 3 » ne dit à
+  personne si c'est bien ou mal, « 5,7 sur 10 » si.
+  Et la note **dit d'où elle vient** : une phrase sous le chiffre (`SCORE_CAPTION`)
+  et une feuille « Comment c'est calculé ? ». Un chiffre seul laisse deviner ce
+  qu'il compte, et on devine toujours quelque chose de plus compliqué que la
+  vérité. La feuille explique aussi pourquoi ni les pas, ni le sport, ni l'argent
+  n'entrent dans la note — c'est la règle 2, vue depuis l'écran : ce sont eux
+  qu'on **compare** ensuite à la couleur.
+- **Alignement et taille dans le journal** : deux choses de nature différente,
+  et c'est ce qui décide où elles vivent. L'alignement est une propriété du
+  **bloc** (`BlockAlign`, colonne `alignCode`, migration 19→20) : centrer la
+  moitié d'un paragraphe ne veut rien dire. La taille est un **intervalle**
+  (`StyleFamily.SIZE`), comme le gras. Elle s'exprime en **em**, donc en part de
+  la taille de base : grossir un mot suit le réglage de la page au lieu de le
+  contredire, et les deux écarts (0,85 et 1,15) restent sous la hauteur d'une
+  ligne du lignage, sans quoi le texte sortirait de ses lignes.
+  L'alignement ne survit pas dans le texte à plat — comme les vocaux, il n'a
+  pas d'équivalent en caractères. Le PDF ne le montre donc pas.
+- **Toucher un mot-clé ouvre les journées qui le portent**
+  (`ui/HashtagTap.kt` → `search?tag=…`). Écrire `#mood` en faisait déjà une
+  étiquette retrouvable dans la recherche, mais il fallait *savoir* que la
+  recherche avait un filtre « Mots-clés », l'ouvrir, et y retrouver son mot
+  parmi les autres. Personne ne fait ça, et le mot est déjà sous le doigt.
+  Mêmes précautions que pour un lien entre pages, et pour la même raison :
+  `getOffsetForPosition` répond toujours quelque chose, donc sans la
+  vérification en ligne **et** en colonne, appuyer dans le vide ouvrirait la
+  recherche et le curseur ne se poserait plus au bas de la page.
 - **Bilan de la semaine** : il raconte des **faits** (« bougé 3 jours »), jamais
   des corrélations. Sur sept jours, comparer « les jours où tu as bougé » aux
   autres n'a aucun sens statistique — ces rapprochements restent dans « Ce qui va

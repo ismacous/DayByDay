@@ -262,13 +262,18 @@ class RichTextTest {
     fun `les codes des styles sont uniques et stables`() {
         val codes = TextStyleKind.entries.map { it.code }
         assertEquals(codes.size, codes.toSet().size)
-        // Chaque style appartient a une famille et une seule.
+        // Chaque style appartient a une famille et une seule. La somme se fait
+        // sur StyleFamily.entries et non sur une liste ecrite a la main :
+        // ajouter une famille sans toucher au test cassait le test, jamais le
+        // code, et l'echec ne disait rien du vrai probleme.
         assertEquals(
             TextStyleKind.entries.size,
-            TextStyleKind.marks.size + TextStyleKind.headings.size +
-                TextStyleKind.colors.size + TextStyleKind.highlights.size +
-                TextStyleKind.fonts.size + TextStyleKind.blocks.size,
+            StyleFamily.entries.sumOf { TextStyleKind.of(it).size },
         )
+        // Une famille vide est une famille qu'on a declaree puis oubliee.
+        StyleFamily.entries.forEach {
+            assertTrue("la famille $it n'a aucun style", TextStyleKind.of(it).isNotEmpty())
+        }
     }
 
     @Test

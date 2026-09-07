@@ -96,6 +96,7 @@ import com.ismael.daybyday.R
 import com.ismael.daybyday.dayByDayApp
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.util.Locale
 
 /**
  * L'ecran d'ecriture du journal : rien d'autre que la page du jour.
@@ -778,7 +779,7 @@ fun JournalScreen(
     val layouts = remember { mutableMapOf<Long, MutableState<TextLayoutResult?>>() }
     var dragKey by remember { mutableStateOf<Long?>(null) }
     var dragDy by remember { mutableStateOf(0f) }
-    var selectedRule by remember { mutableStateOf<Long?>(null) }
+    var selectedBlock by remember { mutableStateOf<Long?>(null) }
 
     /**
      * Le bloc suit le doigt, et la page se reorganise sous lui.
@@ -825,7 +826,7 @@ fun JournalScreen(
         history.record(snapshot(), structural = true)
         focusManager.clearFocus()
         openPanel = null
-        selectedRule = null
+        selectedBlock = null
         dragKey = key
         dragDy = 0f
     }
@@ -851,7 +852,12 @@ fun JournalScreen(
                     navigationIconContentColor = ink,
                     actionIconContentColor = ink,
                 ),
-                title = { Text(Dates.dayMedium(date)) },
+                // Pas de titre ici : la date est **sur la page**, comme
+                // l'en-tete d'une lettre. Coincee entre la fleche de retour et
+                // trois boutons, elle passait a la ligne — et une date qui
+                // tient sur deux lignes dans une barre n'est pas une barre bien
+                // remplie, c'est une date au mauvais endroit.
+                title = {},
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
@@ -892,13 +898,27 @@ fun JournalScreen(
                 // reste entre la barre d'outils et le clavier.
                 .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars)),
         ) {
+            // Le surtitre : la date, en petites capitales espacees. Elle etait
+            // dans la barre du haut, ou elle se disputait la place avec quatre
+            // boutons. Ici elle appartient a la page, et le titre qu'on ecrit
+            // devient enfin le premier mot de la feuille.
+            Text(
+                text = Dates.dayMedium(date).uppercase(Locale.FRENCH),
+                style = MaterialTheme.typography.labelSmall,
+                color = ink.copy(alpha = 0.45f),
+                letterSpacing = 1.4.sp,
+                modifier = Modifier.padding(start = TEXT_INDENT, end = 20.dp),
+            )
+
+            Spacer(Modifier.height(2.dp))
+
             BasicTextField(
                 value = title,
                 onValueChange = {
                     history.record(snapshot(), structural = false)
                     title = it
                 },
-                textStyle = MaterialTheme.typography.headlineSmall.copy(
+                textStyle = MaterialTheme.typography.headlineMedium.copy(
                     color = ink,
                     fontWeight = FontWeight.Bold,
                 ),
@@ -908,9 +928,9 @@ fun JournalScreen(
                         if (title.text.isEmpty()) {
                             Text(
                                 "Titre de la journée",
-                                style = MaterialTheme.typography.headlineSmall,
+                                style = MaterialTheme.typography.headlineMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = ink.copy(alpha = 0.45f),
+                                color = ink.copy(alpha = 0.28f),
                             )
                         }
                         field()
@@ -918,12 +938,14 @@ fun JournalScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 12.dp)
+                    .padding(start = TEXT_INDENT, end = 20.dp, bottom = 14.dp)
                     .selectWordOnDoubleTap({ title }) { title = title.copy(selection = it) }
                     .testTag("day-title-field"),
             )
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+            // Un trait a peine pose : il separe l'en-tete de la page qui defile
+            // dessous, sans couper la feuille en deux.
+            HorizontalDivider(color = ink.copy(alpha = 0.07f))
 
             // La page : les blocs et les photos defilent ensemble, dans un seul
             // conteneur. Les positions des photos sont donc des positions dans
@@ -1021,7 +1043,7 @@ fun JournalScreen(
                         recordingKey = recordingKey,
                         recordingMs = recordingMs,
                         recordingWave = recordingWave,
-                        selectedRule = selectedRule,
+                        selectedBlock = selectedBlock,
                         dragKey = dragKey,
                         dragOffset = { dragDy },
                         layouts = layouts,
@@ -1031,7 +1053,7 @@ fun JournalScreen(
                         onFocused = { key, focused ->
                             if (focused) {
                                 focusedKey = key
-                                selectedRule = null
+                                selectedBlock = null
                                 if (openPanel != null) {
                                     openPanel = null
                                     heldSelection = null
@@ -1048,7 +1070,7 @@ fun JournalScreen(
                         onDrag = ::dragBy,
                         onDragEnd = ::endDrag,
                         onOpenDay = onOpenDay,
-                        onSelectRule = { selectedRule = it },
+                        onSelectBlock = { selectedBlock = it },
                         onDeleteBlock = ::removeBlock,
                         onQuoteBar = { key, style ->
                             history.record(snapshot(), structural = true)
@@ -1253,7 +1275,7 @@ private fun PageColumn(
     recordingKey: Long?,
     recordingMs: Long,
     recordingWave: String,
-    selectedRule: Long?,
+    selectedBlock: Long?,
     dragKey: Long?,
     dragOffset: () -> Float,
     layouts: MutableMap<Long, MutableState<TextLayoutResult?>>,
@@ -1267,7 +1289,7 @@ private fun PageColumn(
     onDrag: (Float) -> Unit,
     onDragEnd: () -> Unit,
     onOpenDay: (LocalDate) -> Unit,
-    onSelectRule: (Long?) -> Unit,
+    onSelectBlock: (Long?) -> Unit,
     onDeleteBlock: (Long) -> Unit,
     onQuoteBar: (Long, TextStyleKind?) -> Unit,
     onQuoteFill: (Long, TextStyleKind?) -> Unit,
@@ -1281,7 +1303,9 @@ private fun PageColumn(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = pageHeight)
-            .padding(horizontal = 20.dp),
+            // A gauche, juste de quoi loger la colonne des poignees ; le texte
+            // se decale d'autant et retombe sur `TEXT_INDENT`, celui du titre.
+            .padding(start = PAGE_START, end = 20.dp),
     ) {
         // La marge du haut est un espace, pas un `padding` : les places des
         // blocs sont mesurees dans cette colonne, et un `padding` les
@@ -1300,146 +1324,181 @@ private fun PageColumn(
                     }
                 }
 
-                val dragging = dragKey == block.key
+                val current = focusedKey == block.key || selectedBlock == block.key
+                val grip = Modifier.blockDrag(
+                    onStart = { onDragStart(block.key) },
+                    onDrag = onDrag,
+                    onEnd = onDragEnd,
+                )
+
+                // La couche est posee **toujours**, jamais seulement pendant le
+                // geste. C'est le bug qui a rendu la premiere version
+                // inutilisable : ajouter un `graphicsLayer` au demarrage du
+                // deplacement changeait la forme de la chaine de modificateurs,
+                // Compose recreait le detecteur d'appui, et le geste en cours
+                // etait annule aussitot — le bloc sursautait puis restait sur
+                // place. Une chaine de forme constante ne peut plus le faire.
                 val slot = Modifier
                     .fillMaxWidth()
                     .reportPlacement { top, height -> onPlaced(block.key, top, height) }
-                    .then(
-                        if (dragging) {
-                            // Le decalage est lu **dans** `graphicsLayer` : lu
-                            // pendant la composition, il remesurerait la page a
-                            // chaque image du geste.
-                            Modifier.graphicsLayer {
-                                translationY = dragOffset()
-                                scaleX = 1.02f
-                                scaleY = 1.02f
-                                shadowElevation = 14f
-                                alpha = 0.97f
+                    .graphicsLayer {
+                        val moving = dragKey == block.key
+                        // Lu **dans** la couche : lu pendant la composition, le
+                        // decalage remesurerait la page a chaque image.
+                        translationY = if (moving) dragOffset() else 0f
+                        scaleX = if (moving) 1.02f else 1f
+                        scaleY = if (moving) 1.02f else 1f
+                        shadowElevation = if (moving) 14f else 0f
+                        alpha = if (moving) 0.97f else 1f
+                    }
+
+                Column(modifier = slot) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        // La poignee, dans la marge. Elle est la pour **tous**
+                        // les blocs, y compris les paragraphes : c'est elle qui
+                        // rend le systeme visible, et sans elle une page en
+                        // blocs ressemble trait pour trait a une page qui n'en
+                        // a pas.
+                        BlockGutter(
+                            current = current,
+                            ink = style.ink,
+                            lineHeight = lineHeight,
+                            dragModifier = grip,
+                        )
+
+                        Box(modifier = Modifier.weight(1f)) {
+                            when (block.kind) {
+                                BlockKind.TEXT -> BlockTextField(
+                                    value = block.value,
+                                    spans = block.spans,
+                                    style = style,
+                                    layout = layout,
+                                    placeholder = "Écris ce que tu veux, comme tu veux."
+                                        .takeIf { blocks.size == 1 },
+                                    heldSelection = heldSelection
+                                        .takeIf { focusedKey == block.key },
+                                    onValueChange = { onValueChange(block.key, it) },
+                                    onLayout = { layout.value = it },
+                                    onFocus = { onFocused(block.key, it) },
+                                    onOpenDay = onOpenDay,
+                                    modifier = Modifier
+                                        .focusRequester(focusRequester)
+                                        .testTag("day-note-field"),
+                                )
+
+                                BlockKind.QUOTE -> QuoteBlockView(
+                                    value = block.value,
+                                    spans = block.spans,
+                                    bar = block.bar,
+                                    fill = block.fill,
+                                    style = style,
+                                    layout = layout,
+                                    heldSelection = heldSelection
+                                        .takeIf { focusedKey == block.key },
+                                    onValueChange = { onValueChange(block.key, it) },
+                                    onLayout = { layout.value = it },
+                                    onFocus = { onFocused(block.key, it) },
+                                    onOpenDay = onOpenDay,
+                                    // Le trait de la citation est une deuxieme
+                                    // prise, en plus de la poignee : c'est deja
+                                    // ce qu'on montre du doigt pour designer
+                                    // une citation.
+                                    dragModifier = grip,
+                                    modifier = Modifier.focusRequester(focusRequester),
+                                )
+
+                                BlockKind.RULE -> Row(
+                                    modifier = Modifier.clickable(
+                                        onClickLabel = "Choisir ce trait",
+                                        onClick = {
+                                            onSelectBlock(
+                                                if (selectedBlock == block.key) null else block.key
+                                            )
+                                        },
+                                    ),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    RuleBlockView(
+                                        rule = block.rule,
+                                        style = style,
+                                        lineHeight = lineHeight,
+                                        dragModifier = grip,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    if (selectedBlock == block.key) {
+                                        IconButton(
+                                            onClick = { onDeleteBlock(block.key) },
+                                            modifier = Modifier.size(32.dp),
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Clear,
+                                                contentDescription = "Supprimer ce trait",
+                                                tint = style.ink.copy(alpha = 0.5f),
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                        }
+                                    }
+                                }
+
+                                BlockKind.VOICE -> {
+                                    val note = voiceNotes.firstOrNull { it.id == block.voiceId }
+                                    when {
+                                        block.key == recordingKey -> RecordingRow(
+                                            elapsedMs = recordingMs,
+                                            waveform = recordingWave,
+                                            paper = style.paper,
+                                            lineHeight = lineHeight,
+                                            onStop = onStopRecording,
+                                        )
+
+                                        note != null -> VoiceNoteRow(
+                                            note = note,
+                                            playing = playingPath == note.relativePath,
+                                            progress = playProgress,
+                                            paper = style.paper,
+                                            lineHeight = lineHeight,
+                                            selected = selectedBlock == block.key,
+                                            onSelect = {
+                                                onSelectBlock(
+                                                    if (selectedBlock == block.key) {
+                                                        null
+                                                    } else {
+                                                        block.key
+                                                    }
+                                                )
+                                            },
+                                            onPlay = { onPlayVoice(note) },
+                                            onDelete = { onDeleteVoice(note, block.key) },
+                                            onToggleWidth = { onToggleVoiceWidth(note) },
+                                            dragModifier = grip,
+                                        )
+
+                                        // Un bloc dont le son a disparu : il
+                                        // s'en ira a la prochaine ouverture
+                                        // (voir JournalBlocks.reconcile).
+                                        else -> Unit
+                                    }
+                                }
                             }
-                        } else {
-                            Modifier
                         }
-                    )
+                    }
 
-                when (block.kind) {
-                    BlockKind.TEXT -> BlockTextField(
-                        value = block.value,
-                        spans = block.spans,
-                        style = style,
-                        layout = layout,
-                        placeholder = "Écris ce que tu veux, comme tu veux."
-                            .takeIf { blocks.size == 1 },
-                        heldSelection = heldSelection.takeIf { focusedKey == block.key },
-                        onValueChange = { onValueChange(block.key, it) },
-                        onLayout = { layout.value = it },
-                        onFocus = { onFocused(block.key, it) },
-                        onOpenDay = onOpenDay,
-                        modifier = slot
-                            .focusRequester(focusRequester)
-                            .testTag("day-note-field"),
-                    )
-
-                    BlockKind.QUOTE -> {
-                        QuoteBlockView(
-                            value = block.value,
-                            spans = block.spans,
+                    // Les reglages de la citation, **sous la citation**. Ils
+                    // existaient deja, ranges au fond d'un panneau qui ne
+                    // s'ouvrait qu'au bon endroit — donc introuvables. Ici ils
+                    // apparaissent a cote de ce qu'ils changent.
+                    if (block.kind == BlockKind.QUOTE &&
+                        focusedKey == block.key &&
+                        dragKey == null
+                    ) {
+                        QuotePalette(
                             bar = block.bar,
                             fill = block.fill,
                             style = style,
-                            layout = layout,
-                            heldSelection = heldSelection.takeIf { focusedKey == block.key },
-                            onValueChange = { onValueChange(block.key, it) },
-                            onLayout = { layout.value = it },
-                            onFocus = { onFocused(block.key, it) },
-                            onOpenDay = onOpenDay,
-                            dragModifier = Modifier.blockDrag(
-                                onStart = { onDragStart(block.key) },
-                                onDrag = onDrag,
-                                onEnd = onDragEnd,
-                            ),
-                            modifier = slot.focusRequester(focusRequester),
+                            onBar = { onQuoteBar(block.key, it) },
+                            onFill = { onQuoteFill(block.key, it) },
+                            modifier = Modifier.padding(start = GUTTER_WIDTH),
                         )
-                        // Les reglages de la citation, **sous la citation**. Ils
-                        // existaient deja, ranges au fond d'un panneau qui ne
-                        // s'ouvrait qu'au bon endroit — donc introuvables. Ici
-                        // ils apparaissent a cote de ce qu'ils changent.
-                        if (focusedKey == block.key && dragKey == null) {
-                            QuotePalette(
-                                bar = block.bar,
-                                fill = block.fill,
-                                style = style,
-                                onBar = { onQuoteBar(block.key, it) },
-                                onFill = { onQuoteFill(block.key, it) },
-                            )
-                        }
-                    }
-
-                    BlockKind.RULE -> Row(
-                        modifier = slot.clickable(
-                            onClickLabel = "Choisir ce trait",
-                            onClick = { onSelectRule(if (selectedRule == block.key) null else block.key) },
-                        ),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RuleBlockView(
-                            rule = block.rule,
-                            style = style,
-                            lineHeight = lineHeight,
-                            dragModifier = Modifier.blockDrag(
-                                onStart = { onDragStart(block.key) },
-                                onDrag = onDrag,
-                                onEnd = onDragEnd,
-                            ),
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (selectedRule == block.key) {
-                            IconButton(
-                                onClick = { onDeleteBlock(block.key) },
-                                modifier = Modifier.size(32.dp),
-                            ) {
-                                Icon(
-                                    Icons.Default.Clear,
-                                    contentDescription = "Supprimer ce trait",
-                                    tint = style.ink.copy(alpha = 0.5f),
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-                        }
-                    }
-
-                    BlockKind.VOICE -> {
-                        val note = voiceNotes.firstOrNull { it.id == block.voiceId }
-                        when {
-                            block.key == recordingKey -> RecordingRow(
-                                elapsedMs = recordingMs,
-                                waveform = recordingWave,
-                                paper = style.paper,
-                                lineHeight = lineHeight,
-                                onStop = onStopRecording,
-                                modifier = slot,
-                            )
-
-                            note != null -> VoiceNoteRow(
-                                note = note,
-                                playing = playingPath == note.relativePath,
-                                progress = playProgress,
-                                paper = style.paper,
-                                lineHeight = lineHeight,
-                                onPlay = { onPlayVoice(note) },
-                                onDelete = { onDeleteVoice(note, block.key) },
-                                onToggleWidth = { onToggleVoiceWidth(note) },
-                                dragModifier = Modifier.blockDrag(
-                                    onStart = { onDragStart(block.key) },
-                                    onDrag = onDrag,
-                                    onEnd = onDragEnd,
-                                ),
-                                modifier = slot,
-                            )
-
-                            // Un bloc dont le son a disparu : il s'en ira a la
-                            // prochaine ouverture (voir JournalBlocks.reconcile).
-                            else -> Unit
-                        }
                     }
                 }
             }
@@ -1515,3 +1574,18 @@ private const val CARET_MARGIN = 120f
 
 /** Le blanc laisse sous le dernier bloc, pour pouvoir ecrire a la suite. */
 private val TAIL_HEIGHT = 220.dp
+
+/** La marge de la page a gauche, avant la colonne des poignees. */
+private val PAGE_START = 6.dp
+
+/**
+ * Ou commence le texte, marge des poignees comprise.
+ *
+ * Le surtitre, le titre et les blocs partagent ce decalage : sans lui, le titre
+ * commencerait a gauche des paragraphes et la page aurait deux bords gauches.
+ *
+ * Declare **apres** `PAGE_START` et ce n'est pas un detail : les proprietes de
+ * fichier s'initialisent dans l'ordre ou elles sont ecrites, donc l'inverse
+ * aurait additionne un zero sans que rien ne le signale.
+ */
+private val TEXT_INDENT = PAGE_START + GUTTER_WIDTH

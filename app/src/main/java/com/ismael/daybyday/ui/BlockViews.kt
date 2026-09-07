@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.State
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -138,11 +139,19 @@ fun BlockTextField(
  * Une citation.
  *
  * Le trait n'est plus dessine a partir de la mise en page du texte : c'est une
- * **forme, a cote du texte**. Trois choses en decoulent, et ce sont les trois
- * que reclamait l'ancienne version : il fait toute la hauteur de la citation
- * sans qu'on ait a le calculer, il a sa propre couleur sans rien devoir a
- * l'encre du texte, et il y a enfin quelque chose a attraper pour deplacer la
- * citation — c'est lui.
+ * **forme, a cote du texte**. Il fait donc toute la hauteur de la citation sans
+ * qu'on ait a la calculer, il a sa propre couleur sans rien devoir a l'encre du
+ * texte, et il y a enfin quelque chose a attraper pour deplacer la citation —
+ * c'est lui.
+ *
+ * **Le trait est pose en `matchParentSize`, pas comme une colonne du `Row`.**
+ * Premiere version : un `Box` a gauche, en `fillMaxHeight()`. Il ne s'affichait
+ * pas du tout. `fillMaxHeight` ne remplit que si la hauteur maximale est
+ * **connue** — or la citation vit dans une page qui defile, donc sa hauteur
+ * maximale est infinie, et le trait se retrouvait haut de zero. En posant le
+ * trait par-dessus une boite qui epouse la taille deja calculee du texte, la
+ * contrainte est finie et le trait a enfin une hauteur. C'est le meme piege
+ * partout : `fillMaxHeight` dans un conteneur qui defile ne remplit rien.
  */
 @Composable
 fun QuoteBlockView(
@@ -167,31 +176,13 @@ fun QuoteBlockView(
         else -> Color.Transparent
     }
 
-    Row(
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(background),
     ) {
-        // Le trait, et la poignee : la meme chose. Un trait de citation est
-        // deja ce qu'on montre du doigt pour dire « cette citation-la » — lui
-        // donner le geste de deplacement ne demande rien a apprendre.
-        Box(
-            modifier = dragModifier
-                .width(QUOTE_GRIP)
-                .fillMaxHeight()
-                .padding(vertical = 1.dp),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(QUOTE_BAR_WIDTH)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(QUOTE_BAR_WIDTH / 2))
-                    .background(color),
-            )
-        }
-
+        // C'est le texte qui donne sa hauteur a la citation.
         BlockTextField(
             value = value,
             spans = spans,
@@ -203,8 +194,32 @@ fun QuoteBlockView(
             onLayout = onLayout,
             onFocus = onFocus,
             onOpenDay = onOpenDay,
-            modifier = Modifier.padding(end = 8.dp),
+            modifier = Modifier.padding(start = QUOTE_GRIP, end = 10.dp),
         )
+
+        // Et le trait se pose dessus, sans participer a la mesure.
+        Box(
+            modifier = Modifier.matchParentSize(),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(QUOTE_GRIP)
+                    .fillMaxHeight()
+                    .then(dragModifier)
+                    .padding(vertical = 3.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .padding(start = 4.dp)
+                        .width(QUOTE_BAR_WIDTH)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(QUOTE_BAR_WIDTH / 2))
+                        .background(color),
+                )
+            }
+        }
     }
 }
 
@@ -361,6 +376,62 @@ private fun FillDot(
 }
 
 /**
+ * La poignee d'un bloc, dans la marge de gauche.
+ *
+ * Elle est **toujours la**, tres pale, et se marque sur le bloc ou l'on est.
+ * C'est ce qui rend le systeme lisible : sans elle, une page en blocs
+ * ressemble trait pour trait a une page qui n'en a pas, et rien ne dit qu'il y
+ * a quelque chose a attraper. Une poignee qu'on ne voit pas est une poignee qui
+ * n'existe pas.
+ *
+ * Elle est haute d'une ligne et calee en haut du bloc : elle designe le debut
+ * du bloc, pas son milieu — un paragraphe de dix lignes aurait sinon sa
+ * poignee perdue au milieu du texte.
+ */
+@Composable
+fun BlockGutter(
+    current: Boolean,
+    ink: Color,
+    lineHeight: Dp,
+    dragModifier: Modifier,
+    modifier: Modifier = Modifier,
+) {
+    val tint = ink.copy(alpha = if (current) 0.55f else 0.14f)
+
+    Box(
+        modifier = modifier
+            .width(GUTTER_WIDTH)
+            .height(lineHeight)
+            .then(dragModifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(modifier = Modifier.size(GRIP_WIDTH, GRIP_HEIGHT)) {
+            // Six points : le signe universel de « ca se deplace ». Dessine
+            // plutot qu'importe — six cercles ne valent pas le jeu complet des
+            // icones Material.
+            val radius = size.width / 6f
+            val columnGap = size.width - radius * 2f
+            val rowGap = (size.height - radius * 2f) / 2f
+            repeat(3) { row ->
+                repeat(2) { column ->
+                    drawCircle(
+                        color = tint,
+                        radius = radius,
+                        center = Offset(radius + column * columnGap, radius + row * rowGap),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** La largeur de la marge qui porte les poignees. */
+val GUTTER_WIDTH = 24.dp
+
+private val GRIP_WIDTH = 10.dp
+private val GRIP_HEIGHT = 16.dp
+
+/**
  * Deplacer un bloc : on maintient le doigt, puis on tire.
  *
  * `detectDragGesturesAfterLongPress` et pas un simple glissement : sur une
@@ -368,20 +439,31 @@ private fun FillDot(
  * est le seul geste qui ne se dispute avec rien — c'est deja celui d'
  * « Organiser ma journee ».
  */
+@Composable
 fun Modifier.blockDrag(
     onStart: () -> Unit,
     onDrag: (Float) -> Unit,
     onEnd: () -> Unit,
-): Modifier = pointerInput(Unit) {
-    detectDragGesturesAfterLongPress(
-        onDragStart = { onStart() },
-        onDragEnd = { onEnd() },
-        onDragCancel = { onEnd() },
-        onDrag = { change, amount ->
-            change.consume()
-            onDrag(amount.y)
-        },
-    )
+): Modifier {
+    // `pointerInput` n'installe son detecteur qu'une fois : les fonctions qu'on
+    // lui donne y restent figees a ce qu'elles etaient au premier passage.
+    // C'est le meme piege que sur les photos, et `rememberUpdatedState` est la
+    // meme reponse — le geste appelle toujours la version du moment.
+    val start = rememberUpdatedState(onStart)
+    val drag = rememberUpdatedState(onDrag)
+    val end = rememberUpdatedState(onEnd)
+
+    return this.pointerInput(Unit) {
+        detectDragGesturesAfterLongPress(
+            onDragStart = { start.value() },
+            onDragEnd = { end.value() },
+            onDragCancel = { end.value() },
+            onDrag = { change, amount ->
+                change.consume()
+                drag.value(amount.y)
+            },
+        )
+    }
 }
 
 /** Retient la place d'un bloc dans la page : c'est ce qui permet de le deplacer. */

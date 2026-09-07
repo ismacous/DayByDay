@@ -69,6 +69,16 @@ fun VoiceNoteRow(
     paper: Color,
     /** La hauteur d'une ligne du lignage : la barre en occupe deux, pile. */
     lineHeight: Dp,
+    /**
+     * Le vocal est **choisi** : ses reglages apparaissent.
+     *
+     * Au repos la barre ne montre que ce qu'on regarde — le bouton, la
+     * silhouette, la duree. Changer la largeur ou effacer sont des gestes
+     * rares : les laisser en permanence encombrait une barre qu'on ouvre
+     * surtout pour ecouter.
+     */
+    selected: Boolean,
+    onSelect: () -> Unit,
     onPlay: () -> Unit,
     onDelete: () -> Unit,
     onToggleWidth: () -> Unit,
@@ -83,6 +93,9 @@ fun VoiceNoteRow(
         paper = paper,
         lineHeight = lineHeight,
         wide = note.wide,
+        // Choisi, le fond se marque un peu : on voit lequel des trois vocaux
+        // repond aux boutons qui viennent d'apparaitre.
+        surface = JournalPaper.shade(paper, if (selected) 0.13f else 0.07f),
         modifier = modifier.then(dragModifier),
     ) {
         Box(
@@ -121,7 +134,12 @@ fun VoiceNoteRow(
             accent = button,
             modifier = Modifier
                 .weight(1f)
-                .height(26.dp),
+                .fillMaxHeight()
+                .clickable(
+                    onClickLabel = if (selected) "Refermer" else "Régler ce vocal",
+                    onClick = onSelect,
+                )
+                .padding(vertical = 12.dp),
         )
 
         Spacer(Modifier.width(8.dp))
@@ -132,40 +150,45 @@ fun VoiceNoteRow(
             color = ink.copy(alpha = 0.75f),
         )
 
-        // La poignee de largeur. Deux tailles et pas une largeur libre : une
-        // barre de lecture n'a pas de proportions a respecter comme une photo,
-        // et la tirer au doigt donnerait surtout des largeurs bancales.
-        Box(
-            modifier = Modifier
-                .size(28.dp)
-                .clip(CircleShape)
-                .clickable(
-                    onClickLabel = if (note.wide) "Rétrécir le vocal" else "Élargir le vocal",
-                    onClick = onToggleWidth,
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_width),
-                contentDescription = null,
-                tint = ink.copy(alpha = 0.45f),
-                modifier = Modifier.size(15.dp),
-            )
-        }
+        if (selected) {
+            // La poignee de largeur. Deux tailles et pas une largeur libre :
+            // une barre de lecture n'a pas de proportions a respecter comme une
+            // photo, et la tirer au doigt donnerait surtout des largeurs
+            // bancales.
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .clickable(
+                        onClickLabel = if (note.wide) "Rétrécir le vocal" else "Élargir le vocal",
+                        onClick = onToggleWidth,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_width),
+                    contentDescription = null,
+                    tint = ink.copy(alpha = 0.55f),
+                    modifier = Modifier.size(15.dp),
+                )
+            }
 
-        Box(
-            modifier = Modifier
-                .size(28.dp)
-                .clip(CircleShape)
-                .clickable(onClickLabel = "Supprimer ce vocal", onClick = onDelete),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                Icons.Default.Clear,
-                contentDescription = null,
-                tint = ink.copy(alpha = 0.45f),
-                modifier = Modifier.size(15.dp),
-            )
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .clickable(onClickLabel = "Supprimer ce vocal", onClick = onDelete),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Default.Clear,
+                    contentDescription = null,
+                    tint = ink.copy(alpha = 0.55f),
+                    modifier = Modifier.size(15.dp),
+                )
+            }
+        } else {
+            Spacer(Modifier.width(4.dp))
         }
     }
 }

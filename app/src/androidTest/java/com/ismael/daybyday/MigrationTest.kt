@@ -74,6 +74,7 @@ class MigrationTest {
                 AppDatabase.MIGRATION_14_15,
                 AppDatabase.MIGRATION_15_16,
                 AppDatabase.MIGRATION_16_17,
+                AppDatabase.MIGRATION_17_18,
             )
             .build()
 
@@ -83,6 +84,16 @@ class MigrationTest {
                 val day = dao.dayOnce(20000)
                 assertEquals("Retour à la maison", day?.title)
                 assertEquals(2, day?.colorKey)
+                // La page ecrite en version 1 est devenue un bloc de texte :
+                // c'est la migration 17->18 qui l'a decoupee, et sans elle la
+                // journee s'ouvrirait sur une page vide.
+                val blocks = dao.blocksForDay(20000)
+                assertEquals(1, blocks.size)
+                assertEquals("Hier je suis allé chez Dune", blocks.first().text)
+                assertEquals(
+                    com.ismael.daybyday.data.BlockKind.TEXT,
+                    blocks.first().kind,
+                )
                 // Les nouveaux champs existent et sont simplement vides.
                 assertEquals(null, day?.sportLevel)
                 assertEquals(null, day?.weightKg)

@@ -169,6 +169,29 @@ interface DayDao {
     @Query("DELETE FROM voice_notes")
     suspend fun clearVoiceNotes()
 
+    // --- Blocs de la page -------------------------------------------------
+
+    @Query("SELECT * FROM journal_blocks WHERE epochDay = :epochDay ORDER BY position, id")
+    fun observeBlocks(epochDay: Long): Flow<List<JournalBlock>>
+
+    @Query("SELECT * FROM journal_blocks WHERE epochDay = :epochDay ORDER BY position, id")
+    suspend fun blocksForDay(epochDay: Long): List<JournalBlock>
+
+    @Query("SELECT * FROM journal_blocks ORDER BY epochDay, position, id")
+    suspend fun allBlocks(): List<JournalBlock>
+
+    @Insert
+    suspend fun insertBlocks(blocks: List<JournalBlock>)
+
+    @Query("DELETE FROM journal_blocks WHERE epochDay = :epochDay")
+    suspend fun clearBlocksForDay(epochDay: Long)
+
+    @Query("SELECT COUNT(*) FROM journal_blocks WHERE epochDay = :epochDay")
+    suspend fun blockCountForDay(epochDay: Long): Int
+
+    @Query("DELETE FROM journal_blocks")
+    suspend fun clearBlocks()
+
     // --- Traitements ------------------------------------------------------
 
     @Query("SELECT * FROM treatments ORDER BY sortOrder, name")

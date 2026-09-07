@@ -8,30 +8,29 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -47,45 +46,53 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ExperimentalTextApi
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.core.content.ContextCompat
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ismael.daybyday.data.BlockKind
 import com.ismael.daybyday.data.DayCard
+import com.ismael.daybyday.data.JournalBlocks
 import com.ismael.daybyday.data.MediaItem
 import com.ismael.daybyday.data.MediaLayer
-import com.ismael.daybyday.data.Placement
 import com.ismael.daybyday.data.PageLink
-import com.ismael.daybyday.data.VoiceNote
+import com.ismael.daybyday.data.Placement
 import com.ismael.daybyday.data.RichText
 import com.ismael.daybyday.data.StyleFamily
 import com.ismael.daybyday.data.TextSpan
 import com.ismael.daybyday.data.TextStyleKind
+import com.ismael.daybyday.data.VoiceNote
+import com.ismael.daybyday.R
 import com.ismael.daybyday.dayByDayApp
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -93,11 +100,18 @@ import java.time.LocalDate
 /**
  * L'ecran d'ecriture du journal : rien d'autre que la page du jour.
  *
- * Le journal vivait dans une carte, au milieu d'un ecran qui defilait deja.
- * Trois consequences : la barre de mise en forme partait vers le haut des
- * qu'on ecrivait un peu, le clavier laissait une bande vide, et il ne restait
- * qu'une lucarne pour ecrire. Ici la page entiere est a l'ecriture, et la
- * barre reste collee au clavier.
+ * **La page est une suite de blocs.** Elle etait un seul long champ de texte,
+ * avec les vocaux ranges dessous et les citations dessinees a partir de la
+ * mise en page. Trois choses en decoulaient, et c'etaient les trois reproches :
+ * rien ne pouvait se glisser entre deux paragraphes, il n'y avait rien a
+ * attraper pour deplacer quoi que ce soit, et un trait de citation dessine a
+ * partir d'un intervalle de caracteres n'appartenait a personne. Un bloc, lui,
+ * est une chose : il a une place, une hauteur, un bord, et on peut le prendre.
+ *
+ * **Ecrire n'a pas change pour autant.** Un bloc de texte n'est pas un
+ * paragraphe : Entree fait un retour a la ligne comme partout, et une page
+ * ordinaire n'a qu'un seul champ. Un deuxieme bloc n'apparait que quand on
+ * pose une citation, un trait ou un vocal au milieu du texte.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalTextApi::class)
 @Composable
@@ -110,107 +124,108 @@ fun JournalScreen(
     val context = LocalContext.current
     val app = context.dayByDayApp
     val repository = app.repository
+    val epochDay = date.toEpochDay()
 
     var title by remember { mutableStateOf(TextFieldValue("")) }
-    var body by remember { mutableStateOf(TextFieldValue("")) }
-    var spans by remember { mutableStateOf<List<TextSpan>>(emptyList()) }
+    var blocks by remember { mutableStateOf(listOf(PageBlocks.text())) }
+    var focusedKey by remember { mutableStateOf<Long?>(null) }
     var loaded by remember { mutableStateOf(false) }
+    val history = remember { PageHistory() }
 
     LaunchedEffect(date) {
         val entry = repository.dayOnce(date)
         title = TextFieldValue(entry?.title.orEmpty())
-        body = TextFieldValue(entry?.note.orEmpty())
-        spans = RichText.decode(entry?.noteSpans, entry?.note?.length ?: 0)
+        val stored = repository.blocksOnce(date)
+        val voices = repository.voiceNotesOnce(date)
+        // Une page qui a du texte mais pas de blocs ne devrait pas exister — la
+        // migration les a tous decoupes. Si ca arrive quand meme, on decoupe a
+        // l'ouverture plutot que de montrer une page vide sur un texte qui est
+        // bien la.
+        val base = stored.ifEmpty {
+            val text = entry?.note.orEmpty()
+            if (text.isEmpty()) {
+                emptyList()
+            } else {
+                JournalBlocks.split(text, RichText.decode(entry?.noteSpans, text.length), epochDay)
+            }
+        }
+        blocks = PageBlocks.tidy(
+            PageBlocks.from(JournalBlocks.reconcile(base, voices.map { it.id }, epochDay))
+        )
+        history.reset()
         loaded = true
     }
 
     // Enregistrement au depart de l'ecran : on ne touche qu'au journal, le
     // reste de la journee est relu au moment d'ecrire pour ne rien ecraser.
-    val current = rememberUpdatedState(Triple(title.text, body.text, spans))
+    val current = rememberUpdatedState(title.text to blocks)
     DisposableEffect(date, loaded) {
         onDispose {
             if (!loaded) return@onDispose
-            val (savedTitle, savedBody, savedSpans) = current.value
+            val (savedTitle, savedBlocks) = current.value
             app.appScope.launch {
-                // Seulement le journal : le reste de la journee est relu au
-                // moment d'ecrire, et « Ma journee » ne réécrit plus ces
-                // trois champs de son côté.
                 repository.saveJournal(
                     date = date,
                     title = savedTitle.trim(),
-                    note = savedBody,
-                    spans = RichText.encode(savedSpans),
+                    blocks = PageBlocks.toStored(PageBlocks.tidy(savedBlocks), epochDay),
                 )
             }
         }
     }
 
-    // Le panneau d'outils prend la place du clavier : on retient la hauteur
-    // que le clavier occupait pour que le texte ne bouge pas quand on echange
-    // l'un pour l'autre.
+    // --- Le clavier et le panneau d'outils --------------------------------
     var openPanel by remember { mutableStateOf<ToolPanel?>(null) }
     val density = LocalDensity.current
     val imeHeight = with(density) { WindowInsets.ime.getBottom(density).toDp() }
     val navHeight = with(density) { WindowInsets.navigationBars.getBottom(density).toDp() }
     // La hauteur du clavier, retenue pour que le panneau prenne exactement sa
-    // place. On garde le **maximum** vu depuis l'ouverture de l'ecran, et c'est
-    // tout l'interet : en se fermant, l'encart du clavier passe par toutes les
-    // valeurs intermediaires, et retenir la derniere au-dessus d'un seuil
-    // gardait 130 au lieu de 330. Le panneau retrecissait donc a chaque
-    // aller-retour, jusqu'a n'etre plus qu'un bandeau ecrase en bas de l'ecran.
+    // place. On garde le **maximum** vu depuis l'ouverture de l'ecran : en se
+    // fermant, l'encart du clavier passe par toutes les valeurs
+    // intermediaires, et retenir la derniere au-dessus d'un seuil gardait le
+    // seuil — le panneau retrecissait a chaque aller-retour.
     var measuredKeyboard by remember { mutableStateOf(0.dp) }
     if (imeHeight > measuredKeyboard) measuredKeyboard = imeHeight
-    // Tant que le clavier n'a jamais ete vu, une hauteur d'attente plausible.
     val keyboardHeight = if (measuredKeyboard > 150.dp) measuredKeyboard else 300.dp
-
-    // Le panneau et le clavier n'avaient pas la meme taille, et l'ecran se
-    // decalait a chaque bascule : le clavier recouvre la barre de navigation,
-    // le panneau se posait au-dessus. La colonne retire deja le plus grand des
-    // deux encarts du bas ; le panneau ne prend donc que ce qui manque pour
-    // atteindre la hauteur du clavier. Comme le calcul suit l'animation du
-    // clavier image par image, le panneau grandit exactement au rythme ou le
-    // clavier s'en va : le total ne bouge jamais.
     val panelHeight = (keyboardHeight - maxOf(imeHeight, navHeight)).coerceAtLeast(0.dp)
 
-    // Meme chose dans l'autre sens : en refermant le panneau on garde sa place
-    // au chaud, le temps que le clavier remonte la prendre.
     var awaitingKeyboard by remember { mutableStateOf(false) }
     if (imeHeight > 150.dp) awaitingKeyboard = false
 
-    // Demander poliment au clavier de se cacher ne suffit pas : tant que le
-    // champ garde le focus, Android le fait revenir. Le panneau et le clavier
-    // s'empilaient donc, et la page sautait a chaque bascule. Retirer le focus
-    // le ferme pour de bon ; le rendre le rouvre, curseur intact.
-    val bodyFocus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
+    // Le bloc a qui rendre le focus : apres un decoupage, apres un « annuler »,
+    // apres avoir pose une citation. Un `LaunchedEffect` par bloc le reclame
+    // quand son tour vient.
+    var pendingFocus by remember { mutableStateOf<Long?>(null) }
 
     // Retirer le focus ferme le clavier, mais efface aussi la selection : on ne
-    // pouvait donc pas colorer un texte deja ecrit, il se deselectionnait a
-    // l'ouverture du panneau. La selection est mise de cote ici avant de lacher
-    // le focus, et c'est elle qui sert de cible tant qu'un panneau est ouvert.
+    // pouvait donc pas colorer un texte deja ecrit. La selection est mise de
+    // cote ici avant de lacher le focus, et c'est elle qui sert de cible tant
+    // qu'un panneau est ouvert.
     var heldSelection by remember { mutableStateOf<TextRange?>(null) }
+
+    fun focusedBlock(): PageBlock? = blocks.firstOrNull { it.key == focusedKey }
 
     fun showPanel(panel: ToolPanel?) {
         if (panel == null) {
             openPanel = null
-            // On rend la selection au champ avant de lui rendre le focus :
-            // le mot colore reste visiblement selectionne.
-            heldSelection?.let { body = body.copy(selection = it) }
+            heldSelection?.let { held ->
+                val key = focusedKey
+                blocks = blocks.map {
+                    if (it.key == key) it.copy(value = it.value.copy(selection = held)) else it
+                }
+            }
             heldSelection = null
             awaitingKeyboard = true
-            runCatching { bodyFocus.requestFocus() }
+            pendingFocus = focusedKey
         } else {
-            // Passer d'un panneau a l'autre ne doit pas relire une selection
-            // deja perdue : on garde celle mise de cote au premier passage.
-            heldSelection = (heldSelection ?: body.selection).takeIf { it.start != it.end }
+            heldSelection = (heldSelection ?: focusedBlock()?.value?.selection)
+                ?.takeIf { it.start != it.end }
             openPanel = panel
             awaitingKeyboard = false
             focusManager.clearFocus()
         }
     }
 
-    // Si le clavier ne vient pas — focus refuse, clavier physique — la place
-    // reservee ne doit pas rester vide indefiniment.
     LaunchedEffect(awaitingKeyboard) {
         if (awaitingKeyboard) {
             kotlinx.coroutines.delay(800)
@@ -218,29 +233,7 @@ fun JournalScreen(
         }
     }
 
-    val mediaItems by remember(date) { repository.observeMediaForDay(date) }
-        .collectAsStateWithLifecycle(emptyList())
-    val storedMedia = mediaItems.filter { it.cardKey == DayCard.JOURNAL.key }
-
-    // --- Les photos posees sur la page ---------------------------------
-    val pageScroll = rememberScrollState()
-
-    // La mise en page du texte, et de quoi convertir des points en pixels : les
-    // deux servent a savoir ou se trouve le curseur dans la page.
-    // La mise en page est gardee dans un `State` et pas derriere un `by` : les
-    // pastilles des mots-cles la lisent **au dessin**, et il leur faut donc
-    // l'objet, pas sa valeur du moment.
-    val bodyLayout = remember { mutableStateOf<TextLayoutResult?>(null) }
-    var bodyFocused by remember { mutableStateOf(false) }
-    val textTopPadding = remember(density) {
-        with(density) { JournalPaper.TOP_PADDING.toPx() }
-    }
-    var pageWidth by remember { mutableStateOf(0f) }
-    var selectedPhotoId by remember { mutableStateOf<Long?>(null) }
-
-    val clipboard = LocalClipboardManager.current
-
-    // --- L'allure de la page, gardee d'une journee a l'autre -------------
+    // --- L'allure de la page, gardee d'une journee a l'autre --------------
     val prefs = app.prefs
     var ruled by remember { mutableStateOf(prefs.journalRuled) }
     var paperIndex by remember { mutableStateOf(prefs.journalPaperIndex) }
@@ -251,24 +244,35 @@ fun JournalScreen(
     var showPaperSettings by remember { mutableStateOf(false) }
     val paper = JournalPaper.paper(paperIndex)
     val ink = JournalPaper.ink(paper)
+    val accent = MaterialTheme.colorScheme.primary
     val rhythm = with(density) { JournalPaper.LINE_SPACING.toSp() }
-    // La police et la taille de base de la page. Les mises en forme posees sur
-    // un morceau de texte passent par-dessus : ce style-ci n'est que le point
-    // de depart, celui de tout ce qui n'a rien de particulier.
     val baseFont = JournalPaper.font(fontCode).fontFamily()
+    val pageStyle = PageStyle(
+        ink = ink,
+        paper = paper,
+        accent = accent,
+        baseFont = baseFont,
+        textSize = textSize,
+        rhythm = rhythm,
+    )
 
-    // Pendant qu'un doigt deplace une photo, sa nouvelle place vit ici : on
-    // n'ecrit pas dans la base a chaque image de l'animation.
+    // --- Les photos posees sur la page ------------------------------------
+    val pageScroll = rememberScrollState()
+    val mediaItems by remember(date) { repository.observeMediaForDay(date) }
+        .collectAsStateWithLifecycle(emptyList())
+    val storedMedia = mediaItems.filter { it.cardKey == DayCard.JOURNAL.key }
+    var pageWidth by remember { mutableStateOf(0f) }
+    var selectedPhotoId by remember { mutableStateOf<Long?>(null) }
     var draft by remember { mutableStateOf<MediaItem?>(null) }
     val journalMedia = storedMedia.map { item ->
         if (item.id == draft?.id) draft ?: item else item
     }
     val selectedPhoto = journalMedia.firstOrNull { it.id == selectedPhotoId }
+    val clipboard = LocalClipboardManager.current
 
     val pendingDraft = draft
     LaunchedEffect(pendingDraft) {
         if (pendingDraft != null) {
-            // Une fois les doigts immobiles, on enregistre.
             kotlinx.coroutines.delay(350)
             repository.updateMedia(pendingDraft)
         }
@@ -278,8 +282,6 @@ fun JournalScreen(
         selectedPhotoId = id
         draft = null
         if (id != null) {
-            // On ne tape pas et on manipule une image : le clavier n'a plus
-            // rien a faire la, et un panneau ouvert non plus.
             openPanel = null
             heldSelection = null
             awaitingKeyboard = false
@@ -292,10 +294,6 @@ fun JournalScreen(
         app.appScope.launch { repository.updateMedia(item) }
     }
 
-    // Une photo qu'on vient de choisir dans la galerie n'a pas encore de place,
-    // et celles ajoutees avant le placement libre non plus. Elles se rangent
-    // la ou on regarde, a leurs proportions, et la derniere est deja choisie
-    // pour qu'on puisse la deplacer tout de suite.
     val unplacedCount = storedMedia.count { !it.isPlaced }
     LaunchedEffect(unplacedCount, pageWidth) {
         if (pageWidth <= 0f || unplacedCount == 0) return@LaunchedEffect
@@ -323,75 +321,179 @@ fun JournalScreen(
         }
     }
 
-    val selection = heldSelection ?: body.selection
+    // --- Modifier la page -------------------------------------------------
+
+    /**
+     * Le style courant du curseur : il suit la frappe, ce qui permet de
+     * continuer a ecrire en gras apres un mot en gras, et d'appuyer sur
+     * « gras » avant d'ecrire. Un seul mecanisme, donc pas de desaccord.
+     */
+    var typing by remember { mutableStateOf<Set<TextStyleKind>>(emptySet()) }
+
+    fun snapshot(): PageSnapshot = PageSnapshot(title.text, blocks)
+
+    /**
+     * Pose la page, en retenant celle d'avant.
+     *
+     * Tout passe par ici — c'est ce qui rend « annuler » complet sans avoir a y
+     * penser a chaque endroit. [structural] dit qu'il ne s'agit pas d'une
+     * lettre tapee mais d'un bloc pose, deplace ou efface : ces pas-la ne se
+     * fondent jamais dans le precedent.
+     */
+    fun setBlocks(structural: Boolean, updated: List<PageBlock>) {
+        history.record(snapshot(), structural)
+        blocks = updated
+    }
+
+    /** Ce que le champ d'un bloc vient de rendre : texte, curseur, styles. */
+    fun changeBlock(key: Long, updated: TextFieldValue) {
+        val index = blocks.indexOfFirst { it.key == key }
+        if (index < 0) return
+        val block = blocks[index]
+
+        // L'utilisateur reprend la main : la selection mise de cote pour le
+        // panneau n'a plus lieu d'etre. Mais seulement panneau ferme — en
+        // perdant le focus, le champ annonce lui-meme une selection vide, et il
+        // ne faut pas la prendre pour un geste.
+        if (openPanel == null) heldSelection = null
+
+        if (updated.text == block.text) {
+            // Deplacement du curseur : on adopte le style de l'endroit ou il
+            // arrive, comme un traitement de texte.
+            val caret = updated.selection.start
+            typing = RichText.stylesOn(block.spans, caret, caret)
+            blocks = blocks.toMutableList().also { it[index] = block.copy(value = updated) }
+            return
+        }
+
+        history.record(snapshot(), structural = false)
+        val moved = RichText.adjust(block.spans, block.text, updated.text)
+        val edit = RichText.diff(block.text, updated.text)
+        val spans = if (edit.newEnd > edit.start && typing.isNotEmpty()) {
+            RichText.applyAll(moved, edit.start, edit.newEnd, typing)
+        } else {
+            moved
+        }
+        blocks = blocks.toMutableList().also {
+            it[index] = block.copy(value = updated, spans = spans)
+        }
+    }
+
+    /** Pose un bloc au curseur, en coupant le paragraphe en deux s'il le faut. */
+    fun insertBlock(inserted: PageBlock, focusIt: Boolean = false) {
+        setBlocks(structural = true, updated = PageBlocks.insertAt(blocks, focusedKey, inserted))
+        if (focusIt) pendingFocus = inserted.key
+    }
+
+    fun removeBlock(key: Long) {
+        setBlocks(structural = true, updated = PageBlocks.tidy(blocks.filterNot { it.key == key }))
+    }
+
+    val selection = heldSelection ?: focusedBlock()?.value?.selection ?: TextRange.Zero
     val start = minOf(selection.start, selection.end)
     val end = maxOf(selection.start, selection.end)
     val hasSelection = end > start
 
-    // Le style courant du curseur : il suit la frappe, ce qui permet de
-    // continuer a ecrire en gras apres un mot en gras, et d'appuyer sur "gras"
-    // avant d'ecrire. Un seul mecanisme, donc pas de desaccord possible.
-    var typing by remember { mutableStateOf<Set<TextStyleKind>>(emptySet()) }
-
-    val active = if (hasSelection) RichText.stylesOn(spans, start, end) else typing
+    val focused = focusedBlock()
+    val activeStyles = if (hasSelection && focused != null) {
+        RichText.stylesOn(focused.spans, start, end)
+    } else {
+        typing
+    }
+    // Une citation n'est plus un style pose sur du texte, c'est un bloc — mais
+    // le bouton doit quand meme s'allumer quand on ecrit dedans.
+    val active = if (focused?.kind == BlockKind.QUOTE) {
+        activeStyles + TextStyleKind.QUOTE
+    } else {
+        activeStyles
+    }
 
     fun applyStyle(style: TextStyleKind) {
-        // La couleur du trait d'une citation et son fond habillent le
-        // **paragraphe ou est le curseur**, sans rien inserer : ce ne sont pas
-        // des blocs qu'on pose, ce sont des reglages du bloc qui est deja la.
-        if (style.family == StyleFamily.QUOTE_BAR || style.family == StyleFamily.QUOTE_FILL) {
-            val line = RichText.lineRange(body.text, start, maxOf(end - 1, start))
-            val to = maxOf(line.last + 1, line.first + 1).coerceAtMost(body.text.length)
-            if (to <= line.first) return
-            spans = RichText.toggle(spans, line.first, to, style)
+        // Une citation devient un **bloc**. Avec une selection, c'est elle qui
+        // part dans la citation et le paragraphe se coupe autour ; sans
+        // selection, une citation vide se pose au curseur, prête a ecrire.
+        if (style == TextStyleKind.QUOTE) {
+            val (updated, key) = PageBlocks.toQuote(blocks, focusedKey)
+            setBlocks(structural = true, updated = updated)
+            if (key != null) pendingFocus = key
             return
         }
 
-        // Un trait de separation ne se pose pas sur du texte : il **est** une
-        // ligne, vide, qu'on insere. On l'ecrit donc, on lui pose son style, et
-        // on laisse le curseur sur la ligne d'apres, prêt a continuer.
+        // Un trait est un bloc lui aussi : il ne se pose pas *sur* du texte, il
+        // prend sa place entre deux paragraphes.
         if (style.isRule) {
-            val needsBreak = start > 0 && body.text.getOrNull(start - 1) != '\n'
-            val prefix = if (needsBreak) "\n" else ""
-            val updated = body.text.substring(0, start) + prefix + "\n" + body.text.substring(start)
-            val at = start + prefix.length
-            spans = RichText.applyAll(
-                RichText.adjust(spans, body.text, updated),
-                at,
-                at + 1,
-                setOf(style),
-            )
-            body = body.copy(
-                text = updated,
-                selection = TextRange((at + 1).coerceAtMost(updated.length)),
-            )
+            insertBlock(PageBlocks.rule(style))
             return
         }
+
+        // La couleur du trait d'une citation et son fond sont des reglages du
+        // bloc, pas des intervalles de texte.
+        if (style.family == StyleFamily.QUOTE_BAR) {
+            val key = focusedKey ?: return
+            history.record(snapshot(), structural = true)
+            blocks = blocks.map {
+                if (it.key == key && it.kind == BlockKind.QUOTE) {
+                    it.copy(bar = if (it.bar == style) null else style)
+                } else {
+                    it
+                }
+            }
+            return
+        }
+        if (style.family == StyleFamily.QUOTE_FILL) {
+            val key = focusedKey ?: return
+            history.record(snapshot(), structural = true)
+            blocks = blocks.map {
+                if (it.key == key && it.kind == BlockKind.QUOTE) {
+                    it.copy(fill = if (it.fill == style) null else style)
+                } else {
+                    it
+                }
+            }
+            return
+        }
+
+        val block = focusedBlock() ?: return
 
         if (hasSelection) {
-            spans = RichText.toggle(spans, start, end, style)
+            history.record(snapshot(), structural = false)
+            blocks = blocks.map {
+                if (it.key == block.key) {
+                    it.copy(spans = RichText.toggle(it.spans, start, end, style))
+                } else {
+                    it
+                }
+            }
             return
         }
 
         // Sans selection, un titre ne peut pas deviner ce qu'il doit habiller.
         // Il pose donc son propre exemple, deja selectionne : ecrire par-dessus
-        // le remplace. Prendre la ligne entiere mettait tout un paragraphe en
-        // titre des qu'il n'y avait pas de retour a la ligne.
+        // le remplace.
         if (style.takesWholeLine) {
+            history.record(snapshot(), structural = true)
             val example = style.label
-            val needsBreak = start > 0 && body.text.getOrNull(start - 1) != '\n'
+            val needsBreak = start > 0 && block.text.getOrNull(start - 1) != '\n'
             val prefix = if (needsBreak) "\n" else ""
             val inserted = prefix + example + "\n"
-            val updated = body.text.substring(0, start) + inserted + body.text.substring(start)
+            val updated = block.text.substring(0, start) + inserted + block.text.substring(start)
             val from = start + prefix.length
             val to = from + example.length
-            spans = RichText.applyAll(
-                RichText.adjust(spans, body.text, updated),
-                from,
-                to,
-                setOf(style),
-            )
-            body = body.copy(text = updated, selection = TextRange(from, to))
+            blocks = blocks.map {
+                if (it.key == block.key) {
+                    it.copy(
+                        value = TextFieldValue(updated, TextRange(from, to)),
+                        spans = RichText.applyAll(
+                            RichText.adjust(it.spans, block.text, updated),
+                            from,
+                            to,
+                            setOf(style),
+                        ),
+                    )
+                } else {
+                    it
+                }
+            }
             return
         }
 
@@ -405,77 +507,117 @@ fun JournalScreen(
 
     /** Repasse en texte normal la selection, ou la ligne du curseur. */
     fun clearHeading() {
-        val line = RichText.lineRange(body.text, start, end)
+        val block = focusedBlock() ?: return
+        val line = RichText.lineRange(block.text, start, end)
         val from = if (hasSelection) start else line.first
         val to = if (hasSelection) end else line.last + 1
-        spans = RichText.clearFamily(spans, from, to, StyleFamily.HEADING)
+        history.record(snapshot(), structural = false)
+        blocks = blocks.map {
+            if (it.key == block.key) {
+                it.copy(spans = RichText.clearFamily(it.spans, from, to, StyleFamily.HEADING))
+            } else {
+                it
+            }
+        }
     }
 
     /** Retire le fond d'une citation : « sans fond » est l'absence de style. */
     fun clearQuoteFill() {
-        val line = RichText.lineRange(body.text, start, maxOf(end - 1, start))
-        val to = maxOf(line.last + 1, line.first + 1).coerceAtMost(body.text.length)
-        spans = RichText.clearFamily(spans, line.first, to, StyleFamily.QUOTE_FILL)
+        val key = focusedKey ?: return
+        history.record(snapshot(), structural = true)
+        blocks = blocks.map { if (it.key == key) it.copy(fill = null) else it }
     }
 
     /** Revient a la police d'origine sur la selection, ou pour la suite tapee. */
     fun clearFont() {
-        if (hasSelection) {
-            spans = RichText.clearFamily(spans, start, end, StyleFamily.FONT)
+        val block = focusedBlock()
+        if (hasSelection && block != null) {
+            history.record(snapshot(), structural = false)
+            blocks = blocks.map {
+                if (it.key == block.key) {
+                    it.copy(spans = RichText.clearFamily(it.spans, start, end, StyleFamily.FONT))
+                } else {
+                    it
+                }
+            }
         } else {
             typing = typing.filterNot { it.family == StyleFamily.FONT }.toSet()
         }
     }
 
+    /** Ecrit du texte au curseur du bloc courant, et deplace le curseur apres. */
+    fun insertText(at: Int, inserted: String) {
+        val block = focusedBlock() ?: return
+        history.record(snapshot(), structural = false)
+        val updated = block.text.substring(0, at) + inserted + block.text.substring(at)
+        blocks = blocks.map {
+            if (it.key == block.key) {
+                it.copy(
+                    value = TextFieldValue(
+                        updated,
+                        TextRange((at + inserted.length).coerceAtMost(updated.length)),
+                    ),
+                    spans = RichText.adjust(it.spans, block.text, updated),
+                )
+            } else {
+                it
+            }
+        }
+    }
+
     /** Ajoute une puce, un numero ou une lettre en tete de ligne : du vrai texte. */
     fun prefixLine(marker: String) {
-        val line = RichText.lineRange(body.text, start, end)
-        val at = line.first
-        val updated = body.text.substring(0, at) + marker + body.text.substring(at)
-        spans = RichText.adjust(spans, body.text, updated)
-        body = body.copy(
-            text = updated,
-            selection = TextRange((start + marker.length).coerceAtMost(updated.length)),
-        )
+        val block = focusedBlock() ?: return
+        insertText(RichText.lineRange(block.text, start, end).first, marker)
     }
 
     /**
-     * Insere un `#` au curseur.
+     * Insere un `#` au curseur, avec une espace devant s'il est colle a un mot.
      *
-     * Avec une espace devant s'il est colle a un mot : un `#` accroche au mot
-     * precedent n'est pas un mot-cle (voir `Hashtag.rangesIn`), et le bouton
-     * ne doit pas fabriquer quelque chose qui ne marchera pas. Le curseur reste
-     * juste apres, prêt pour le mot.
+     * Un `#` accroche au mot precedent n'est pas un mot-cle (voir
+     * `Hashtag.rangesIn`), et le bouton ne doit pas fabriquer quelque chose qui
+     * ne marchera pas.
      */
     fun insertHashtag() {
+        val block = focusedBlock() ?: return
         val at = if (hasSelection) end else start
-        val before = body.text.getOrNull(at - 1)
-        val inserted = if (before != null && (before.isLetterOrDigit() || before == '_')) " #" else "#"
-        val updated = body.text.substring(0, at) + inserted + body.text.substring(at)
-        spans = RichText.adjust(spans, body.text, updated)
-        body = body.copy(
-            text = updated,
-            selection = TextRange((at + inserted.length).coerceAtMost(updated.length)),
-        )
+        val before = block.text.getOrNull(at - 1)
+        val glued = before != null && (before.isLetterOrDigit() || before == '_')
+        insertText(at, if (glued) " #" else "#")
     }
 
-    // Les messages du bas de l'ecran. Declares avant les vocaux : c'est eux
-    // qui s'en servent pour dire qu'un micro est pris.
+    fun undo() {
+        val restored = history.undo(snapshot()) ?: return
+        title = title.copy(text = restored.title)
+        blocks = restored.blocks
+        focusedKey = restored.blocks.firstOrNull { it.isText }?.key
+    }
+
+    fun redo() {
+        val restored = history.redo(snapshot()) ?: return
+        title = title.copy(text = restored.title)
+        blocks = restored.blocks
+        focusedKey = restored.blocks.firstOrNull { it.isText }?.key
+    }
+
+    // --- Les vocaux -------------------------------------------------------
+    // Les messages du bas de l'ecran. Declares avant les vocaux : c'est eux qui
+    // s'en servent pour dire qu'un micro est pris.
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    // --- Les vocaux -------------------------------------------------------
-    val storedVoice by remember(date) { repository.observeVoiceNotes(date) }
+    val voiceNotes by remember(date) { repository.observeVoiceNotes(date) }
         .collectAsStateWithLifecycle(emptyList())
     val recorder = remember { VoiceRecorder() }
     val player = remember { VoicePlayer() }
     var recordingPath by remember { mutableStateOf<String?>(null) }
-    var recordingMs by remember { mutableStateOf<Long?>(null) }
+    /** Le bloc en cours d'enregistrement : un bloc vocal qui n'a pas encore de son. */
+    var recordingKey by remember { mutableStateOf<Long?>(null) }
+    var recordingMs by remember { mutableStateOf(0L) }
+    var recordingWave by remember { mutableStateOf("") }
     // L'avancee de la lecture. Dans un `State` et lue au dessin : lue pendant
     // la composition, elle recomposerait la page vingt fois par seconde.
     val playProgress = remember { mutableStateOf(0f) }
-    // Le vocal en cours de lecture, tenu a part : `VoicePlayer` n'est pas un
-    // etat que Compose observe, il faut donc le lui dire.
     var playingPath by remember { mutableStateOf<String?>(null) }
 
     // Le micro et le haut-parleur se rendent en quittant l'ecran. Sans ca, un
@@ -493,15 +635,15 @@ fun JournalScreen(
     LaunchedEffect(recordingPath) {
         while (recordingPath != null) {
             // Le meme battement sert au chiffre qui defile et a la mesure du
-            // micro qui dessinera la forme d'onde.
+            // micro qui dessine la silhouette du son, en direct.
             recordingMs = recorder.tick()
+            recordingWave = recorder.waveform()
             kotlinx.coroutines.delay(100)
         }
-        recordingMs = null
+        recordingMs = 0L
+        recordingWave = ""
     }
 
-    // L'horloge de la lecture : elle ne tourne que pendant, comme celle de
-    // l'enregistrement.
     LaunchedEffect(playingPath) {
         while (playingPath != null) {
             playProgress.value = player.progress()
@@ -511,12 +653,21 @@ fun JournalScreen(
     }
 
     fun startRecording() {
-        val relativePath = repository.media.newVoicePath(date.toEpochDay())
+        val relativePath = repository.media.newVoicePath(epochDay)
         when (recorder.start(context, repository.media.file(relativePath))) {
             RecordStart.OK -> {
                 player.stop()
                 playingPath = null
                 recordingPath = relativePath
+                // Le bloc est pose **tout de suite**, au curseur : la barre
+                // rouge est deja a la place ou le vocal restera. Rien ne bougera
+                // quand on arretera — c'est le meme bloc, il changera juste de
+                // couleur et de bouton.
+                val placeholder = PageBlock(key = PageBlocks.newKey(), kind = BlockKind.VOICE)
+                recordingKey = placeholder.key
+                insertBlock(placeholder)
+                focusManager.clearFocus()
+                openPanel = null
             }
             // Pendant un appel, `MediaRecorder` demarre sans broncher et
             // enregistre du silence : mieux vaut refuser et le dire.
@@ -531,7 +682,9 @@ fun JournalScreen(
 
     fun stopRecording() {
         val relativePath = recordingPath ?: return
+        val key = recordingKey
         recordingPath = null
+        recordingKey = null
         val duration = recorder.stop()
         val heard = recorder.heardSomething()
         val file = repository.media.file(relativePath)
@@ -540,13 +693,18 @@ fun JournalScreen(
             // vocal qui ne contient rien. Un enregistrement vide qui a l'air
             // reussi est pire qu'un refus.
             file.delete()
+            if (key != null) blocks = PageBlocks.tidy(blocks.filterNot { it.key == key })
             if (duration != null) {
                 scope.launch { snackbar.showSnackbar("Rien n'a été entendu — vocal non gardé.") }
             }
             return
         }
         val shape = recorder.waveform()
-        app.appScope.launch { repository.addVoiceNote(date, relativePath, duration, shape) }
+        app.appScope.launch {
+            val id = repository.addVoiceNote(date, relativePath, duration, shape)
+            // Le bloc etait deja la ; il apprend seulement quel son il montre.
+            blocks = blocks.map { if (it.key == key) it.copy(voiceId = id) else it }
+        }
     }
 
     val askMicrophone = rememberLauncherForActivityResult(
@@ -567,18 +725,18 @@ fun JournalScreen(
         if (allowed) startRecording() else askMicrophone.launch(Manifest.permission.RECORD_AUDIO)
     }
 
-    val voiceNotes = storedVoice
-
-    // --- L'export PDF ---------------------------------------------------
-    // Lue ici, dans la composition : `PagePdf` travaille hors de Compose et ne
-    // peut pas aller chercher le theme lui-meme.
-    val accentForPdf = MaterialTheme.colorScheme.primary
+    // --- L'export PDF -----------------------------------------------------
     val exportPdf = rememberLauncherForActivityResult(
-        // On laisse l'utilisateur choisir ou ranger le fichier, comme pour la
-        // sauvegarde : rien ne sort du telephone sans qu'il ait dit ou.
+        // On laisse l'utilisateur choisir ou ranger le fichier : rien ne sort du
+        // telephone sans qu'il ait dit ou.
         ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri: Uri? ->
         if (uri != null) {
+            // Le PDF est dessine a partir de la page **a plat** : il ne sait
+            // rien des blocs, comme la recherche et l'export de l'annee.
+            val flat = JournalBlocks.flatten(
+                PageBlocks.toStored(PageBlocks.tidy(blocks), epochDay)
+            )
             scope.launch {
                 val result = runCatching {
                     PagePdf.write(
@@ -586,15 +744,15 @@ fun JournalScreen(
                         target = uri,
                         date = date,
                         title = title.text,
-                        body = body.text,
-                        spans = spans,
+                        body = flat.text,
+                        spans = flat.spans,
                         photos = journalMedia,
                         voiceNotes = voiceNotes,
                         photoFile = { repository.media.file(it.relativePath) },
                         paper = paper,
                         ink = ink,
                         lineColor = JournalPaper.line(lineIndex),
-                        accent = accentForPdf,
+                        accent = accent,
                         ruled = ruled,
                         baseFont = baseFont,
                         textSize = textSize,
@@ -611,11 +769,79 @@ fun JournalScreen(
         }
     }
 
+    // --- Deplacer un bloc -------------------------------------------------
+    // La hauteur et la place de chaque bloc, mesurees a la volee. On ne s'en
+    // sert que pendant un deplacement : c'est ce qui permet de savoir quand le
+    // doigt a franchi le voisin, sans rien mesurer pendant le geste.
+    val blockHeights = remember { mutableStateMapOf<Long, Float>() }
+    val blockTops = remember { mutableStateMapOf<Long, Float>() }
+    val layouts = remember { mutableMapOf<Long, MutableState<TextLayoutResult?>>() }
+    var dragKey by remember { mutableStateOf<Long?>(null) }
+    var dragDy by remember { mutableStateOf(0f) }
+    var selectedRule by remember { mutableStateOf<Long?>(null) }
+
+    /**
+     * Le bloc suit le doigt, et la page se reorganise sous lui.
+     *
+     * La liste est reordonnee **pendant** le geste : le trou s'ouvre a la
+     * bonne place, donc il n'y a pas d'indicateur a dessiner — le trou *est*
+     * l'indicateur. A chaque franchissement on retranche la hauteur du voisin
+     * de l'ecart accumule, sinon le bloc s'echapperait du doigt.
+     *
+     * La boucle s'arrete sur une hauteur nulle : un bloc pas encore mesure
+     * rendrait la condition vraie sans que rien ne bouge, et on tournerait
+     * pour toujours. C'est exactement le piege d'« Organiser ma journee ».
+     */
+    fun dragBy(delta: Float) {
+        val key = dragKey ?: return
+        var offset = dragDy + delta
+        var list = blocks
+        var index = list.indexOfFirst { it.key == key }
+        if (index < 0) return
+
+        while (true) {
+            if (offset > 0f && index < list.lastIndex) {
+                val height = blockHeights[list[index + 1].key] ?: break
+                if (height <= 0f || offset < height / 2f) break
+                list = list.toMutableList().also { it.add(index + 1, it.removeAt(index)) }
+                offset -= height
+                index += 1
+            } else if (offset < 0f && index > 0) {
+                val height = blockHeights[list[index - 1].key] ?: break
+                if (height <= 0f || -offset < height / 2f) break
+                list = list.toMutableList().also { it.add(index - 1, it.removeAt(index)) }
+                offset += height
+                index -= 1
+            } else {
+                break
+            }
+        }
+
+        blocks = list
+        dragDy = offset
+    }
+
+    fun startDrag(key: Long) {
+        history.record(snapshot(), structural = true)
+        focusManager.clearFocus()
+        openPanel = null
+        selectedRule = null
+        dragKey = key
+        dragDy = 0f
+    }
+
+    fun endDrag() {
+        dragKey = null
+        dragDy = 0f
+        // Deux paragraphes qui se retrouvent cote a cote n'ont plus de raison
+        // d'etre separes : ils se recollent.
+        blocks = PageBlocks.tidy(blocks)
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
-        // Le papier prend tout l'ecran. Une page teintee dans un cadre blanc
-        // ne ressemblait a rien : c'est le carnet entier qui a une couleur,
-        // pas une feuille posee dessus.
+        // Le papier prend tout l'ecran. Une page teintee dans un cadre blanc ne
+        // ressemblait a rien : c'est le carnet entier qui a une couleur.
         containerColor = paper,
         topBar = {
             TopAppBar(
@@ -632,6 +858,24 @@ fun JournalScreen(
                     }
                 },
                 actions = {
+                    // Annuler et refaire vivent **ici**, pas dans la barre du
+                    // bas : on en a besoin surtout quand quelque chose vient de
+                    // mal se passer, et a ce moment-la le clavier est souvent
+                    // deja parti — donc la barre du bas aussi.
+                    IconButton(onClick = { undo() }, enabled = history.canUndo) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_undo),
+                            contentDescription = "Annuler",
+                            tint = ink.copy(alpha = if (history.canUndo) 0.9f else 0.25f),
+                        )
+                    }
+                    IconButton(onClick = { redo() }, enabled = history.canRedo) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_redo),
+                            contentDescription = "Refaire",
+                            tint = ink.copy(alpha = if (history.canRedo) 0.9f else 0.25f),
+                        )
+                    }
                     IconButton(onClick = { showPaperSettings = true }) {
                         Icon(Icons.Default.MoreVert, contentDescription = "Paramètres de la page")
                     }
@@ -650,12 +894,15 @@ fun JournalScreen(
         ) {
             BasicTextField(
                 value = title,
-                onValueChange = { title = it },
+                onValueChange = {
+                    history.record(snapshot(), structural = false)
+                    title = it
+                },
                 textStyle = MaterialTheme.typography.headlineSmall.copy(
                     color = ink,
                     fontWeight = FontWeight.Bold,
                 ),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                cursorBrush = SolidColor(accent),
                 decorationBox = { field ->
                     Box {
                         if (title.text.isEmpty()) {
@@ -678,14 +925,9 @@ fun JournalScreen(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
 
-            recordingMs?.let { elapsed ->
-                RecordingBanner(elapsedMs = elapsed, onStop = { stopRecording() })
-            }
-
-            // La page : le texte et les photos defilent ensemble, dans un seul
+            // La page : les blocs et les photos defilent ensemble, dans un seul
             // conteneur. Les positions des photos sont donc des positions dans
-            // la page, pas dans l'ecran — sinon tout se decalerait au premier
-            // defilement.
+            // la page, pas dans l'ecran.
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -697,45 +939,38 @@ fun JournalScreen(
 
                 // La page descend au moins jusqu'au bas de la photo la plus
                 // basse : sans ca, une image posee en bas serait inatteignable.
-                // Seules les photos comptent ici : elles sont posees a une
-                // hauteur donnee, donc la page doit descendre jusqu'a elles.
-                // Les vocaux, eux, sont dans le fil et ajoutent leur propre
-                // hauteur sous le texte.
                 val pageHeight = maxOf(
                     viewportHeight,
                     (Placement.lowestEdge(journalMedia) + 160f).dp,
                 )
 
-                // Le curseur ne doit jamais passer sous le clavier. Le champ
-                // ne peut pas s'en charger : il n'a pas de defilement a lui, il
-                // s'etend sur toute la page et c'est la page qui bouge. On
-                // calcule donc nous-memes ou est le curseur, et on amene la
-                // page a lui — avec une marge, pour qu'on voie aussi la ligne
-                // qui suit et non le curseur colle au bord.
-                LaunchedEffect(body.selection, bodyLayout.value, viewportHeight, bodyFocused) {
-                    // Seulement quand on ecrit vraiment. Perdre le focus remet
-                    // la selection a zero, et la page remontait alors d'un coup
-                    // tout en haut — il suffisait d'appuyer sur un vocal.
-                    if (!bodyFocused) return@LaunchedEffect
-                    val layout = bodyLayout.value ?: return@LaunchedEffect
-                    val caret = body.selection.end
+                val focusedLayout = layouts[focusedKey]?.value
+                val focusedSelection = focusedBlock()?.value?.selection
+
+                // Le curseur ne doit jamais passer sous le clavier. Aucun champ
+                // ne peut s'en charger : ils n'ont pas de defilement a eux, ils
+                // grandissent, et c'est la page qui bouge. On calcule donc ou
+                // est le curseur — dans son bloc, plus la place du bloc dans la
+                // page — et on amene la page a lui.
+                LaunchedEffect(focusedSelection, focusedLayout, viewportHeight, focusedKey) {
+                    val key = focusedKey ?: return@LaunchedEffect
+                    val layout = focusedLayout ?: return@LaunchedEffect
+                    val blockTop = blockTops[key] ?: return@LaunchedEffect
+                    val caret = (focusedSelection?.end ?: 0)
                         .coerceIn(0, layout.layoutInput.text.length)
                     val rect = runCatching { layout.getCursorRect(caret) }.getOrNull()
                         ?: return@LaunchedEffect
-                    val top = rect.top + textTopPadding
-                    val bottom = rect.bottom + textTopPadding
+                    val top = rect.top + blockTop
+                    val bottom = rect.bottom + blockTop
                     val viewport = with(density) { viewportHeight.toPx() }
-                    val current = pageScroll.value.toFloat()
+                    val at = pageScroll.value.toFloat()
                     val target = when {
-                        bottom + CARET_MARGIN > current + viewport ->
-                            bottom + CARET_MARGIN - viewport
-                        top - CARET_MARGIN < current -> top - CARET_MARGIN
+                        bottom + CARET_MARGIN > at + viewport -> bottom + CARET_MARGIN - viewport
+                        top - CARET_MARGIN < at -> top - CARET_MARGIN
                         else -> null
                     }
                     if (target != null) {
-                        pageScroll.animateScrollTo(
-                            target.toInt().coerceIn(0, pageScroll.maxValue)
-                        )
+                        pageScroll.animateScrollTo(target.toInt().coerceIn(0, pageScroll.maxValue))
                     }
                 }
 
@@ -744,16 +979,11 @@ fun JournalScreen(
                         .fillMaxSize()
                         .verticalScroll(pageScroll),
                 ) {
-                    // Les lignes d'ecriture restent tout le temps ; la grille
-                    // des photos, elle, n'apparait que pendant qu'on en
-                    // deplace une. Deux choses differentes, deux durees de vie.
-                    //
-                    // matchParentSize, et non une hauteur calculee : c'est le
-                    // texte qui decide de la hauteur de la page, et une hauteur
-                    // fixee d'avance laissait le bas de la page sans lignes des
-                    // que le texte depassait — d'ou les lignes qui semblaient
-                    // s'arreter apres un titre, ou disparaitre a l'ouverture du
-                    // clavier, qui reduit la page visible.
+                    // Le lignage reste tout le temps ; la grille des photos
+                    // n'apparait que pendant qu'on en deplace une. Deux choses
+                    // differentes, deux durees de vie. `matchParentSize` et non
+                    // une hauteur calculee : c'est le contenu qui decide de la
+                    // hauteur de la page.
                     if (ruled) {
                         PaperLines(
                             color = JournalPaper.line(lineIndex),
@@ -764,12 +994,6 @@ fun JournalScreen(
                         PhotoGrid(modifier = Modifier.matchParentSize())
                     }
 
-                    // La page proprement dite, puis les vocaux dessous. Les
-                    // deux dans une colonne, et le lignage derriere les deux :
-                    // un vocal est pose sur le papier, pas a cote de la feuille.
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                    Box(modifier = Modifier.fillMaxWidth()) {
-
                     // Sous le texte : le fond, puis le milieu.
                     journalMedia
                         .filter { it.layer != MediaLayer.FRONT && it.isPlaced }
@@ -779,167 +1003,106 @@ fun JournalScreen(
                                 item = item,
                                 file = repository.media.file(item.relativePath),
                                 // Sous le texte, un appui va au texte : c'est le
-                                // champ qui est devant. On la reprend par la liste
-                                // "Photos de la page".
+                                // champ qui est devant. On la reprend par la
+                                // liste « Photos de la page ».
                                 onSelect = null,
                             )
                         }
 
-                    BasicTextField(
-                        value = body,
-                        onValueChange = { updated ->
-                            // L'utilisateur reprend la main sur le texte : la selection
-                            // mise de cote pour le panneau n'a plus lieu d'etre. Mais
-                            // seulement panneau ferme : en perdant le focus, le champ
-                            // annonce lui-meme une selection vide, et il ne faut pas la
-                            // prendre pour un geste de l'utilisateur.
-                            if (openPanel == null) heldSelection = null
-                            if (updated.text == body.text) {
-                                // Deplacement du curseur : on adopte le style de
-                                // l'endroit ou il arrive, comme un traitement de texte.
-                                val caret = updated.selection.start
-                                typing = RichText.stylesOn(spans, caret, caret)
-                                body = updated
-                                return@BasicTextField
-                            }
-
-                            val moved = RichText.adjust(spans, body.text, updated.text)
-                            val edit = RichText.diff(body.text, updated.text)
-                            spans = if (edit.newEnd > edit.start && typing.isNotEmpty()) {
-                                RichText.applyAll(moved, edit.start, edit.newEnd, typing)
-                            } else {
-                                moved
-                            }
-                            body = updated
-                        },
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(
-                            color = ink,
-                            fontFamily = baseFont,
-                            fontSize = textSize.sp,
-                            // La hauteur de ligne vient d'une mesure en points,
-                            // pas d'une taille de police : agrandir les
-                            // caracteres dans les reglages d'Android decalerait
-                            // sinon le texte de ses lignes.
-                            lineHeight = rhythm,
-                            // Sans ca, Compose repartit l'espace d'une ligne
-                            // autour du texte, et rogne meme celui de la
-                            // premiere : le texte flottait au-dessus de ses
-                            // lignes, d'un ecart different a chaque ligne. Cale
-                            // en bas et sans rognage, chaque ligne fait
-                            // exactement le pas du lignage, texte pose dessus.
-                            lineHeightStyle = LineHeightStyle(
-                                alignment = LineHeightStyle.Alignment.Bottom,
-                                trim = LineHeightStyle.Trim.None,
-                            ),
-                        ),
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        // La mise en page du texte, gardee pour savoir **ou** est
-                        // le curseur. C'est la seule facon de le suivre ici : le
-                        // champ ne defile pas lui-meme, il grandit, et c'est la
-                        // page autour de lui qui defile.
-                        onTextLayout = { bodyLayout.value = it },
-                        visualTransformation = run {
-                            // Sans focus, le champ ne peint plus la selection : on la
-                            // dessine nous-memes, sinon on colore a l'aveugle.
-                            val tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
-                            remember(spans, heldSelection, tint, rhythm) {
-                                SpanTransformation(spans, heldSelection, tint, rhythm)
-                            }
-                        },
-                        decorationBox = { field ->
-                            Box {
-                                if (body.text.isEmpty()) {
-                                    Text(
-                                        "Écris ce que tu veux, comme tu veux.",
-                                        style = MaterialTheme.typography.bodyLarge.copy(
-                                            fontFamily = baseFont,
-                                            fontSize = textSize.sp,
-                                        ),
-                                        color = ink.copy(alpha = 0.45f),
-                                    )
-                                }
-                                field()
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            // La page entiere est a l'ecriture : appuyer n'importe ou
-                            // dessous pose le curseur, meme loin sous le dernier mot.
-                            .heightIn(min = pageHeight)
-                            .padding(horizontal = 20.dp, vertical = JournalPaper.TOP_PADDING)
-                            // Apres la marge, pas avant : l'origine du dessin
-                            // doit etre celle du texte, sinon les pastilles
-                            // sont decalees de toute la marge.
-                            .openPageLinkOnTap(bodyLayout, { body.text }, onOpenDay)
-                            .ruleLines(bodyLayout) {
-                                spans.filter { it.style.isRule && !it.isEmpty }.map { rule ->
-                                    RuleLine(
-                                        at = rule.start,
-                                        thickness = ruleThickness(rule.style),
-                                        widthFraction = ruleWidth(rule.style),
-                                        // Le trait est de l'encre : on le trace
-                                        // avec le stylo qui a servi a ecrire.
-                                        color = ink.copy(alpha = 0.45f),
-                                    )
-                                }
-                            }
-                            .quoteBars(bodyLayout) {
-                                // Relu au dessin : poser une citation ou en
-                                // changer la couleur ne doit pas remesurer la
-                                // page entiere.
-                                spans.filter { it.style == TextStyleKind.QUOTE && !it.isEmpty }
-                                    .map { quote ->
-                                        // La couleur du trait est la sienne, pas
-                                        // celle du texte : un trait bleu sur une
-                                        // citation ecrite en noir doit etre
-                                        // possible.
-                                        val tint = spans.firstOrNull {
-                                            it.style.family == StyleFamily.QUOTE_BAR &&
-                                                overlaps(it, quote)
-                                        }
-                                        val fill = spans.firstOrNull {
-                                            it.style.family == StyleFamily.QUOTE_FILL &&
-                                                overlaps(it, quote)
-                                        }
-                                        // Le trait couvre le **paragraphe**, pas
-                                        // l'intervalle enregistre : une citation
-                                        // habille la ligne entiere (c'est ce que
-                                        // pose `headingParagraphs`), et l'intervalle
-                                        // peut ne porter que sur les premiers mots
-                                        // — le trait s'arretait alors a la
-                                        // premiere ligne d'une citation qui en
-                                        // fait trois.
-                                        val (from, to) = blockRange(body.text, quote)
-                                        val barColor = tint?.let { Color(it.style.argb) } ?: ink
-                                        QuoteBar(
-                                            range = from..maxOf(to - 1, from),
-                                            color = barColor,
-                                            fill = when (fill?.style) {
-                                                TextStyleKind.QUOTE_FILL_SOFT ->
-                                                    barColor.copy(alpha = 0.08f)
-                                                TextStyleKind.QUOTE_FILL_FULL ->
-                                                    barColor.copy(alpha = 0.18f)
-                                                else -> null
-                                            },
-                                        )
-                                    }
-                            }
-                            .hashtagChips(bodyLayout, textSize.toFloat())
-                            .focusRequester(bodyFocus)
-                            .onFocusChanged { state ->
-                                bodyFocused = state.isFocused
-                                // Retourner ecrire referme le panneau : sinon il reste
-                                // sous le clavier qui remonte, et les deux s'empilent.
-                                // C'est l'appui de l'utilisateur qui decide du curseur,
-                                // donc on ne rend pas la selection mise de cote.
-                                if (state.isFocused && openPanel != null) {
+                    PageColumn(
+                        blocks = blocks,
+                        style = pageStyle,
+                        pageHeight = pageHeight,
+                        lineHeight = JournalPaper.LINE_SPACING,
+                        voiceNotes = voiceNotes,
+                        focusedKey = focusedKey,
+                        pendingFocus = pendingFocus,
+                        heldSelection = heldSelection,
+                        recordingKey = recordingKey,
+                        recordingMs = recordingMs,
+                        recordingWave = recordingWave,
+                        selectedRule = selectedRule,
+                        dragKey = dragKey,
+                        dragOffset = { dragDy },
+                        layouts = layouts,
+                        playingPath = playingPath,
+                        playProgress = { playProgress.value },
+                        onValueChange = ::changeBlock,
+                        onFocused = { key, focused ->
+                            if (focused) {
+                                focusedKey = key
+                                selectedRule = null
+                                if (openPanel != null) {
                                     openPanel = null
                                     heldSelection = null
                                     awaitingKeyboard = false
                                 }
                             }
-                            .selectWordOnDoubleTap({ body }) { body = body.copy(selection = it) }
-                            .testTag("day-note-field"),
+                        },
+                        onFocusHandled = { pendingFocus = null },
+                        onPlaced = { key, top, height ->
+                            blockTops[key] = top
+                            blockHeights[key] = height
+                        },
+                        onDragStart = ::startDrag,
+                        onDrag = ::dragBy,
+                        onDragEnd = ::endDrag,
+                        onOpenDay = onOpenDay,
+                        onSelectRule = { selectedRule = it },
+                        onDeleteBlock = ::removeBlock,
+                        onQuoteBar = { key, style ->
+                            history.record(snapshot(), structural = true)
+                            blocks = blocks.map { if (it.key == key) it.copy(bar = style) else it }
+                        },
+                        onQuoteFill = { key, style ->
+                            history.record(snapshot(), structural = true)
+                            blocks = blocks.map { if (it.key == key) it.copy(fill = style) else it }
+                        },
+                        onStopRecording = { stopRecording() },
+                        onPlayVoice = { note ->
+                            player.toggle(
+                                file = repository.media.file(note.relativePath),
+                                key = note.relativePath,
+                            ) { playingPath = null }
+                            playingPath = player.playing
+                        },
+                        onDeleteVoice = { note, key ->
+                            if (playingPath == note.relativePath) {
+                                player.stop()
+                                playingPath = null
+                            }
+                            removeBlock(key)
+                            app.appScope.launch { repository.deleteVoiceNote(note) }
+                        },
+                        onToggleVoiceWidth = { note ->
+                            app.appScope.launch {
+                                repository.updateVoiceNote(note.copy(wide = !note.wide))
+                            }
+                        },
+                        onTapBelow = {
+                            // Appuyer sous le dernier bloc doit poser le curseur
+                            // au bout du texte, comme appuyer dans une page
+                            // blanche. Sans ca, tout le bas de la page est mort.
+                            val last = blocks.lastOrNull()
+                            if (last != null && last.isText) {
+                                blocks = blocks.map {
+                                    if (it.key == last.key) {
+                                        it.copy(
+                                            value = it.value.copy(
+                                                selection = TextRange(it.text.length),
+                                            )
+                                        )
+                                    } else {
+                                        it
+                                    }
+                                }
+                                pendingFocus = last.key
+                            } else {
+                                val added = PageBlocks.text()
+                                setBlocks(structural = true, updated = blocks + added)
+                                pendingFocus = added.key
+                            }
+                        },
                     )
 
                     // Devant le texte : ces photos-la se prennent directement.
@@ -953,8 +1116,8 @@ fun JournalScreen(
                             )
                         }
 
-                    // Le cadre de manipulation passe par-dessus tout, meme sur une
-                    // photo de fond que le texte recouvre.
+                    // Le cadre de manipulation passe par-dessus tout, meme sur
+                    // une photo de fond que le texte recouvre.
                     selectedPhoto?.let { photo ->
                         PhotoHandle(
                             item = photo,
@@ -962,36 +1125,6 @@ fun JournalScreen(
                             snapToGrid = snapToGrid,
                             onChange = { draft = it },
                         )
-                    }
-                    }
-
-                    // Les vocaux, dans l'ordre ou ils ont ete dits. Ils ne se
-                    // posent pas librement comme les photos : un enregistrement
-                    // n'est pas un objet qu'on colle de travers, c'est un
-                    // morceau de la journee, et il se range a la suite.
-                    voiceNotes.forEach { note ->
-                        VoiceNoteRow(
-                            note = note,
-                            playing = playingPath == note.relativePath,
-                            progress = { playProgress.value },
-                            paper = paper,
-                            onPlay = {
-                                player.toggle(
-                                    file = repository.media.file(note.relativePath),
-                                    key = note.relativePath,
-                                ) { playingPath = null }
-                                playingPath = player.playing
-                            },
-                            onDelete = {
-                                if (playingPath == note.relativePath) {
-                                    player.stop()
-                                    playingPath = null
-                                }
-                                app.appScope.launch { repository.deleteVoiceNote(note) }
-                            },
-                        )
-                    }
-                    if (voiceNotes.isNotEmpty()) Spacer(Modifier.height(24.dp))
                     }
                 }
             }
@@ -1046,19 +1179,18 @@ fun JournalScreen(
                     active = active,
                     openPanel = openPanel,
                     onTogglePanel = { panel ->
-                        // Le panneau prend la place du clavier : l'un se ferme pour
-                        // que l'autre s'ouvre, et la hauteur totale ne bouge pas.
                         showPanel(if (openPanel == panel) null else panel)
                     },
                     onStyle = { style ->
                         // Le panneau reste ouvert : on essaie rarement une seule
-                        // nuance, et le refermer a chaque essai obligeait a le
-                        // rouvrir pour comparer. Il ne se ferme que quand
-                        // l'action a insere du texte — la, il n'y a plus rien a
-                        // reessayer, et il faut voir ou on en est.
-                        val inserted = !hasSelection && style.takesWholeLine
+                        // nuance. Il ne se ferme que quand l'action a pose
+                        // quelque chose — la, il n'y a plus rien a reessayer, et
+                        // il faut voir ou on en est.
+                        val posed = style.isRule ||
+                            style == TextStyleKind.QUOTE ||
+                            (!hasSelection && style.takesWholeLine)
                         applyStyle(style)
-                        if (inserted) showPanel(null)
+                        if (posed) showPanel(null)
                     },
                     onClearHeading = { clearHeading() },
                     onClearFont = { clearFont() },
@@ -1074,12 +1206,10 @@ fun JournalScreen(
                         // d'ouvrir un mot, il faut pouvoir l'ecrire.
                         showPanel(null)
                         insertHashtag()
-                        bodyFocus.requestFocus()
                     },
                     onAddPhoto = {
                         // On referme le panneau sans rendre le focus : le
-                        // selecteur de photos passe devant, inutile de rappeler le
-                        // clavier juste avant.
+                        // selecteur de photos passe devant.
                         openPanel = null
                         pickMedia.launch(
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
@@ -1099,6 +1229,231 @@ fun JournalScreen(
                 }
             }
         }
+    }
+}
+
+/**
+ * La page : ses blocs, les uns sous les autres.
+ *
+ * Elle ne decide de rien — pas plus que les champs de texte. Elle place, elle
+ * mesure, elle previent. Toute la logique reste dans l'ecran, a un seul
+ * endroit : c'est ce qui permet a « annuler » de tout couvrir sans avoir a y
+ * penser bloc par bloc.
+ */
+@Composable
+private fun PageColumn(
+    blocks: List<PageBlock>,
+    style: PageStyle,
+    pageHeight: Dp,
+    lineHeight: Dp,
+    voiceNotes: List<VoiceNote>,
+    focusedKey: Long?,
+    pendingFocus: Long?,
+    heldSelection: TextRange?,
+    recordingKey: Long?,
+    recordingMs: Long,
+    recordingWave: String,
+    selectedRule: Long?,
+    dragKey: Long?,
+    dragOffset: () -> Float,
+    layouts: MutableMap<Long, MutableState<TextLayoutResult?>>,
+    playingPath: String?,
+    playProgress: () -> Float,
+    onValueChange: (Long, TextFieldValue) -> Unit,
+    onFocused: (Long, Boolean) -> Unit,
+    onFocusHandled: () -> Unit,
+    onPlaced: (Long, Float, Float) -> Unit,
+    onDragStart: (Long) -> Unit,
+    onDrag: (Float) -> Unit,
+    onDragEnd: () -> Unit,
+    onOpenDay: (LocalDate) -> Unit,
+    onSelectRule: (Long?) -> Unit,
+    onDeleteBlock: (Long) -> Unit,
+    onQuoteBar: (Long, TextStyleKind?) -> Unit,
+    onQuoteFill: (Long, TextStyleKind?) -> Unit,
+    onStopRecording: () -> Unit,
+    onPlayVoice: (VoiceNote) -> Unit,
+    onDeleteVoice: (VoiceNote, Long) -> Unit,
+    onToggleVoiceWidth: (VoiceNote) -> Unit,
+    onTapBelow: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = pageHeight)
+            .padding(horizontal = 20.dp),
+    ) {
+        // La marge du haut est un espace, pas un `padding` : les places des
+        // blocs sont mesurees dans cette colonne, et un `padding` les
+        // decalerait toutes de sa hauteur sans que rien ne le dise.
+        Spacer(Modifier.height(JournalPaper.TOP_PADDING))
+
+        blocks.forEach { block ->
+            key(block.key) {
+                val layout = layouts.getOrPut(block.key) { mutableStateOf<TextLayoutResult?>(null) }
+                val focusRequester = remember { FocusRequester() }
+
+                LaunchedEffect(pendingFocus) {
+                    if (pendingFocus == block.key) {
+                        runCatching { focusRequester.requestFocus() }
+                        onFocusHandled()
+                    }
+                }
+
+                val dragging = dragKey == block.key
+                val slot = Modifier
+                    .fillMaxWidth()
+                    .reportPlacement { top, height -> onPlaced(block.key, top, height) }
+                    .then(
+                        if (dragging) {
+                            // Le decalage est lu **dans** `graphicsLayer` : lu
+                            // pendant la composition, il remesurerait la page a
+                            // chaque image du geste.
+                            Modifier.graphicsLayer {
+                                translationY = dragOffset()
+                                scaleX = 1.02f
+                                scaleY = 1.02f
+                                shadowElevation = 14f
+                                alpha = 0.97f
+                            }
+                        } else {
+                            Modifier
+                        }
+                    )
+
+                when (block.kind) {
+                    BlockKind.TEXT -> BlockTextField(
+                        value = block.value,
+                        spans = block.spans,
+                        style = style,
+                        layout = layout,
+                        placeholder = "Écris ce que tu veux, comme tu veux."
+                            .takeIf { blocks.size == 1 },
+                        heldSelection = heldSelection.takeIf { focusedKey == block.key },
+                        onValueChange = { onValueChange(block.key, it) },
+                        onLayout = { layout.value = it },
+                        onFocus = { onFocused(block.key, it) },
+                        onOpenDay = onOpenDay,
+                        modifier = slot
+                            .focusRequester(focusRequester)
+                            .testTag("day-note-field"),
+                    )
+
+                    BlockKind.QUOTE -> {
+                        QuoteBlockView(
+                            value = block.value,
+                            spans = block.spans,
+                            bar = block.bar,
+                            fill = block.fill,
+                            style = style,
+                            layout = layout,
+                            heldSelection = heldSelection.takeIf { focusedKey == block.key },
+                            onValueChange = { onValueChange(block.key, it) },
+                            onLayout = { layout.value = it },
+                            onFocus = { onFocused(block.key, it) },
+                            onOpenDay = onOpenDay,
+                            dragModifier = Modifier.blockDrag(
+                                onStart = { onDragStart(block.key) },
+                                onDrag = onDrag,
+                                onEnd = onDragEnd,
+                            ),
+                            modifier = slot.focusRequester(focusRequester),
+                        )
+                        // Les reglages de la citation, **sous la citation**. Ils
+                        // existaient deja, ranges au fond d'un panneau qui ne
+                        // s'ouvrait qu'au bon endroit — donc introuvables. Ici
+                        // ils apparaissent a cote de ce qu'ils changent.
+                        if (focusedKey == block.key && dragKey == null) {
+                            QuotePalette(
+                                bar = block.bar,
+                                fill = block.fill,
+                                style = style,
+                                onBar = { onQuoteBar(block.key, it) },
+                                onFill = { onQuoteFill(block.key, it) },
+                            )
+                        }
+                    }
+
+                    BlockKind.RULE -> Row(
+                        modifier = slot.clickable(
+                            onClickLabel = "Choisir ce trait",
+                            onClick = { onSelectRule(if (selectedRule == block.key) null else block.key) },
+                        ),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RuleBlockView(
+                            rule = block.rule,
+                            style = style,
+                            lineHeight = lineHeight,
+                            dragModifier = Modifier.blockDrag(
+                                onStart = { onDragStart(block.key) },
+                                onDrag = onDrag,
+                                onEnd = onDragEnd,
+                            ),
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (selectedRule == block.key) {
+                            IconButton(
+                                onClick = { onDeleteBlock(block.key) },
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.Clear,
+                                    contentDescription = "Supprimer ce trait",
+                                    tint = style.ink.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
+                    }
+
+                    BlockKind.VOICE -> {
+                        val note = voiceNotes.firstOrNull { it.id == block.voiceId }
+                        when {
+                            block.key == recordingKey -> RecordingRow(
+                                elapsedMs = recordingMs,
+                                waveform = recordingWave,
+                                paper = style.paper,
+                                lineHeight = lineHeight,
+                                onStop = onStopRecording,
+                                modifier = slot,
+                            )
+
+                            note != null -> VoiceNoteRow(
+                                note = note,
+                                playing = playingPath == note.relativePath,
+                                progress = playProgress,
+                                paper = style.paper,
+                                lineHeight = lineHeight,
+                                onPlay = { onPlayVoice(note) },
+                                onDelete = { onDeleteVoice(note, block.key) },
+                                onToggleWidth = { onToggleVoiceWidth(note) },
+                                dragModifier = Modifier.blockDrag(
+                                    onStart = { onDragStart(block.key) },
+                                    onDrag = onDrag,
+                                    onEnd = onDragEnd,
+                                ),
+                                modifier = slot,
+                            )
+
+                            // Un bloc dont le son a disparu : il s'en ira a la
+                            // prochaine ouverture (voir JournalBlocks.reconcile).
+                            else -> Unit
+                        }
+                    }
+                }
+            }
+        }
+
+        // Le bas de la page repond au doigt, comme une page blanche : sans ca,
+        // tout ce qui est sous le dernier bloc est mort, et il faut viser la
+        // derniere ligne pour reprendre l'ecriture.
+        Spacer(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(TAIL_HEIGHT)
+                .clickable(onClickLabel = "Écrire à la suite", onClick = onTapBelow),
+        )
     }
 }
 
@@ -1152,18 +1507,11 @@ fun JournalPreview(
 }
 
 /**
- * Deux intervalles qui se touchent.
- *
- * La couleur du trait d'une citation et son fond sont poses sur le meme
- * paragraphe qu'elle, mais rien ne garantit que les bornes enregistrees soient
- * identiques au caractere pres — l'un a pu etre pose avant que le texte ne
- * s'allonge. Se chevaucher suffit donc a dire « c'est la meme citation ».
- */
-private fun overlaps(a: TextSpan, b: TextSpan): Boolean = a.start < b.end && b.start < a.end
-
-/**
  * L'air garde entre le curseur et le bord de la page quand elle defile toute
  * seule. Sans marge, le curseur se colle au bas de l'ecran et on ecrit sans
  * voir la ligne suivante.
  */
 private const val CARET_MARGIN = 120f
+
+/** Le blanc laisse sous le dernier bloc, pour pouvoir ecrire a la suite. */
+private val TAIL_HEIGHT = 220.dp

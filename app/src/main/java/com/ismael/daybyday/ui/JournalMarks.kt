@@ -116,121 +116,22 @@ private const val PADDING = 0.22f
  */
 private const val CHIP_ALPHA = 0.18f
 
-/**
- * Le trait d'une citation, dessine le long de son paragraphe.
+/*
+ * Le trait d'une citation et les traits de separation etaient dessines ici, a
+ * partir de la mise en page du texte : on lisait ou tombaient les lignes, et on
+ * peignait derriere. C'etait la seule facon de faire tant que la page etait un
+ * seul champ de texte.
  *
- * Pourquoi le dessiner plutot que l'ecrire : un caractere ajoute devant chaque
- * ligne se retrouverait dans la recherche, dans l'export de l'annee et dans
- * l'apercu de la carte, et il faudrait le retirer partout. Le trait n'existe
- * qu'a l'ecran, et la citation reste exactement le texte qu'on a ecrit.
+ * Depuis la refonte en blocs, une citation **est** une chose : elle a un bord,
+ * une hauteur, une place. Son trait est une forme posee a cote de son texte
+ * (`QuoteBlockView`), et un trait de separation est un bloc a lui tout seul
+ * (`RuleBlockView`). Le dessin a partir de la mise en page a donc disparu — et
+ * avec lui le defaut qui allait avec : un trait dessine sur l'intervalle
+ * enregistre s'arretait au premier mot quand la citation en faisait trois.
  *
- * Il court du haut de la premiere ligne au bas de la derniere, dans la marge
- * que le paragraphe s'est reservee ([QUOTE_INDENT]).
+ * L'export PDF, lui, continue de les dessiner a partir du texte a plat : il
+ * travaille hors de Compose, sur une page qui ne connait pas les blocs.
  */
-fun Modifier.quoteBars(
-    layout: State<TextLayoutResult?>,
-    /** Les citations et l'habillage de chacune, relus a chaque dessin. */
-    quotes: () -> List<QuoteBar>,
-): Modifier = drawBehind {
-    val result = layout.value ?: return@drawBehind
-    val length = result.layoutInput.text.length
-    if (length == 0) return@drawBehind
-
-    val width = BAR_WIDTH.toPx()
-    val radius = CornerRadius(width / 2f)
-    quotes().forEach { quote ->
-        val start = quote.range.first.coerceIn(0, length - 1)
-        val end = quote.range.last.coerceIn(start, length - 1)
-        val firstLine = result.getLineForOffset(start)
-        val lastLine = result.getLineForOffset(end)
-        val left = result.getLineLeft(firstLine)
-        val top = result.getLineTop(firstLine)
-        val bottom = result.getLineBottom(lastLine)
-
-        // Le fond d'abord, le trait par-dessus : le trait doit rester net sur
-        // son bord, pas se fondre dans le panneau.
-        quote.fill?.let { fill ->
-            drawRoundRect(
-                color = fill,
-                topLeft = Offset(left, top),
-                size = Size((size.width - left).coerceAtLeast(0f), bottom - top),
-                cornerRadius = CornerRadius(FILL_RADIUS.toPx()),
-            )
-        }
-        drawRoundRect(
-            color = quote.color,
-            topLeft = Offset(left, top + BAR_INSET.toPx()),
-            size = Size(width, (bottom - top - 2 * BAR_INSET.toPx()).coerceAtLeast(width)),
-            cornerRadius = radius,
-        )
-    }
-}
-
-/**
- * Une citation : l'intervalle qu'elle couvre, la couleur de son trait, et le
- * fond derriere elle s'il y en a un.
- *
- * La couleur du trait est **independante** de celle du texte : on veut pouvoir
- * mettre un trait bleu sur une citation ecrite en noir. Les deux venaient du
- * meme endroit, donc changer l'un changeait l'autre.
- */
-data class QuoteBar(val range: IntRange, val color: Color, val fill: Color? = null)
-
-/** Le fond suit le trait de loin : c'est un panneau, pas un surlignage. */
-private val FILL_RADIUS = 10.dp
-
-/** Assez large pour se voir, assez fin pour ne pas devenir une barre. */
-private val BAR_WIDTH = 3.dp
-
-/**
- * Le trait ne touche ni le haut ni le bas de sa bande : une ligne fait 28
- * points de haut alors que les lettres en font seize, donc un trait sur toute
- * la bande deborderait nettement du texte qu'il accompagne.
- */
-private val BAR_INSET = 5.dp
-
-/**
- * Les traits de separation, dessines sur leur ligne vide.
- *
- * Un trait n'est pas un caractere : c'est un style pose sur une ligne qui ne
- * contient rien. La ligne existe donc vraiment dans le texte — elle garde sa
- * place dans le rythme du lignage, et le paragraphe suivant reprend
- * exactement dessous — mais rien n'est ecrit dedans. Un texte exporte ou
- * cherche ne contient pas une rangee de tirets.
- */
-fun Modifier.ruleLines(
-    layout: State<TextLayoutResult?>,
-    rules: () -> List<RuleLine>,
-): Modifier = drawBehind {
-    val result = layout.value ?: return@drawBehind
-    val length = result.layoutInput.text.length
-    if (length == 0) return@drawBehind
-
-    rules().forEach { rule ->
-        val offset = rule.at.coerceIn(0, length - 1)
-        val line = result.getLineForOffset(offset)
-        // Au milieu de sa bande : une ligne fait 28 points de haut, et un
-        // trait pose sur le bas toucherait le paragraphe suivant.
-        val y = (result.getLineTop(line) + result.getLineBottom(line)) / 2f
-        val thickness = rule.thickness.toPx()
-        val width = size.width * rule.widthFraction
-        val left = (size.width - width) / 2f
-        drawRoundRect(
-            color = rule.color,
-            topLeft = Offset(left, y - thickness / 2f),
-            size = Size(width, thickness),
-            cornerRadius = CornerRadius(thickness / 2f),
-        )
-    }
-}
-
-/** Un trait : la ligne qui le porte, son epaisseur, sa largeur et sa couleur. */
-data class RuleLine(
-    val at: Int,
-    val thickness: Dp,
-    val widthFraction: Float,
-    val color: Color,
-)
 
 /** L'epaisseur de chacune des trois formes. */
 fun ruleThickness(style: TextStyleKind): Dp = when (style) {

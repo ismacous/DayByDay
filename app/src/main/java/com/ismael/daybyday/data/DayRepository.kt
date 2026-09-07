@@ -124,6 +124,10 @@ class DayRepository(context: Context) {
         val hasExtras = hasAttachments(epochDay)
         if (entry.isEmpty && !hasExtras) {
             dao.deleteDay(epochDay)
+            // Une journee effacee n'a plus de page : garder ses blocs
+            // laisserait un texte invisible qui reviendrait a la prochaine
+            // ouverture.
+            dao.clearBlocksForDay(epochDay)
         } else {
             dao.upsertDay(entry.copy(updatedAt = System.currentTimeMillis()))
         }
@@ -155,11 +159,37 @@ class DayRepository(context: Context) {
      * est relu au moment d'ecrire, donc rien de ce qui a ete coche ailleurs
      * entre-temps n'est perdu.
      */
-    suspend fun saveJournal(date: LocalDate, title: String, note: String, spans: String) {
+    suspend fun saveJournal(date: LocalDate, title: String, blocks: List<JournalBlock>) {
         val epochDay = date.toEpochDay()
+        val tidy = JournalBlocks.tidy(blocks, epochDay)
+
+        // Les blocs sont reecrits en entier plutot que compares un a un. Une
+        // page fait quelques lignes ; chercher lesquelles ont bouge couterait
+        // plus cher que de les reposer, et laisserait la porte ouverte a un
+        // rang en double apres un deplacement.
+        dao.clearBlocksForDay(epochDay)
+        dao.insertBlocks(tidy.map { it.copy(id = 0) })
+
+        // Le texte a plat : la **projection** que lisent la recherche, l'export
+        // de l'annee, les apercus et le PDF. Elle est recalculee ici et nulle
+        // part ailleurs — c'est ce qui empeche qu'elle se desynchronise des
+        // blocs qui l'ont produite.
+        val flat = JournalBlocks.flatten(tidy)
         val existing = dao.dayOnce(epochDay) ?: DayEntry(epochDay = epochDay)
-        saveDay(existing.copy(title = title, note = note, noteSpans = spans))
+        saveDay(
+            existing.copy(
+                title = title,
+                note = flat.text,
+                noteSpans = RichText.encode(flat.spans),
+            )
+        )
     }
+
+    /** Les blocs d'une page, dans l'ordre. */
+    suspend fun blocksOnce(date: LocalDate): List<JournalBlock> =
+        dao.blocksForDay(date.toEpochDay())
+
+    suspend fun allBlocks(): List<JournalBlock> = dao.allBlocks()
 
     /** Cree la ligne du jour si elle n'existe pas encore (media, etiquette...). */
     private suspend fun ensureDayExists(epochDay: Long) {
@@ -267,14 +297,22 @@ class DayRepository(context: Context) {
 
     suspend fun allVoiceNotes(): List<VoiceNote> = dao.allVoiceNotes()
 
+    /** Les vocaux d'une journee, une fois : de quoi accorder les blocs a l'ouverture. */
+    suspend fun voiceNotesOnce(date: LocalDate): List<VoiceNote> =
+        dao.voiceNotesForDay(date.toEpochDay())
+
     /** Ajoute un vocal deja enregistre a l'endroit rendu par [MediaFiles.newVoicePath]. */
     suspend fun addVoiceNote(
         date: LocalDate,
         relativePath: String,
         durationMs: Long,
         waveform: String,
-    ) {
-        dao.insertVoiceNote(
+    ): Long {
+        ensureDayExists(date.toEpochDay())
+        // L'identifiant revient a l'appelant : c'est l'ecran du journal qui
+        // pose le bloc du vocal a l'endroit du curseur, et il lui faut de quoi
+        // le designer.
+        return dao.insertVoiceNote(
             VoiceNote(
                 epochDay = date.toEpochDay(),
                 relativePath = relativePath,
@@ -282,7 +320,6 @@ class DayRepository(context: Context) {
                 waveform = waveform,
             )
         )
-        ensureDayExists(date.toEpochDay())
     }
 
     /** Enregistre la nouvelle place ou la nouvelle taille d'un vocal. */
@@ -346,7 +383,9 @@ class DayRepository(context: Context) {
         treatments: List<Treatment>,
         doses: List<DoseTaken>,
         voiceNotes: List<VoiceNote> = emptyList(),
+        blocks: List<JournalBlock> = emptyList(),
     ) {
+        dao.clearBlocks()
         dao.clearVoiceNotes()
         dao.deleteAllMedia()
         dao.deleteAllDayTags()
@@ -360,7 +399,11 @@ class DayRepository(context: Context) {
         }
         days.forEach { dao.upsertDay(it) }
         mediaItems.forEach { dao.insertMedia(it.copy(id = 0)) }
-        voiceNotes.forEach { dao.insertVoiceNote(it.copy(id = 0)) }
+        // Les vocaux gardent leur identifiant : ce sont les blocs de la page
+        // qui les designent par lui. En regenerer un detacherait le vocal de sa
+        // place dans le texte.
+        voiceNotes.forEach { dao.insertVoiceNote(it) }
+        if (blocks.isNotEmpty()) dao.insertBlocks(blocks.map { it.copy(id = 0) })
         links.forEach { dao.linkTag(it) }
         money.forEach { dao.upsertMoney(it.copy(id = 0)) }
         // Les identifiants des traitements sont conserves tels quels : les

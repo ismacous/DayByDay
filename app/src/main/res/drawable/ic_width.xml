@@ -1,0 +1,17 @@
+<!--
+  Une fleche horizontale a deux pointes : « change la largeur ».
+
+  Dessinee ici plutot que prise dans le jeu complet des icones Material — le
+  projet n'embarque que le jeu de base, et ajouter les cinq megaoctets du jeu
+  complet pour une fleche n'aurait aucun sens (meme raison que le micro).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M2,12 l5,-5 v3 h10 v-3 l5,5 l-5,5 v-3 h-10 v3 z" />
+</vector>

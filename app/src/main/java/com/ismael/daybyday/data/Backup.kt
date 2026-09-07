@@ -36,7 +36,7 @@ object Backup {
 
     private const val JSON_NAME = "daybyday.json"
     private const val MEDIA_PREFIX = "media/"
-    private const val FORMAT_VERSION = 7
+    private const val FORMAT_VERSION = 8
 
     const val AUTO_BACKUP_NAME = "DayByDay-sauvegarde-auto.zip"
 
@@ -79,6 +79,7 @@ object Backup {
         val treatments = repository.allTreatments()
         val doses = repository.allDoses()
         val voiceNotes = repository.allVoiceNotes()
+        val blocks = repository.allBlocks()
 
         val root = JSONObject()
         root.put("version", FORMAT_VERSION)
@@ -210,6 +211,10 @@ object Backup {
         voiceNotes.forEach { note ->
             voiceJson.put(
                 JSONObject()
+                    // L'identifiant est garde : ce sont les blocs de la page
+                    // qui designent un vocal par lui. Le regenerer a la
+                    // restauration detacherait chaque vocal de sa place.
+                    .put("id", note.id)
                     .put("epochDay", note.epochDay)
                     .put("relativePath", note.relativePath)
                     .put("durationMs", note.durationMs)
@@ -224,6 +229,26 @@ object Backup {
             )
         }
         root.put("voiceNotes", voiceJson)
+
+        // Les blocs : la page elle-meme. Sans eux, une restauration rendrait le
+        // texte (il est dans `note`) mais plus sa mise en page — citations
+        // redevenues des paragraphes, vocaux entasses a la fin.
+        val blocksJson = JSONArray()
+        blocks.forEach { block ->
+            blocksJson.put(
+                JSONObject()
+                    .put("epochDay", block.epochDay)
+                    .put("position", block.position)
+                    .put("kindCode", block.kindCode)
+                    .put("text", block.text)
+                    .put("spans", block.spans)
+                    .put("voiceId", block.voiceId ?: JSONObject.NULL)
+                    .put("barCode", block.barCode)
+                    .put("fillCode", block.fillCode)
+                    .put("ruleCode", block.ruleCode)
+            )
+        }
+        root.put("blocks", blocksJson)
 
         var copied = 0
         ZipOutputStream(output.buffered()).use { zip ->
@@ -408,6 +433,7 @@ object Backup {
                 for (i in 0 until voiceJson.length()) {
                     val item = voiceJson.getJSONObject(i)
                     voiceNotes += VoiceNote(
+                        id = item.optLong("id", 0L),
                         epochDay = item.getLong("epochDay"),
                         relativePath = item.getString("relativePath"),
                         durationMs = item.optLong("durationMs", 0L),
@@ -416,6 +442,26 @@ object Backup {
                         placedY = item.optFloatOrNull("placedY"),
                         wide = item.optBoolean("wide", true),
                         waveform = item.optString("waveform", ""),
+                    )
+                }
+
+                // Absents des sauvegardes d'avant les blocs. La page se
+                // redecoupe alors toute seule a l'ouverture, a partir du texte
+                // a plat : on retrouve le contenu, pas les places des vocaux.
+                val blocks = mutableListOf<JournalBlock>()
+                val blocksJson = json.optJSONArray("blocks") ?: JSONArray()
+                for (i in 0 until blocksJson.length()) {
+                    val item = blocksJson.getJSONObject(i)
+                    blocks += JournalBlock(
+                        epochDay = item.getLong("epochDay"),
+                        position = item.optInt("position", i),
+                        kindCode = item.optString("kindCode", BlockKind.TEXT.code),
+                        text = item.optString("text", ""),
+                        spans = item.optString("spans", ""),
+                        voiceId = if (item.isNull("voiceId")) null else item.getLong("voiceId"),
+                        barCode = item.optString("barCode", ""),
+                        fillCode = item.optString("fillCode", ""),
+                        ruleCode = item.optString("ruleCode", ""),
                     )
                 }
 
@@ -493,6 +539,7 @@ object Backup {
                 }
                 repository.replaceAll(
                     days, mediaItems, tags, links, money, treatments, doses, voiceNotes,
+                    blocks,
                 )
 
                 BackupSummary(days = days.size, mediaFiles = restoredFiles)

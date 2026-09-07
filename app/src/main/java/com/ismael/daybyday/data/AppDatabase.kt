@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Version du schema. Affichee dans les reglages, a propos, pour savoir ce que
  * fait tourner le telephone en cas de probleme.
  */
-const val DATABASE_VERSION = 17
+const val DATABASE_VERSION = 18
 
 @Database(
     entities = [
@@ -23,6 +23,7 @@ const val DATABASE_VERSION = 17
         Treatment::class,
         DoseTaken::class,
         VoiceNote::class,
+        JournalBlock::class,
     ],
     version = DATABASE_VERSION,
     exportSchema = true,
@@ -365,6 +366,108 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * La page devient une suite de blocs.
+         *
+         * Deux choses ici, et la seconde est celle qui compte. La table
+         * `journal_blocks` d'abord. Puis le **decoupage des pages deja
+         * ecrites** : chaque journee est relue, son texte est coupe en blocs
+         * ([JournalBlocks.split]), et ses vocaux sont ajoutes a la suite.
+         *
+         * Sans ce decoupage, une citation ecrite avant cette version resterait
+         * un morceau de texte parmi d'autres : on pourrait deplacer les
+         * nouvelles et pas les anciennes. Une regle a moitie appliquee se voit
+         * plus qu'une regle absente.
+         *
+         * Le texte a plat (`note`, `noteSpans`) n'est pas efface : il reste la
+         * projection que lisent la recherche, l'export de l'annee et les
+         * apercus. Il est simplement reecrit a chaque enregistrement a partir
+         * des blocs.
+         */
+        val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `journal_blocks` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`epochDay` INTEGER NOT NULL, " +
+                        "`position` INTEGER NOT NULL, " +
+                        "`kindCode` TEXT NOT NULL, " +
+                        "`text` TEXT NOT NULL, " +
+                        "`spans` TEXT NOT NULL, " +
+                        "`voiceId` INTEGER, " +
+                        "`barCode` TEXT NOT NULL, " +
+                        "`fillCode` TEXT NOT NULL, " +
+                        "`ruleCode` TEXT NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_journal_blocks_epochDay` " +
+                        "ON `journal_blocks` (`epochDay`)"
+                )
+
+                // Les vocaux de chaque journee, dans l'ordre ou ils ont ete
+                // dits : ils se rangeront a la suite du texte, exactement la ou
+                // ils etaient affiches avant.
+                val voices = mutableMapOf<Long, MutableList<Long>>()
+                db.query("SELECT id, epochDay FROM voice_notes ORDER BY recordedAt, id").use { c ->
+                    while (c.moveToNext()) {
+                        voices.getOrPut(c.getLong(1)) { mutableListOf() } += c.getLong(0)
+                    }
+                }
+
+                val pages = mutableListOf<Triple<Long, String, String>>()
+                db.query("SELECT epochDay, note, noteSpans FROM day_entries").use { c ->
+                    while (c.moveToNext()) {
+                        pages += Triple(
+                            c.getLong(0),
+                            c.getString(1) ?: "",
+                            c.getString(2) ?: "",
+                        )
+                    }
+                }
+
+                val days = (pages.map { it.first } + voices.keys).distinct()
+                days.forEach { epochDay ->
+                    val page = pages.firstOrNull { it.first == epochDay }
+                    val text = page?.second.orEmpty()
+                    val blocks = if (text.isEmpty()) {
+                        emptyList()
+                    } else {
+                        JournalBlocks.split(
+                            text = text,
+                            spans = RichText.decode(page?.third, text.length),
+                            epochDay = epochDay,
+                        )
+                    }
+                    var position = 0
+                    blocks.forEach { block ->
+                        db.execSQL(
+                            "INSERT INTO journal_blocks " +
+                                "(epochDay, position, kindCode, text, spans, voiceId, " +
+                                "barCode, fillCode, ruleCode) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)",
+                            arrayOf<Any>(
+                                epochDay,
+                                position++,
+                                block.kindCode,
+                                block.text,
+                                block.spans,
+                                block.barCode,
+                                block.fillCode,
+                                block.ruleCode,
+                            ),
+                        )
+                    }
+                    voices[epochDay]?.forEach { voiceId ->
+                        db.execSQL(
+                            "INSERT INTO journal_blocks " +
+                                "(epochDay, position, kindCode, text, spans, voiceId, " +
+                                "barCode, fillCode, ruleCode) VALUES (?, ?, ?, '', '', ?, '', '', '')",
+                            arrayOf<Any>(epochDay, position++, BlockKind.VOICE.code, voiceId),
+                        )
+                    }
+                }
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -391,6 +494,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_14_15,
                     MIGRATION_15_16,
                     MIGRATION_16_17,
+                    MIGRATION_17_18,
                 )
                 .build()
                 .also { instance = it }

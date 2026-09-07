@@ -8,11 +8,11 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -36,57 +36,66 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.ismael.daybyday.R
 import com.ismael.daybyday.data.VoiceNote
 import com.ismael.daybyday.data.Waveform
 
 /**
  * Un vocal, dans le fil de la page.
  *
- * Il n'est **pas** posé librement comme une photo : un enregistrement n'est pas
- * une image qu'on colle de travers dans un coin, c'est un morceau de la
- * journée. Il se range donc sous le texte, dans l'ordre où il a été dit, et
- * garde la largeur de la page.
+ * Il est **pose entre deux paragraphes**, pas range en bas ni colle de travers
+ * comme une photo : un enregistrement appartient a un moment du texte. On le
+ * deplace en maintenant le doigt dessus puis en tirant, comme un bloc — c'est
+ * le meme geste partout dans la page.
  *
- * Ses couleurs viennent du **papier**, pas du thème : le rond de lecture est
- * une teinte sombre de la page, opaque, et la barre une teinte à peine
- * marquée. Une pastille violette du thème sur un papier ivoire ressemble à un
- * bouton posé par une autre application.
+ * Ses couleurs viennent du **papier** : le rond de lecture est une teinte
+ * sombre de la page, opaque, et la barre une teinte a peine marquee. Une
+ * pastille violette du theme sur un papier ivoire ressemble a un bouton pose
+ * par une autre application.
+ *
+ * Il n'y a **pas de menu** : tout ce qu'on peut faire est sur la barre
+ * elle-meme — ecouter, changer sa largeur, l'effacer — et le reste est un
+ * geste. Un menu pour trois boutons est un menu de trop.
  */
 @Composable
 fun VoiceNoteRow(
     note: VoiceNote,
     playing: Boolean,
-    /** Où en est la lecture, entre 0 et 1. Ignoré quand le vocal ne joue pas. */
+    /** Ou en est la lecture, entre 0 et 1. Ignore quand le vocal ne joue pas. */
     progress: () -> Float,
     paper: Color,
+    /** La hauteur d'une ligne du lignage : la barre en occupe deux, pile. */
+    lineHeight: Dp,
     onPlay: () -> Unit,
     onDelete: () -> Unit,
+    onToggleWidth: () -> Unit,
+    dragModifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
     val ink = JournalPaper.ink(paper)
     val surface = JournalPaper.shade(paper, 0.07f)
     val button = JournalPaper.shade(paper, 0.78f)
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 5.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(surface)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    VoiceShell(
+        paper = paper,
+        lineHeight = lineHeight,
+        wide = note.wide,
+        modifier = modifier.then(dragModifier),
     ) {
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(PLAY_SIZE)
                 .clip(CircleShape)
                 .background(button)
                 .clickable(onClickLabel = if (playing) "Arrêter" else "Écouter", onClick = onPlay),
             contentAlignment = Alignment.Center,
         ) {
             if (playing) {
-                // Le jeu d'icônes de base n'a pas de « arrêter » : un carré le
-                // dit aussi bien, et c'est le signe que tout le monde connaît.
+                // Le jeu d'icones de base n'a pas de « arreter » : un carre le
+                // dit aussi bien, et c'est le signe que tout le monde connait.
                 Box(
                     modifier = Modifier
                         .size(13.dp)
@@ -115,7 +124,7 @@ fun VoiceNoteRow(
                 .height(26.dp),
         )
 
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(8.dp))
 
         Text(
             text = formatDuration(note.durationMs),
@@ -123,9 +132,30 @@ fun VoiceNoteRow(
             color = ink.copy(alpha = 0.75f),
         )
 
+        // La poignee de largeur. Deux tailles et pas une largeur libre : une
+        // barre de lecture n'a pas de proportions a respecter comme une photo,
+        // et la tirer au doigt donnerait surtout des largeurs bancales.
         Box(
             modifier = Modifier
-                .size(30.dp)
+                .size(28.dp)
+                .clip(CircleShape)
+                .clickable(
+                    onClickLabel = if (note.wide) "Rétrécir le vocal" else "Élargir le vocal",
+                    onClick = onToggleWidth,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_width),
+                contentDescription = null,
+                tint = ink.copy(alpha = 0.45f),
+                modifier = Modifier.size(15.dp),
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .size(28.dp)
                 .clip(CircleShape)
                 .clickable(onClickLabel = "Supprimer ce vocal", onClick = onDelete),
             contentAlignment = Alignment.Center,
@@ -134,19 +164,144 @@ fun VoiceNoteRow(
                 Icons.Default.Clear,
                 contentDescription = null,
                 tint = ink.copy(alpha = 0.45f),
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(15.dp),
             )
         }
     }
 }
 
 /**
+ * L'enregistrement en cours, **a la place ou le vocal se posera**.
+ *
+ * C'etait la demande, et elle vaut mieux que ce qu'il y avait : un petit
+ * temoin rouge en haut de l'ecran laissait deviner qu'il se passait quelque
+ * chose, puis le vocal apparaissait ailleurs, en haut du texte, et il fallait
+ * le descendre a la main. Ici la barre est **deja** la, au bon endroit, a la
+ * bonne taille ; le bouton rouge occupe la place du bouton d'ecoute, et on
+ * appuie au meme endroit pour arreter. Rien ne bouge quand l'enregistrement
+ * s'arrete : la barre rouge devient la barre grise, sur place.
+ */
+@Composable
+fun RecordingRow(
+    elapsedMs: Long,
+    /** La silhouette du son mesuree jusqu'ici : elle pousse pendant qu'on parle. */
+    waveform: String,
+    paper: Color,
+    lineHeight: Dp,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val ink = JournalPaper.ink(paper)
+    val transition = rememberInfiniteTransition(label = "enregistrement")
+    val pulse by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.45f,
+        animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
+        label = "battement",
+    )
+
+    VoiceShell(
+        paper = paper,
+        lineHeight = lineHeight,
+        wide = true,
+        surface = RECORD_RED.copy(alpha = 0.10f),
+        modifier = modifier,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(PLAY_SIZE)
+                .clip(CircleShape)
+                .background(RECORD_RED)
+                .clickable(onClickLabel = "Arrêter l'enregistrement", onClick = onStop),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(14.dp)
+                    // Le battement se lit dans `graphicsLayer` : lu pendant la
+                    // composition, il ferait recomposer la page a chaque image.
+                    .graphicsLayer { alpha = pulse }
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(Color.White),
+            )
+        }
+
+        Spacer(Modifier.width(10.dp))
+
+        VoiceWave(
+            waveform = waveform,
+            played = { 0f },
+            ink = RECORD_RED,
+            accent = RECORD_RED,
+            modifier = Modifier
+                .weight(1f)
+                .height(26.dp),
+        )
+
+        Spacer(Modifier.width(8.dp))
+
+        Text(
+            text = formatDuration(elapsedMs),
+            style = MaterialTheme.typography.labelMedium,
+            color = RECORD_RED,
+        )
+
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = "Appuie pour arrêter",
+            style = MaterialTheme.typography.labelSmall,
+            color = ink.copy(alpha = 0.5f),
+        )
+        Spacer(Modifier.width(6.dp))
+    }
+}
+
+/**
+ * Le cadre commun a la barre d'ecoute et a celle d'enregistrement.
+ *
+ * Les deux **doivent** avoir exactement la meme forme : c'est ce qui fait que
+ * la fin d'un enregistrement ne deplace rien a l'ecran. Le partager evite
+ * qu'elles divergent a la premiere retouche.
+ *
+ * La hauteur vaut deux lignes du lignage, pile : la page garde son rythme, et
+ * le texte qui suit retombe sur ses lignes.
+ */
+@Composable
+private fun VoiceShell(
+    paper: Color,
+    lineHeight: Dp,
+    wide: Boolean,
+    modifier: Modifier = Modifier,
+    surface: Color = JournalPaper.shade(paper, 0.07f),
+    content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(lineHeight * VOICE_LINES),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth(if (wide) 1f else NARROW_FRACTION)
+                .fillMaxHeight()
+                .padding(vertical = 3.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(surface)
+                .padding(horizontal = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content,
+        )
+    }
+}
+
+/**
  * La silhouette du son.
  *
- * Elle est **dessinée**, pas composée en cinquante-six petites boîtes : une
- * barre par vue coûterait cinquante-six mesures à chaque image de la lecture,
- * pour des rectangles de deux points de large. Et l'avancée de la lecture est
- * lue **dans le dessin** — la règle habituelle : une valeur qui change à
+ * Elle est **dessinee**, pas composee en cinquante-six petites boites : une
+ * barre par vue couterait cinquante-six mesures a chaque image de la lecture,
+ * pour des rectangles de deux points de large. Et l'avancee de la lecture est
+ * lue **dans le dessin** — la regle habituelle : une valeur qui change a
  * chaque image ne se lit pas pendant la composition.
  */
 @Composable
@@ -170,8 +325,8 @@ private fun VoiceWave(
         heights.forEachIndexed { index, value ->
             val height = (size.height * value).coerceAtLeast(barWidth)
             drawRoundRect(
-                // La partie déjà lue prend la couleur d'accent : on voit où on
-                // en est sans chiffre qui défile.
+                // La partie deja lue prend la couleur d'accent : on voit ou on
+                // en est sans chiffre qui defile.
                 color = if (index < edge) accent else resting,
                 topLeft = Offset(index * step + (step - barWidth) / 2f, (size.height - height) / 2f),
                 size = Size(barWidth, height),
@@ -181,70 +336,18 @@ private fun VoiceWave(
     }
 }
 
-/**
- * L'enregistrement en cours, en bandeau au-dessus de la page.
- *
- * Il ne se pose pas dans la page : tant qu'on parle, le vocal n'existe pas
- * encore, il n'a ni durée ni silhouette. Le bandeau disparaît dès qu'on
- * s'arrête, et la barre apparaît alors dans la page.
- */
-@Composable
-fun RecordingBanner(elapsedMs: Long, onStop: () -> Unit) {
-    val transition = rememberInfiniteTransition(label = "enregistrement")
-    val pulse by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.35f,
-        animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
-        label = "battement",
-    )
+/** Deux lignes du lignage : la barre garde le rythme de la page. */
+const val VOICE_LINES = 2
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(
-            modifier = Modifier
-                .clip(CircleShape)
-                .background(RECORD_RED.copy(alpha = 0.14f))
-                .clickable(onClickLabel = "Arrêter l'enregistrement", onClick = onStop)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(9.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .graphicsLayer { alpha = pulse }
-                    .clip(CircleShape)
-                    .background(RECORD_RED),
-            )
-            Text(
-                text = formatDuration(elapsedMs),
-                style = MaterialTheme.typography.labelLarge,
-                color = RECORD_RED,
-            )
-            Box(
-                modifier = Modifier
-                    .size(12.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(RECORD_RED),
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        Text(
-            text = "Appuie pour arrêter",
-            style = MaterialTheme.typography.labelMedium,
-            color = RECORD_RED.copy(alpha = 0.75f),
-        )
-    }
-}
+private val PLAY_SIZE = 38.dp
+
+/** La largeur d'un vocal retreci, en part de la page. */
+private const val NARROW_FRACTION = 0.62f
 
 /**
  * Le rouge de l'enregistrement, fixe.
  *
- * Ce n'est pas une couleur du thème : « ça enregistre » se dit en rouge
+ * Ce n'est pas une couleur du theme : « ca enregistre » se dit en rouge
  * partout, et le prendre dans la palette de la page voudrait dire qu'il change
  * avec le papier — donc qu'il ne veut plus rien dire.
  */

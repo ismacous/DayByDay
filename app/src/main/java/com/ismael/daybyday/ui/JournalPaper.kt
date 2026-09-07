@@ -209,6 +209,10 @@ fun PaperSettingsSheet(
     onSnap: (Boolean) -> Unit,
     onFont: (String) -> Unit,
     onTextSize: (Int) -> Unit,
+    /** Copie le lien de cette page, a coller dans une autre. */
+    onCopyLink: () -> Unit,
+    /** Le lien lui-meme, montre en clair : on colle ce qu'on a vu. */
+    linkText: String,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -319,6 +323,19 @@ fun PaperSettingsSheet(
                             )
                         }
                     }
+                }
+            }
+
+            SettingSection(label = "Cette page", value = linkText) {
+                // Le lien est du texte : colle dans une autre journee, il y
+                // devient un nom souligne sur lequel on appuie. Rien n'est
+                // enregistre nulle part, donc rien ne peut pointer dans le vide.
+                ChoicePill(selected = false, onClick = onCopyLink) { color ->
+                    Text(
+                        text = "Copier le lien de cette page",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = color,
+                    )
                 }
             }
 

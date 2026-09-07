@@ -8,6 +8,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.dp
 import com.ismael.daybyday.data.Hashtag
 
 /**
@@ -112,3 +113,54 @@ private const val PADDING = 0.22f
  * un journal d'un formulaire.
  */
 private const val CHIP_ALPHA = 0.18f
+
+/**
+ * Le trait d'une citation, dessine le long de son paragraphe.
+ *
+ * Pourquoi le dessiner plutot que l'ecrire : un caractere ajoute devant chaque
+ * ligne se retrouverait dans la recherche, dans l'export de l'annee et dans
+ * l'apercu de la carte, et il faudrait le retirer partout. Le trait n'existe
+ * qu'a l'ecran, et la citation reste exactement le texte qu'on a ecrit.
+ *
+ * Il court du haut de la premiere ligne au bas de la derniere, dans la marge
+ * que le paragraphe s'est reservee ([QUOTE_INDENT]).
+ */
+fun Modifier.quoteBars(
+    layout: State<TextLayoutResult?>,
+    /** Les citations et la couleur de chacune, relues a chaque dessin. */
+    quotes: () -> List<QuoteBar>,
+): Modifier = drawBehind {
+    val result = layout.value ?: return@drawBehind
+    val length = result.layoutInput.text.length
+    if (length == 0) return@drawBehind
+
+    val width = BAR_WIDTH.toPx()
+    val radius = CornerRadius(width / 2f)
+    quotes().forEach { quote ->
+        val start = quote.range.first.coerceIn(0, length - 1)
+        val end = quote.range.last.coerceIn(start, length - 1)
+        val firstLine = result.getLineForOffset(start)
+        val lastLine = result.getLineForOffset(end)
+        val top = result.getLineTop(firstLine)
+        val bottom = result.getLineBottom(lastLine)
+        drawRoundRect(
+            color = quote.color,
+            topLeft = Offset(result.getLineLeft(firstLine), top + BAR_INSET.toPx()),
+            size = Size(width, (bottom - top - 2 * BAR_INSET.toPx()).coerceAtLeast(width)),
+            cornerRadius = radius,
+        )
+    }
+}
+
+/** Une citation : l'intervalle qu'elle couvre, et la couleur de son trait. */
+data class QuoteBar(val range: IntRange, val color: Color)
+
+/** Assez large pour se voir, assez fin pour ne pas devenir une barre. */
+private val BAR_WIDTH = 3.dp
+
+/**
+ * Le trait ne touche ni le haut ni le bas de sa bande : une ligne fait 28
+ * points de haut alors que les lettres en font seize, donc un trait sur toute
+ * la bande deborderait nettement du texte qu'il accompagne.
+ */
+private val BAR_INSET = 5.dp

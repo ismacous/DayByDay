@@ -12,9 +12,11 @@ import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import com.ismael.daybyday.data.Hashtag
+import com.ismael.daybyday.data.PageLink
 import com.ismael.daybyday.data.RichText
 import com.ismael.daybyday.data.StyleFamily
 import com.ismael.daybyday.data.TextSpan
@@ -140,7 +142,7 @@ fun buildAnnotatedStringWithSpans(
     spanStyles = spans
         .filter { it.start < text.length && it.end <= text.length && !it.isEmpty }
         .map { AnnotatedString.Range(it.style.toSpanStyle(), it.start, it.end) } +
-        hashtagSpans(text, hashtagColors),
+        hashtagSpans(text, hashtagColors) + linkSpans(text),
     paragraphStyles = if (rhythm == null) emptyList() else headingParagraphs(text, spans, rhythm),
 )
 
@@ -167,6 +169,26 @@ private fun hashtagSpans(
 }
 
 /**
+ * Les liens vers une autre journee, soulignes et colores.
+ *
+ * Une seule couleur pour tous, et pas la teinte de l'application : ce bleu est
+ * celui de la palette du texte, choisi pour rester lisible aussi bien sur
+ * l'ivoire que sur l'ardoise. Un lien doit se reconnaitre comme un lien
+ * partout, pas prendre la couleur de la page.
+ */
+private fun linkSpans(text: String): List<AnnotatedString.Range<SpanStyle>> =
+    PageLink.linksIn(text).map { link ->
+        AnnotatedString.Range(
+            SpanStyle(
+                color = Color(TextStyleKind.COLOR_BLUE.argb),
+                textDecoration = TextDecoration.Underline,
+            ),
+            link.range.first,
+            link.range.last + 1,
+        )
+    }
+
+/**
  * Les titres, ramenes a des lignes entieres et a une hauteur multiple du
  * lignage.
  *
@@ -183,7 +205,7 @@ private fun headingParagraphs(
     if (text.isEmpty()) return emptyList()
 
     val wanted = spans
-        .filter { it.style.family == StyleFamily.HEADING && !it.isEmpty }
+        .filter { it.style.takesWholeLine && !it.isEmpty }
         .mapNotNull { span ->
             val from = span.start.coerceIn(0, text.length - 1)
             val line = RichText.lineRange(text, from, (span.end - 1).coerceIn(from, text.length - 1))
@@ -200,7 +222,17 @@ private fun headingParagraphs(
     wanted.forEach { (from, to, style) ->
         if (from < covered) return@forEach
         result += AnnotatedString.Range(
-            ParagraphStyle(lineHeight = rhythm * style.lineSpan()),
+            ParagraphStyle(
+                lineHeight = rhythm * style.lineSpan(),
+                // La citation se decale pour laisser passer son trait. Le
+                // decalage porte sur **toutes** les lignes, sinon seule la
+                // premiere s'ecarterait et le trait traverserait le texte.
+                textIndent = if (style == TextStyleKind.QUOTE) {
+                    TextIndent(firstLine = QUOTE_INDENT, restLine = QUOTE_INDENT)
+                } else {
+                    TextIndent.None
+                },
+            ),
             from,
             to,
         )
@@ -224,6 +256,11 @@ fun TextStyleKind.toSpanStyle(): SpanStyle = when (this) {
     TextStyleKind.TITLE_2 -> SpanStyle(fontSize = 21.sp, fontWeight = FontWeight.Bold)
     TextStyleKind.TITLE_3 -> SpanStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
 
+    // L'italique, et rien de plus : la couleur du trait vient de la couleur
+    // posee sur le texte, s'il y en a une, et l'encre de la page sinon. Une
+    // citation grisee d'office serait illisible sur l'ardoise.
+    TextStyleKind.QUOTE -> SpanStyle(fontStyle = FontStyle.Italic)
+
     else -> when (this.family) {
         StyleFamily.FONT -> SpanStyle(fontFamily = fontFamily())
         StyleFamily.COLOR -> SpanStyle(color = Color(argb))
@@ -236,3 +273,12 @@ fun TextStyleKind.toSpanStyle(): SpanStyle = when (this) {
         else -> SpanStyle()
     }
 }
+
+/**
+ * La place laissee au trait d'une citation.
+ *
+ * En `sp` et non en points : c'est un decalage de **texte**, il doit grandir
+ * avec les caracteres quand on agrandit la police dans Android, sinon le trait
+ * finirait par mordre sur les lettres.
+ */
+val QUOTE_INDENT = 20.sp

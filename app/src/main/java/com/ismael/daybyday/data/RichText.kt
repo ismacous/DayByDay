@@ -32,6 +32,12 @@ enum class StyleFamily {
 
     /** Police de caracteres : une seule a la fois. */
     FONT,
+
+    /**
+     * Un bloc : une citation. Comme un titre, il prend la ligne entiere, mais
+     * il ne change ni la taille ni la graisse — il change le **cadre**.
+     */
+    BLOCK,
 }
 
 /**
@@ -84,10 +90,22 @@ enum class TextStyleKind(
     FONT_SERIF("fs", "Serif", StyleFamily.FONT),
     FONT_MODERN("fo", "Moderne", StyleFamily.FONT),
     FONT_SANS("fn", "Sans serif", StyleFamily.FONT),
-    FONT_MONO("fm", "Machine à écrire", StyleFamily.FONT);
+    FONT_MONO("fm", "Machine à écrire", StyleFamily.FONT),
 
-    /** Un titre habille la ligne entiere : il ne se pose pas sur trois mots. */
-    val takesWholeLine: Boolean get() = family == StyleFamily.HEADING
+    /**
+     * La citation : un trait coloré le long du paragraphe, et le texte
+     * décalé pour lui laisser la place. Rien d'autre — pas de guillemets
+     * ajoutés, pas de taille changée : ce qui est cité reste ce qui a été
+     * écrit, c'est la marge qui dit qu'on cite.
+     */
+    QUOTE("q", "Citation", StyleFamily.BLOCK);
+
+    /**
+     * Une citation, comme un titre, habille la ligne entiere : ni l'une ni
+     * l'autre ne se posent sur trois mots au milieu d'une phrase.
+     */
+    val takesWholeLine: Boolean
+        get() = family == StyleFamily.HEADING || family == StyleFamily.BLOCK
 
     companion object {
         fun fromCode(code: String): TextStyleKind? = entries.firstOrNull { it.code == code }
@@ -103,6 +121,8 @@ enum class TextStyleKind(
         val highlights: List<TextStyleKind> get() = of(StyleFamily.HIGHLIGHT)
 
         val fonts: List<TextStyleKind> get() = of(StyleFamily.FONT)
+
+        val blocks: List<TextStyleKind> get() = of(StyleFamily.BLOCK)
     }
 }
 

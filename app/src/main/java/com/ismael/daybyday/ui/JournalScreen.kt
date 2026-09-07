@@ -56,10 +56,12 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextLayoutResult
@@ -71,6 +73,7 @@ import com.ismael.daybyday.data.DayCard
 import com.ismael.daybyday.data.MediaItem
 import com.ismael.daybyday.data.MediaLayer
 import com.ismael.daybyday.data.Placement
+import com.ismael.daybyday.data.PageLink
 import com.ismael.daybyday.data.RichText
 import com.ismael.daybyday.data.StyleFamily
 import com.ismael.daybyday.data.TextSpan
@@ -90,7 +93,12 @@ import java.time.LocalDate
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalTextApi::class)
 @Composable
-fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
+fun JournalScreen(
+    date: LocalDate,
+    onBack: () -> Unit,
+    /** Ouvre la journee visee par un lien ecrit dans la page. */
+    onOpenDay: (LocalDate) -> Unit = {},
+) {
     val app = LocalContext.current.dayByDayApp
     val repository = app.repository
 
@@ -219,6 +227,8 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
     }
     var pageWidth by remember { mutableStateOf(0f) }
     var selectedPhotoId by remember { mutableStateOf<Long?>(null) }
+
+    val clipboard = LocalClipboardManager.current
 
     // --- L'allure de la page, gardee d'une journee a l'autre -------------
     val prefs = app.prefs
@@ -640,6 +650,23 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                             // Apres la marge, pas avant : l'origine du dessin
                             // doit etre celle du texte, sinon les pastilles
                             // sont decalees de toute la marge.
+                            .openPageLinkOnTap(bodyLayout, { body.text }, onOpenDay)
+                            .quoteBars(bodyLayout) {
+                                // Relu au dessin : poser une citation ou en
+                                // changer la couleur ne doit pas remesurer la
+                                // page entiere.
+                                spans.filter { it.style == TextStyleKind.QUOTE && !it.isEmpty }
+                                    .map { quote ->
+                                        val tint = spans.firstOrNull {
+                                            it.style.family == StyleFamily.COLOR &&
+                                                it.start <= quote.start && it.end >= quote.end
+                                        }
+                                        QuoteBar(
+                                            range = quote.start until quote.end,
+                                            color = tint?.let { Color(it.style.argb) } ?: ink,
+                                        )
+                                    }
+                            }
                             .hashtagChips(bodyLayout, textSize.toFloat())
                             .focusRequester(bodyFocus)
                             .onFocusChanged { state ->
@@ -695,6 +722,11 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                     onSnap = { snapToGrid = it; prefs.journalSnapToGrid = it },
                     onFont = { fontCode = it; prefs.journalFontCode = it },
                     onTextSize = { textSize = it; prefs.journalTextSize = it },
+                    linkText = PageLink.format(date),
+                    onCopyLink = {
+                        clipboard.setText(AnnotatedString(PageLink.format(date)))
+                        showPaperSettings = false
+                    },
                     onDismiss = { showPaperSettings = false },
                 )
             }

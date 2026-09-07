@@ -229,6 +229,13 @@ fun AppNavigation(
                         JournalScreen(
                             date = LocalDate.ofEpochDay(day),
                             onBack = { navController.popBackStack() },
+                            // Un lien empile une page de plus : le retour
+                            // ramene a celle d'ou l'on vient, comme on
+                            // l'attend. Sans ca, sauter de page en page
+                            // finirait toujours par sortir du journal.
+                            onOpenDay = { target ->
+                                navController.navigate("journal/${target.toEpochDay()}")
+                            },
                         )
                     }
 

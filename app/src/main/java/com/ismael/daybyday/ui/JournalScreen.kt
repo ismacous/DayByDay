@@ -763,7 +763,16 @@ fun JournalScreen(
         if (allowed) startRecording() else askMicrophone.launch(Manifest.permission.RECORD_AUDIO)
     }
 
-    // --- Supprimer un bloc ------------------------------------------------
+    // --- Choisir, puis supprimer un bloc -----------------------------------
+    /**
+     * Le bloc choisi sans qu'on ecrive dedans : un vocal, un trait.
+     *
+     * Declare **ici**, avec ce qui s'en sert, et non plus avec le deplacement
+     * plus bas : les fonctions d'un composable ne voient que ce qui est ecrit
+     * au-dessus d'elles.
+     */
+    var selectedBlock by remember { mutableStateOf<Long?>(null) }
+
     /** Le bloc dont la poignee a ete effleuree : son petit menu est ouvert. */
     var menuFor by remember { mutableStateOf<Long?>(null) }
 
@@ -858,7 +867,6 @@ fun JournalScreen(
     val layouts = remember { mutableMapOf<Long, MutableState<TextLayoutResult?>>() }
     var dragKey by remember { mutableStateOf<Long?>(null) }
     var dragDy by remember { mutableStateOf(0f) }
-    var selectedBlock by remember { mutableStateOf<Long?>(null) }
 
     /**
      * Le bloc suit le doigt, et la page se reorganise sous lui.

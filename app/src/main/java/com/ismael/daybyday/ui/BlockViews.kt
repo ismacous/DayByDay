@@ -445,21 +445,29 @@ fun BlockGutter(
         contentAlignment = Alignment.Center,
     ) {
         if (!current) return@Box
-        Canvas(modifier = Modifier.size(GRIP_WIDTH, GRIP_HEIGHT)) {
-            // Six points : le signe universel de « ca se deplace ». Dessine
-            // plutot qu'importe — six cercles ne valent pas le jeu complet des
-            // icones Material.
-            val radius = size.width / 6f
-            val columnGap = size.width - radius * 2f
-            val rowGap = (size.height - radius * 2f) / 2f
-            repeat(3) { row ->
-                repeat(2) { column ->
-                    drawCircle(
-                        color = ink.copy(alpha = 0.5f),
-                        radius = radius,
-                        center = Offset(radius + column * columnGap, radius + row * rowGap),
-                    )
-                }
+        BlockGrip(ink = ink)
+    }
+}
+
+/**
+ * Six points : le signe universel de « ca se deplace ».
+ *
+ * Dessine plutot qu'importe — six cercles ne valent pas les quelques
+ * megaoctets du jeu complet des icones Material.
+ */
+@Composable
+private fun BlockGrip(ink: Color) {
+    Canvas(modifier = Modifier.size(GRIP_WIDTH, GRIP_HEIGHT)) {
+        val radius = size.width / 6f
+        val columnGap = size.width - radius * 2f
+        val rowGap = (size.height - radius * 2f) / 2f
+        repeat(3) { row ->
+            repeat(2) { column ->
+                drawCircle(
+                    color = ink.copy(alpha = 0.5f),
+                    radius = radius,
+                    center = Offset(radius + column * columnGap, radius + row * rowGap),
+                )
             }
         }
     }
@@ -552,6 +560,19 @@ fun Modifier.blockDrag(
 /** Retient la place d'un bloc dans la page : c'est ce qui permet de le deplacer. */
 fun Modifier.reportPlacement(onPlace: (top: Float, height: Float) -> Unit): Modifier =
     onGloballyPositioned { onPlace(it.positionInParent().y, it.size.height.toFloat()) }
+
+/**
+ * La marge de gauche qui porte les poignees.
+ *
+ * Le titre et le surtitre de la page se decalent d'autant (`TEXT_INDENT`) :
+ * sans ca, le titre commencerait a gauche des paragraphes et la page aurait
+ * deux bords gauches.
+ */
+val GUTTER_WIDTH = 24.dp
+
+/** La poignee elle-meme : six points, plus petits que la marge qui les tient. */
+private val GRIP_WIDTH = 10.dp
+private val GRIP_HEIGHT = 16.dp
 
 /** La largeur reservee au trait d'une citation, poignee comprise. */
 val QUOTE_GRIP = 22.dp

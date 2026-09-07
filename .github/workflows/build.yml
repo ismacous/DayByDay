@@ -37,11 +37,11 @@ jobs:
 
       - name: Unit tests
         timeout-minutes: 15
-        run: ./gradlew --no-daemon --stacktrace testDebugUnitTest
+        run: ./gradlew --no-daemon testDebugUnitTest
 
       - name: Build debug APK
         timeout-minutes: 15
-        run: ./gradlew --no-daemon --stacktrace assembleDebug
+        run: ./gradlew --no-daemon assembleDebug
 
       - name: Rename APK
         run: |

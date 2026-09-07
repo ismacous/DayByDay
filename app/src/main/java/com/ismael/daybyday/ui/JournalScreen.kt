@@ -82,6 +82,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ismael.daybyday.data.BlockAlign
 import com.ismael.daybyday.data.BlockKind
 import com.ismael.daybyday.data.DayCard
 import com.ismael.daybyday.data.JournalBlocks
@@ -123,6 +124,8 @@ fun JournalScreen(
     onBack: () -> Unit,
     /** Ouvre la journee visee par un lien ecrit dans la page. */
     onOpenDay: (LocalDate) -> Unit = {},
+    /** Ouvre les journees qui portent le mot-cle qu'on vient de toucher. */
+    onOpenHashtag: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val app = context.dayByDayApp
@@ -404,7 +407,30 @@ fun JournalScreen(
      */
     fun backspaceAtStart(key: Long): Boolean {
         val index = blocks.indexOfFirst { it.key == key }
-        if (index <= 0) return false
+        if (index < 0) return false
+        val block = blocks[index]
+
+        // Une citation redevient d'abord du texte ordinaire, et ne disparait
+        // qu'au coup suivant. C'est le geste qu'on attend d'un editeur : la
+        // touche d'effacement defait la mise en forme avant de defaire le
+        // texte. Une citation vide, elle, n'a rien a defaire — elle s'en va.
+        if (block.kind == BlockKind.QUOTE) {
+            history.record(snapshot(), structural = true)
+            blocks = if (block.text.isEmpty()) {
+                PageBlocks.tidy(blocks.filterNot { it.key == key })
+            } else {
+                blocks.map {
+                    if (it.key == key) {
+                        it.copy(kind = BlockKind.TEXT, bar = null, fill = null)
+                    } else {
+                        it
+                    }
+                }
+            }
+            return true
+        }
+
+        if (index == 0) return false
         val previous = blocks[index - 1]
 
         // Au-dessus, autre chose que du texte — un vocal, un trait, une
@@ -543,6 +569,18 @@ fun JournalScreen(
         }
     }
 
+    /**
+     * Cale le texte du bloc courant a gauche, au centre ou a droite.
+     *
+     * Sur le **bloc**, pas sur la selection : centrer la moitie d'un
+     * paragraphe ne veut rien dire.
+     */
+    fun alignBlock(align: BlockAlign) {
+        val key = focusedKey ?: return
+        history.record(snapshot(), structural = true)
+        blocks = blocks.map { if (it.key == key) it.copy(align = align) else it }
+    }
+
     /** Repasse en texte normal la selection, ou la ligne du curseur. */
     fun clearHeading() {
         val block = focusedBlock() ?: return
@@ -564,6 +602,23 @@ fun JournalScreen(
         val key = focusedKey ?: return
         history.record(snapshot(), structural = true)
         blocks = blocks.map { if (it.key == key) it.copy(fill = null) else it }
+    }
+
+    /** Revient a la taille de base : « normale » est l'absence de style. */
+    fun clearSize() {
+        val block = focusedBlock()
+        if (hasSelection && block != null) {
+            history.record(snapshot(), structural = false)
+            blocks = blocks.map {
+                if (it.key == block.key) {
+                    it.copy(spans = RichText.clearFamily(it.spans, start, end, StyleFamily.SIZE))
+                } else {
+                    it
+                }
+            }
+        } else {
+            typing = typing.filterNot { it.family == StyleFamily.SIZE }.toSet()
+        }
     }
 
     /** Revient a la police d'origine sur la selection, ou pour la suite tapee. */
@@ -1157,6 +1212,7 @@ fun JournalScreen(
                         onDrag = ::dragBy,
                         onDragEnd = ::endDrag,
                         onOpenDay = onOpenDay,
+                        onOpenHashtag = onOpenHashtag,
                         onBackspaceAtStart = ::backspaceAtStart,
                         onSelectBlock = { selectedBlock = it },
                         onDeleteBlock = ::requestDeleteBlock,
@@ -1322,7 +1378,10 @@ fun JournalScreen(
                         applyStyle(style)
                         if (posed) showPanel(null)
                     },
+                    align = focusedBlock()?.align ?: BlockAlign.START,
+                    onAlign = { alignBlock(it) },
                     onClearHeading = { clearHeading() },
+                    onClearSize = { clearSize() },
                     onClearFont = { clearFont() },
                     onClearQuoteFill = { clearQuoteFill() },
                     onList = { marker ->
@@ -1397,6 +1456,7 @@ private fun PageColumn(
     onDrag: (Float) -> Unit,
     onDragEnd: () -> Unit,
     onOpenDay: (LocalDate) -> Unit,
+    onOpenHashtag: (String) -> Unit,
     onBackspaceAtStart: (Long) -> Boolean,
     onSelectBlock: (Long?) -> Unit,
     onDeleteBlock: (Long) -> Unit,
@@ -1502,6 +1562,8 @@ private fun PageColumn(
                                     onLayout = { layout.value = it },
                                     onFocus = { onFocused(block.key, it) },
                                     onOpenDay = onOpenDay,
+                                    onOpenHashtag = onOpenHashtag,
+                                    align = block.align,
                                     onBackspaceAtStart = { onBackspaceAtStart(block.key) },
                                     modifier = Modifier
                                         .focusRequester(focusRequester)
@@ -1521,6 +1583,9 @@ private fun PageColumn(
                                     onLayout = { layout.value = it },
                                     onFocus = { onFocused(block.key, it) },
                                     onOpenDay = onOpenDay,
+                                    onOpenHashtag = onOpenHashtag,
+                                    align = block.align,
+                                    onBackspaceAtStart = { onBackspaceAtStart(block.key) },
                                     // Le trait de la citation est une deuxieme
                                     // prise, en plus de la poignee : c'est deja
                                     // ce qu'on montre du doigt pour designer

@@ -73,8 +73,28 @@ fun Context.findActivity(): Activity? {
     return null
 }
 
+/**
+ * La moyenne d'une couleur (0 a 3) devient une note sur dix.
+ *
+ * Les quatre couleurs valent 0, 1, 2 et 3 — c'est ce qui est **enregistre**, et
+ * ca ne bouge pas. Mais « 1,7 sur 3 » ne veut rien dire pour personne : sur
+ * trois, on ne sait pas si c'est bien ou mal sans y reflechir. Sur dix, si.
+ * La conversion se fait donc a l'affichage, et seulement la.
+ */
+fun outOfTen(average: Double): Double = average / DayColor.MAX_SCORE * 10.0
+
 fun formatAverage(average: Double?): String =
-    average?.let { String.format(Locale.FRANCE, "%.1f", it) + " / 3" } ?: "—"
+    average?.let { String.format(Locale.FRANCE, "%.1f", outOfTen(it)) + " / 10" } ?: "—"
+
+/**
+ * Ce que la note veut dire, en une phrase.
+ *
+ * Elle ne vient **que** de la couleur des journees : ni les pas, ni le sport,
+ * ni l'argent n'y entrent, et c'est voulu — ce sont eux qu'on compare ensuite
+ * a la couleur dans « Ce qui va avec tes bonnes journees », et les faire
+ * entrer dans la note rendrait la comparaison circulaire.
+ */
+const val SCORE_CAPTION = "La moyenne de la couleur de tes journées notées."
 
 fun formatWeight(weightKg: Double?): String =
     weightKg?.let { String.format(Locale.FRANCE, "%.1f kg", it) } ?: "—"

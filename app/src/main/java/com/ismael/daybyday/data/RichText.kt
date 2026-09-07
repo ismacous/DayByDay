@@ -50,6 +50,15 @@ enum class StyleFamily {
 
     /** Le fond d'une citation : rien, leger, ou plein. */
     QUOTE_FILL,
+
+    /**
+     * La taille du texte : une seule a la fois.
+     *
+     * A part des titres, qui changent aussi la graisse et prennent la ligne
+     * entiere. Ici on grossit ou on rapetisse **un morceau de phrase**, sans
+     * en faire un titre.
+     */
+    SIZE,
 }
 
 /**
@@ -137,7 +146,15 @@ enum class TextStyleKind(
     // Le fond de la citation. Son absence vaut « pas de fond » : c'est le cas
     // le plus courant, et il ne merite pas d'etre enregistre.
     QUOTE_FILL_SOFT("qfs", "Fond léger", StyleFamily.QUOTE_FILL),
-    QUOTE_FILL_FULL("qff", "Fond plein", StyleFamily.QUOTE_FILL);
+    QUOTE_FILL_FULL("qff", "Fond plein", StyleFamily.QUOTE_FILL),
+
+    // Les deux ecarts restent modestes, et c'est une contrainte du lignage :
+    // une ligne fait 28 points, et un texte plus haut que ca sortirait de ses
+    // lignes. Elles sont exprimees en **em** (donc en part de la taille de
+    // base) pour suivre le reglage de taille de la page au lieu de le
+    // contredire.
+    SIZE_SMALL("zs", "Petit", StyleFamily.SIZE),
+    SIZE_LARGE("zl", "Grand", StyleFamily.SIZE);
 
     /** Vrai pour les trois traits de separation. */
     val isRule: Boolean
@@ -173,6 +190,9 @@ enum class TextStyleKind(
         val quoteBars: List<TextStyleKind> get() = of(StyleFamily.QUOTE_BAR)
 
         val quoteFills: List<TextStyleKind> get() = of(StyleFamily.QUOTE_FILL)
+
+        /** Les tailles de texte, hors titres. */
+        val sizes: List<TextStyleKind> get() = of(StyleFamily.SIZE)
     }
 }
 

@@ -48,6 +48,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
@@ -55,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import com.ismael.daybyday.data.BlockAlign
 import com.ismael.daybyday.data.TextSpan
 import com.ismael.daybyday.data.TextStyleKind
 import java.time.LocalDate
@@ -96,6 +98,8 @@ fun BlockTextField(
     onLayout: (TextLayoutResult) -> Unit,
     onFocus: (Boolean) -> Unit,
     onOpenDay: (LocalDate) -> Unit,
+    onOpenHashtag: (String) -> Unit = {},
+    align: BlockAlign = BlockAlign.START,
     /**
      * Effacer alors que le curseur est au tout debut : le bloc rejoint celui
      * d'au-dessus. Rend `true` s'il l'a fait, et l'appui est alors consomme —
@@ -115,6 +119,11 @@ fun BlockTextField(
             alignment = LineHeightStyle.Alignment.Bottom,
             trim = LineHeightStyle.Trim.None,
         ),
+        textAlign = when (align) {
+            BlockAlign.START -> TextAlign.Start
+            BlockAlign.CENTER -> TextAlign.Center
+            BlockAlign.END -> TextAlign.End
+        },
     )
 
     BasicTextField(
@@ -158,6 +167,7 @@ fun BlockTextField(
                 }
             }
             .openPageLinkOnTap(layout, { value.text }, onOpenDay)
+            .openHashtagOnTap(layout, { value.text }, onOpenHashtag)
             .hashtagChips(layout, style.textSize.toFloat())
             .onFocusChanged { onFocus(it.isFocused) }
             .selectWordOnDoubleTap({ value }) { onValueChange(value.copy(selection = it)) },
@@ -195,6 +205,9 @@ fun QuoteBlockView(
     onLayout: (TextLayoutResult) -> Unit,
     onFocus: (Boolean) -> Unit,
     onOpenDay: (LocalDate) -> Unit,
+    onOpenHashtag: (String) -> Unit,
+    align: BlockAlign,
+    onBackspaceAtStart: () -> Boolean,
     dragModifier: Modifier,
     modifier: Modifier = Modifier,
 ) {
@@ -223,6 +236,9 @@ fun QuoteBlockView(
             onLayout = onLayout,
             onFocus = onFocus,
             onOpenDay = onOpenDay,
+            onOpenHashtag = onOpenHashtag,
+            align = align,
+            onBackspaceAtStart = onBackspaceAtStart,
             modifier = Modifier.padding(start = QUOTE_GRIP, end = 10.dp),
         )
 

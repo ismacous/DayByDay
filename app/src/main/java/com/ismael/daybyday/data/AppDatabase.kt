@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Version du schema. Affichee dans les reglages, a propos, pour savoir ce que
  * fait tourner le telephone en cas de probleme.
  */
-const val DATABASE_VERSION = 19
+const val DATABASE_VERSION = 20
 
 @Database(
     entities = [
@@ -572,6 +572,21 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Le texte d'un bloc peut se centrer ou se caler a droite.
+         *
+         * Une propriete du **bloc**, pas un intervalle de caracteres : centrer
+         * la moitie d'un paragraphe ne veut rien dire. Le defaut vide veut dire
+         * « a gauche », donc les pages deja ecrites ne bougent pas d'un point.
+         */
+        val MIGRATION_19_20 = object : Migration(19, 20) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE journal_blocks ADD COLUMN alignCode TEXT NOT NULL DEFAULT ''"
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -600,6 +615,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_16_17,
                     MIGRATION_17_18,
                     MIGRATION_18_19,
+                    MIGRATION_19_20,
                 )
                 .build()
                 .also { instance = it }

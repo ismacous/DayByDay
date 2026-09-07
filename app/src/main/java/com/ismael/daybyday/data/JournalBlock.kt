@@ -29,6 +29,23 @@ enum class BlockKind(val code: String) {
 }
 
 /**
+ * Comment le texte d'un bloc se pose dans sa largeur.
+ *
+ * C'est une propriete du **bloc**, pas un intervalle de caracteres : centrer
+ * la moitie d'un paragraphe ne veut rien dire. Le code vide est la valeur par
+ * defaut, ce qui evite d'ecrire quoi que ce soit pour les pages existantes.
+ */
+enum class BlockAlign(val code: String, val label: String) {
+    START("", "Gauche"),
+    CENTER("c", "Centre"),
+    END("r", "Droite");
+
+    companion object {
+        fun fromCode(code: String): BlockAlign = entries.firstOrNull { it.code == code } ?: START
+    }
+}
+
+/**
  * Un morceau de page.
  *
  * **Pourquoi des blocs.** La page etait un seul long champ de texte, et les
@@ -75,8 +92,12 @@ data class JournalBlock(
     val fillCode: String = "",
     /** Trait : lequel des trois. */
     val ruleCode: String = "",
+    /** Texte et citation : a gauche, au centre ou a droite. */
+    val alignCode: String = "",
 ) {
     val kind: BlockKind get() = BlockKind.fromCode(kindCode)
+
+    val align: BlockAlign get() = BlockAlign.fromCode(alignCode)
 
     /** Un bloc de texte qui ne contient rien : il ne merite pas d'etre garde. */
     val isEmptyText: Boolean get() = kind == BlockKind.TEXT && text.isEmpty()

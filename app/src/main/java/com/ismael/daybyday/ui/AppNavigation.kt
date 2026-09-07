@@ -1,5 +1,6 @@
 package com.ismael.daybyday.ui
 
+import android.net.Uri
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -233,6 +234,12 @@ fun AppNavigation(
                             // ramene a celle d'ou l'on vient, comme on
                             // l'attend. Sans ca, sauter de page en page
                             // finirait toujours par sortir du journal.
+                            onOpenHashtag = { name ->
+                                // Toucher un mot-cle repond a « ou est-ce que
+                                // je l'ai mis ? » : la recherche s'ouvre deja
+                                // filtree dessus.
+                                navController.navigate("search?tag=" + Uri.encode(name))
+                            },
                             onOpenDay = { target ->
                                 navController.navigate("journal/${target.toEpochDay()}")
                             },
@@ -243,10 +250,20 @@ fun AppNavigation(
                         OrganizeCardsScreen(onBack = { navController.popBackStack() })
                     }
 
-                    composable("search") {
+                    composable(
+                        route = "search?tag={tag}",
+                        arguments = listOf(
+                            navArgument("tag") {
+                                type = NavType.StringType
+                                nullable = true
+                                defaultValue = null
+                            }
+                        ),
+                    ) { entry ->
                         SearchScreen(
                             onBack = { navController.popBackStack() },
                             onDayClick = { date -> navController.navigate("day/${date.toEpochDay()}") },
+                            startHashtag = entry.arguments?.getString("tag"),
                         )
                     }
                 }

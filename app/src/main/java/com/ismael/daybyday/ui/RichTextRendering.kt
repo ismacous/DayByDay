@@ -14,6 +14,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.ismael.daybyday.data.Hashtag
 import com.ismael.daybyday.data.PageLink
@@ -290,6 +291,12 @@ fun TextStyleKind.toSpanStyle(): SpanStyle = when (this) {
     // posee sur le texte, s'il y en a une, et l'encre de la page sinon. Une
     // citation grisee d'office serait illisible sur l'ardoise.
     TextStyleKind.QUOTE -> SpanStyle(fontStyle = FontStyle.Italic)
+
+    // En **em**, donc en part de la taille de base : la taille choisie pour la
+    // page reste le point de reference, et grossir un mot ne le fige pas a une
+    // valeur qui contredirait le reglage.
+    TextStyleKind.SIZE_SMALL -> SpanStyle(fontSize = 0.85.em)
+    TextStyleKind.SIZE_LARGE -> SpanStyle(fontSize = 1.15.em)
 
     else -> when (this.family) {
         StyleFamily.FONT -> SpanStyle(fontFamily = fontFamily())

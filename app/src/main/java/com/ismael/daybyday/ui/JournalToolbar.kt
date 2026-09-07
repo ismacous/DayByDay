@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import com.ismael.daybyday.R
 import com.ismael.daybyday.data.MediaItem
 import com.ismael.daybyday.data.StyleFamily
+import com.ismael.daybyday.data.BlockAlign
 import com.ismael.daybyday.data.TextStyleKind
 import java.io.File
 
@@ -132,7 +133,12 @@ fun JournalToolbar(
     openPanel: ToolPanel?,
     onTogglePanel: (ToolPanel) -> Unit,
     onStyle: (TextStyleKind) -> Unit,
+    /** L'alignement du bloc courant, et de quoi en changer. */
+    align: BlockAlign,
+    onAlign: (BlockAlign) -> Unit,
     onClearHeading: () -> Unit,
+    /** Revient a la taille de base : « normale » est l'absence de style. */
+    onClearSize: () -> Unit,
     onClearFont: () -> Unit,
     /** Retire le fond d'une citation : « sans fond » est l'absence de style. */
     onClearQuoteFill: () -> Unit,
@@ -295,7 +301,12 @@ private fun ToolPanelContent(
     panel: ToolPanel,
     active: Set<TextStyleKind>,
     onStyle: (TextStyleKind) -> Unit,
+    /** L'alignement du bloc courant, et de quoi en changer. */
+    align: BlockAlign,
+    onAlign: (BlockAlign) -> Unit,
     onClearHeading: () -> Unit,
+    /** Revient a la taille de base : « normale » est l'absence de style. */
+    onClearSize: () -> Unit,
     onClearFont: () -> Unit,
     onClearQuoteFill: () -> Unit,
     onList: (ListMarker) -> Unit,
@@ -320,7 +331,10 @@ private fun ToolPanelContent(
             ToolPanel.ALL -> AllToolsPanel(
                 active = active,
                 onStyle = onStyle,
+                align = align,
+                onAlign = onAlign,
                 onClearHeading = onClearHeading,
+                onClearSize = onClearSize,
                 onClearFont = onClearFont,
                 onClearQuoteFill = onClearQuoteFill,
                 onList = onList,
@@ -363,7 +377,12 @@ private fun ToolPanelContent(
 private fun AllToolsPanel(
     active: Set<TextStyleKind>,
     onStyle: (TextStyleKind) -> Unit,
+    /** L'alignement du bloc courant, et de quoi en changer. */
+    align: BlockAlign,
+    onAlign: (BlockAlign) -> Unit,
     onClearHeading: () -> Unit,
+    /** Revient a la taille de base : « normale » est l'absence de style. */
+    onClearSize: () -> Unit,
     onClearFont: () -> Unit,
     onClearQuoteFill: () -> Unit,
     onList: (ListMarker) -> Unit,
@@ -396,6 +415,41 @@ private fun AllToolsPanel(
         onClick = onClearHeading,
     ) {
         Text("A", fontSize = 16.sp)
+    }
+
+    SectionLabel("Taille du texte")
+    // A part des titres : ici on grossit un morceau de phrase sans en faire un
+    // titre. Les deux ecarts restent modestes — une ligne du lignage fait
+    // vingt-huit points, et un texte plus haut sortirait de ses lignes.
+    TextStyleKind.sizes.forEach { style ->
+        PanelRow(
+            label = style.label,
+            selected = style in active,
+            onClick = { onStyle(style) },
+        ) {
+            Text(
+                "A",
+                fontSize = if (style == TextStyleKind.SIZE_SMALL) 12.sp else 19.sp,
+            )
+        }
+    }
+    PanelRow(
+        label = "Taille normale",
+        selected = active.none { it.family == StyleFamily.SIZE },
+        onClick = onClearSize,
+    ) {
+        Text("A", fontSize = 16.sp)
+    }
+
+    SectionLabel("Alignement")
+    BlockAlign.entries.forEach { option ->
+        PanelRow(
+            label = option.label,
+            selected = align == option,
+            onClick = { onAlign(option) },
+        ) {
+            AlignPreview(option)
+        }
     }
 
     SectionLabel("Blocs")
@@ -576,6 +630,38 @@ private fun ColorGlyph(chosen: TextStyleKind?) {
                     }
                 ),
         )
+    }
+}
+
+/**
+ * Trois traits, calés comme le sera le texte.
+ *
+ * Dessinés plutôt qu'importés : le jeu d'icônes de base n'a pas les
+ * alignements, et trois rectangles ne valent pas les mégaoctets du jeu complet.
+ * Le troisième trait est plus court — c'est lui qui rend l'alignement visible,
+ * puisque trois traits de même longueur se ressemblent quel que soit le côté.
+ */
+@Composable
+private fun AlignPreview(align: BlockAlign) {
+    val ink = paperFill(0.6f)
+    Column(
+        modifier = Modifier.width(18.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+        horizontalAlignment = when (align) {
+            BlockAlign.START -> Alignment.Start
+            BlockAlign.CENTER -> Alignment.CenterHorizontally
+            BlockAlign.END -> Alignment.End
+        },
+    ) {
+        listOf(1f, 0.7f, 1f, 0.5f).forEach { width ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(width)
+                    .height(2.dp)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(ink),
+            )
+        }
     }
 }
 

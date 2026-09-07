@@ -68,6 +68,13 @@ import java.time.LocalDate
 fun SearchScreen(
     onBack: () -> Unit,
     onDayClick: (LocalDate) -> Unit,
+    /**
+     * Le mot-cle sur lequel on arrive, quand on vient d'en toucher un dans une
+     * page. La recherche s'ouvre alors deja filtree, liste depliee : c'est la
+     * reponse a « ou est-ce que j'ai mis ce mot-cle ? », pas un ecran de plus
+     * a remplir.
+     */
+    startHashtag: String? = null,
 ) {
     val repository = LocalContext.current.dayByDayApp.repository
 
@@ -80,8 +87,10 @@ fun SearchScreen(
     var withText by rememberSaveable { mutableStateOf(false) }
     var tagIds by remember { mutableStateOf(emptySet<Long>()) }
     var showTags by rememberSaveable { mutableStateOf(false) }
-    var hashtags by remember { mutableStateOf(emptySet<String>()) }
-    var showHashtags by rememberSaveable { mutableStateOf(false) }
+    var hashtags by remember {
+        mutableStateOf(startHashtag?.let { setOf(Hashtag.key(it)) } ?: emptySet())
+    }
+    var showHashtags by rememberSaveable { mutableStateOf(startHashtag != null) }
 
     val allDays by remember { repository.observeAllDays() }
         .collectAsStateWithLifecycle(emptyList())

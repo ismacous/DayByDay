@@ -1,6 +1,9 @@
 package com.ismael.daybyday.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -17,17 +21,21 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -56,6 +64,7 @@ fun StatsScreen(onOpenWeek: () -> Unit = {}) {
     val repository = app.repository
     val today = LocalDate.now()
     var year by rememberSaveable { mutableIntStateOf(today.year) }
+    var showScoreHelp by rememberSaveable { mutableStateOf(false) }
 
     val allDays by remember { repository.observeAllDays() }
         .collectAsStateWithLifecycle(emptyList())
@@ -153,12 +162,43 @@ fun StatsScreen(onOpenWeek: () -> Unit = {}) {
                         contentAlignment = Alignment.Center,
                     ) {
                         ScoreRing(
-                            progress = ((yearSummary.average ?: 0.0) / 3.0).toFloat(),
+                            progress = ((yearSummary.average ?: 0.0) / DayColor.MAX_SCORE)
+                                .toFloat(),
                             value = yearSummary.average?.let {
-                                String.format(Locale.FRANCE, "%.1f", it)
+                                String.format(Locale.FRANCE, "%.1f", outOfTen(it))
                             } ?: "—",
-                            caption = "sur 3",
+                            caption = "sur 10",
                         )
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    // Ce que la note veut dire, la ou on la regarde. Sans ca,
+                    // un chiffre seul laisse deviner ce qu'il compte — et on
+                    // devine toujours quelque chose de plus complique que la
+                    // verite.
+                    Text(
+                        text = SCORE_CAPTION,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.75f),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    Text(
+                        text = "Comment c'est calculé ?",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { showScoreHelp = true }
+                            .padding(vertical = 8.dp),
+                    )
+
+                    if (showScoreHelp) {
+                        ScoreHelpSheet(onDismiss = { showScoreHelp = false })
                     }
 
                     Spacer(Modifier.height(14.dp))
@@ -452,6 +492,75 @@ private fun WeightSparkline(
     }
 }
 
+/**
+ * D'ou sort la note.
+ *
+ * Un chiffre seul laisse deviner ce qu'il compte, et on devine toujours
+ * quelque chose de plus complique que la verite : ici, la note ne vient que de
+ * la couleur des journees. Rien d'autre n'y entre — surtout pas les pas, le
+ * sport ou l'argent, qui sont justement ce qu'on **compare** ensuite a la
+ * couleur. Les faire entrer dans la note rendrait la comparaison circulaire.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ScoreHelpSheet(onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text("D'où vient cette note ?", style = MaterialTheme.typography.titleLarge)
+
+            Text(
+                text = "Elle ne vient que d'une chose : la couleur que tu donnes à " +
+                    "tes journées. Chaque couleur vaut un nombre de points.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+
+            DayColor.entries.sortedByDescending { it.score }.forEach { color ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(14.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(color.color),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(color.label, style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = String.format(
+                            Locale.FRANCE,
+                            "%.1f / 10",
+                            outOfTen(color.score.toDouble()),
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Text(
+                text = "La note d'une semaine, d'un mois ou d'une année est la moyenne " +
+                    "de ces points. Les journées sans couleur ne comptent pas : elles " +
+                    "ne baissent pas ta note, elles n'y entrent simplement pas.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+
+            Text(
+                text = "Rien d'autre n'y entre — ni tes pas, ni le sport, ni les repas, " +
+                    "ni l'argent. C'est fait exprès : ce sont eux qu'on compare à ta " +
+                    "note dans « Ce qui va avec tes bonnes journées ». S'ils la " +
+                    "fabriquaient aussi, la comparaison ne dirait plus rien.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
 @Composable
 private fun StatLine(label: String, value: String) {
     Row(

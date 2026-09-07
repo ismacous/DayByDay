@@ -2,6 +2,7 @@ package com.ismael.daybyday.ui
 
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import com.ismael.daybyday.data.BlockAlign
 import com.ismael.daybyday.data.BlockKind
 import com.ismael.daybyday.data.JournalBlock
 import com.ismael.daybyday.data.RichText
@@ -33,6 +34,8 @@ data class PageBlock(
     val fill: TextStyleKind? = null,
     /** Trait : lequel. */
     val rule: TextStyleKind? = null,
+    /** A gauche, au centre, a droite. */
+    val align: BlockAlign = BlockAlign.START,
 ) {
     val isText: Boolean get() = kind == BlockKind.TEXT
     val text: String get() = value.text
@@ -74,6 +77,7 @@ object PageBlocks {
             bar = style(block.barCode, StyleFamily.QUOTE_BAR),
             fill = style(block.fillCode, StyleFamily.QUOTE_FILL),
             rule = TextStyleKind.fromCode(block.ruleCode)?.takeIf { it.isRule },
+            align = block.align,
         )
     }
 
@@ -103,6 +107,7 @@ object PageBlocks {
                 barCode = block.bar?.code.orEmpty(),
                 fillCode = block.fill?.code.orEmpty(),
                 ruleCode = block.rule?.code.orEmpty(),
+                alignCode = block.align.code,
             )
         }
 
@@ -154,6 +159,10 @@ object PageBlocks {
                     spans = clip(block.spans, caret, block.text.length).map {
                         TextSpan(it.start - caret, it.end - caret, it.style)
                     },
+                    // La moitie qui part garde l'alignement de celle dont elle
+                    // vient : couper un paragraphe centre en deux doit donner
+                    // deux paragraphes centres.
+                    align = block.align,
                 )
                 before + head + inserted + tail + after
             }
@@ -203,6 +212,7 @@ object PageBlocks {
             spans = clip(block.spans, from, to).map {
                 TextSpan(it.start - from, it.end - from, it.style)
             },
+            align = block.align,
         )
         val tail = PageBlock(
             key = newKey(),
@@ -211,6 +221,7 @@ object PageBlocks {
             spans = clip(block.spans, to, block.text.length).map {
                 TextSpan(it.start - to, it.end - to, it.style)
             },
+            align = block.align,
         )
 
         // Les moities vides sont ecartees ici, pas par `tidy` : une citation
@@ -268,6 +279,7 @@ object PageBlocks {
             spans = clip(block.spans, at, block.text.length).map {
                 TextSpan(it.start - at, it.end - at, it.style)
             },
+            align = block.align,
         )
         return (blocks.take(index) + head + tail + blocks.drop(index + 1)) to tail.key
     }

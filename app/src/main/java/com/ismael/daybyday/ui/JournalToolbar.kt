@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -154,95 +155,100 @@ fun JournalToolbar(
     CompositionLocalProvider(
         LocalPaperInk provides ink,
         LocalPaperSurface provides paper,
+        // Et l'encre courante avec : sans ca, les lettres des boutons (« G »,
+        // « I »…) et les icones gardent la couleur du theme, donc du sombre
+        // sur le papier ardoise. Les fonds s'adaptaient, pas ce qu'il y a
+        // dessus — c'est-a-dire la seule chose qu'on regarde.
+        LocalContentColor provides ink,
     ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        HorizontalDivider(color = paperFill(0.12f))
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            GroupButton(
-                label = "Tous les outils",
-                open = openPanel == ToolPanel.ALL,
-                marked = active.any {
-                    it.family == StyleFamily.HEADING || it.family == StyleFamily.FONT
-                },
-                onClick = { onTogglePanel(ToolPanel.ALL) },
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
-            }
-
-            ToolButton(selected = false, label = "Ajouter une photo", onClick = onAddPhoto) {
-                Icon(
-                    painterResource(R.drawable.ic_photo),
-                    contentDescription = null,
-                    modifier = Modifier.size(19.dp),
-                )
-            }
-
-            Separator()
-
-            TextStyleKind.marks.forEach { style ->
-                ToolButton(
-                    selected = style in active,
-                    label = style.label,
-                    onClick = { onStyle(style) },
-                ) { MarkGlyph(style) }
-            }
-
-            Separator()
-
-            GroupButton(
-                label = ToolPanel.COLORS.label,
-                open = openPanel == ToolPanel.COLORS,
-                marked = active.any { it.family == StyleFamily.COLOR },
-                onClick = { onTogglePanel(ToolPanel.COLORS) },
-            ) {
-                ColorGlyph(active.firstOrNull { it.family == StyleFamily.COLOR })
-            }
-
-            GroupButton(
-                label = ToolPanel.HIGHLIGHTS.label,
-                open = openPanel == ToolPanel.HIGHLIGHTS,
-                marked = active.any { it.family == StyleFamily.HIGHLIGHT },
-                onClick = { onTogglePanel(ToolPanel.HIGHLIGHTS) },
-            ) {
-                val chosen = active.firstOrNull { it.family == StyleFamily.HIGHLIGHT }
-                Text(
-                    "A",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1B1B1B),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(Color(chosen?.argb ?: TextStyleKind.HIGHLIGHT.argb))
-                        .padding(horizontal = 5.dp, vertical = 1.dp),
-                )
-            }
-        }
-
-        if (openPanel != null) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             HorizontalDivider(color = paperFill(0.12f))
-            ToolPanelContent(
-                panel = openPanel,
-                active = active,
-                onStyle = onStyle,
-                onClearHeading = onClearHeading,
-                onClearFont = onClearFont,
-                onList = onList,
-                onAddPhoto = onAddPhoto,
-                photos = photos,
-                photoFile = photoFile,
-                onPickPhoto = onPickPhoto,
-                height = panelHeight,
-            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                GroupButton(
+                    label = "Tous les outils",
+                    open = openPanel == ToolPanel.ALL,
+                    marked = active.any {
+                        it.family == StyleFamily.HEADING || it.family == StyleFamily.FONT
+                    },
+                    onClick = { onTogglePanel(ToolPanel.ALL) },
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
+                }
+
+                ToolButton(selected = false, label = "Ajouter une photo", onClick = onAddPhoto) {
+                    Icon(
+                        painterResource(R.drawable.ic_photo),
+                        contentDescription = null,
+                        modifier = Modifier.size(19.dp),
+                    )
+                }
+
+                Separator()
+
+                TextStyleKind.marks.forEach { style ->
+                    ToolButton(
+                        selected = style in active,
+                        label = style.label,
+                        onClick = { onStyle(style) },
+                    ) { MarkGlyph(style) }
+                }
+
+                Separator()
+
+                GroupButton(
+                    label = ToolPanel.COLORS.label,
+                    open = openPanel == ToolPanel.COLORS,
+                    marked = active.any { it.family == StyleFamily.COLOR },
+                    onClick = { onTogglePanel(ToolPanel.COLORS) },
+                ) {
+                    ColorGlyph(active.firstOrNull { it.family == StyleFamily.COLOR })
+                }
+
+                GroupButton(
+                    label = ToolPanel.HIGHLIGHTS.label,
+                    open = openPanel == ToolPanel.HIGHLIGHTS,
+                    marked = active.any { it.family == StyleFamily.HIGHLIGHT },
+                    onClick = { onTogglePanel(ToolPanel.HIGHLIGHTS) },
+                ) {
+                    val chosen = active.firstOrNull { it.family == StyleFamily.HIGHLIGHT }
+                    Text(
+                        "A",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1B1B1B),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color(chosen?.argb ?: TextStyleKind.HIGHLIGHT.argb))
+                            .padding(horizontal = 5.dp, vertical = 1.dp),
+                    )
+                }
+            }
+
+            if (openPanel != null) {
+                HorizontalDivider(color = paperFill(0.12f))
+                ToolPanelContent(
+                    panel = openPanel,
+                    active = active,
+                    onStyle = onStyle,
+                    onClearHeading = onClearHeading,
+                    onClearFont = onClearFont,
+                    onList = onList,
+                    onAddPhoto = onAddPhoto,
+                    photos = photos,
+                    photoFile = photoFile,
+                    onPickPhoto = onPickPhoto,
+                    height = panelHeight,
+                )
+            }
         }
-    }
     }
 }
 

@@ -250,6 +250,17 @@ téléphone (Samsung S25, Android 15).
   rangées vivent dans la **même** `LazyColumn` sous un séparateur, avec la même
   clé : retirer une carte la fait donc *glisser* jusque là (`animateItem`), ce
   qui montre que rien n'est effacé.
+- **Hygiène** (`Brushing`, migration 20→21) : la douche et les trois brossages,
+  dans la même forme que les prières — un masque de bits pour les trois
+  brossages, des perles à l'écran. Même question, même forme : leur donner une
+  autre apparence aurait fait croire à une autre mécanique.
+  **Deux gestes seulement**, et c'est délibéré : une carte d'hygiène qui en
+  demande dix devient une corvée, et c'est le jour noir qu'elle sert. La douche
+  est un **seul oui** qu'on coche, pas un « oui / non » à deux boutons — ne
+  rien cocher *est* la réponse « non », et il y a des journées où l'on n'a pas
+  envie de la dire à voix haute.
+  Ses deux badges détournent leur signe (des bulles, des étincelles) : Google
+  n'anime ni la douche, ni la brosse à dents, ni le savon — vérifié.
 - **Prières** : cinq oui-ou-non par journée, rangés en **masque de bits** dans
   une seule colonne (`DayEntry.prayerMask`, migration 11→12). Les `bit` de
   `Prayer` ne doivent jamais changer : c'est eux qui sont écrits. La colonne
@@ -442,6 +453,48 @@ téléphone (Samsung S25, Android 15).
   vérité. La feuille explique aussi pourquoi ni les pas, ni le sport, ni l'argent
   n'entrent dans la note — c'est la règle 2, vue depuis l'écran : ce sont eux
   qu'on **compare** ensuite à la couleur.
+- **La note : le ressenti, plus ce qu'on a fait** (`data/Deed.kt`, testé dans
+  `DeedTest`). Dix points pour la couleur des journées, dix pour les gestes
+  réussis. Trois règles, et elles sont des promesses faites à l'utilisateur —
+  un calcul de note peut les trahir sans que personne ne s'en aperçoive :
+  1. **Rien ne se perd.** Un geste manqué n'ajoute rien, il ne retire jamais.
+     Une semaine difficile où l'on s'est quand même bougé ne tombe donc pas à
+     zéro, et c'est tout l'intérêt.
+  2. **Masquer une carte ne coûte rien.** Chaque geste appartient à une carte,
+     et une carte masquée sort du calcul **des deux côtés de la fraction**. Les
+     actions sont une part (gestes faits sur gestes possibles), pas un compte :
+     sinon afficher trois cartes plutôt que dix baisserait la note sans qu'on
+     ait rien fait de moins. C'est la question qu'Ismael a posée lui-même, et
+     la seule réponse honnête.
+  3. **Le ressenti reste intouchable.** Il ne vient que de la couleur, et rien
+     de ce qu'on fait ne le corrige — c'est la règle 2 vue depuis la note.
+  Les gestes comptés sont **les mêmes que les badges**, et ce n'est pas un
+  hasard : les deux répondent à « qu'est-ce que tu as réussi à faire
+  aujourd'hui ? ». Les faire diverger donnerait une médaille sans point, ou un
+  point sans médaille, et personne ne saurait lequel compte.
+  Sans aucune carte à geste affichée, la note reste **sur dix** : il n'y a rien
+  à compter, et prétendre le contraire la plafonnerait à la moitié sans que
+  rien ne l'explique.
+- **Barre d'outils du journal : deux portes, pas une liste.** Il y avait un
+  seul panneau, « Tous les outils », où l'alignement se trouvait derrière les
+  titres, la taille, les blocs et les listes. Ismael l'a trouvé — en cherchant,
+  et un réglage qu'on trouve en cherchant est un réglage mal rangé. On ne
+  cherche pas de la même façon « poser quelque chose » et « changer l'allure de
+  ce qui est déjà là » : ce sont maintenant `ToolPanel.INSERT` et
+  `ToolPanel.FORMAT`, avec l'alignement en tête du second.
+  La rangée du bas est passée de dix boutons à sept. Ce qui reste est soit une
+  porte, soit un geste qu'on fait **sans arrêter d'écrire** (le micro, le gras,
+  l'italique, les deux couleurs) ; souligné, barré et le mot-clé sont partis
+  derrière une porte. Les réglages d'une citation ont quitté le panneau : ils
+  apparaissent déjà sous la citation, et deux chemins pour la même chose
+  allongeaient le panneau pour tout le monde.
+- **Effacer au début d'un bloc : `onPreviewKeyEvent`, jamais `onKeyEvent`.**
+  Le champ de texte **consomme** la touche d'effacement, donc l'événement ne
+  remonte jamais jusqu'à un `onKeyEvent` posé au-dessus de lui — c'est pour ça
+  que la première version ne faisait rien du tout. La passe « preview » descend
+  depuis la racine et la donne en premier. Une citation redevient alors du
+  texte, et ne disparaît qu'au coup suivant : la touche d'effacement défait la
+  mise en forme avant de défaire le texte.
 - **Alignement et taille dans le journal** : deux choses de nature différente,
   et c'est ce qui décide où elles vivent. L'alignement est une propriété du
   **bloc** (`BlockAlign`, colonne `alignCode`, migration 19→20) : centrer la

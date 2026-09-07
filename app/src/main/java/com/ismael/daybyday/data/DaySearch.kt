@@ -27,14 +27,21 @@ data class SearchFilter(
      * chaque appui, ce qui n'aide personne.
      */
     val tagIds: Set<Long> = emptySet(),
+    /**
+     * Les mots-cles retenus, sous leur forme pliee ([Hashtag.key]).
+     *
+     * Ils se lisent « et », comme les etiquettes et pour la meme raison : on
+     * les ajoute pour resserrer, pas pour elargir.
+     */
+    val hashtags: Set<String> = emptySet(),
 ) {
     val isEmpty: Boolean
         get() = text.isBlank() && colors.isEmpty() && !moved && !wentOut &&
-            !ateWell && !withPhoto && !withText && tagIds.isEmpty()
+            !ateWell && !withPhoto && !withText && tagIds.isEmpty() && hashtags.isEmpty()
 
     /** Nombre de criteres actifs, pour le dire a l'ecran. */
     val activeCount: Int
-        get() = colors.size + tagIds.size +
+        get() = colors.size + tagIds.size + hashtags.size +
             listOf(moved, wentOut, ateWell, withPhoto, withText).count { it } +
             (if (text.isBlank()) 0 else 1)
 }
@@ -75,6 +82,12 @@ object DaySearch {
             if (filter.tagIds.isNotEmpty()) {
                 val onDay = tagsByDay[entry.epochDay].orEmpty()
                 if (!onDay.containsAll(filter.tagIds)) return@filter false
+            }
+            // Les mots-cles vivent dans le texte du journal : titre et page,
+            // la ou on ecrit des phrases. Les champs des cartes repondent a une
+            // question, on n'y met pas de `#`.
+            if (!Hashtag.containsAll(entry.title + "\n" + entry.note, filter.hashtags)) {
+                return@filter false
             }
             true
         }.sortedByDescending { it.epochDay }

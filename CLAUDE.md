@@ -254,6 +254,33 @@ téléphone (Samsung S25, Android 15).
   accepte `null`, et ça compte — une journée d'avant cette version n'est pas une
   journée sans prière, c'est une journée dont on ne sait rien. Testé dans
   `PrayerTest`.
+- **Mots-clés** (`data/Hashtag.kt`, `ui/Hashtags.kt`, testé dans `HashtagTest`) :
+  écrire `#mood` dans le journal en fait une étiquette, retrouvable partout.
+  Le point qui décide de tout le reste : **ils ne sont enregistrés nulle part**.
+  Un `#mood` est cinq caractères dans `note`, comme le reste du texte — donc la
+  recherche, l'export annuel et les aperçus les voient sans rien savoir, effacer
+  le `#` suffit à défaire l'étiquette, et il n'existe aucun moyen de
+  désynchroniser une liste de mots-clés du texte qui les contient. C'est ce qui
+  les sépare des étiquettes du catalogue : une étiquette se coche, un mot-clé
+  s'invente en écrivant.
+  Trois règles à ne pas défaire :
+  1. Un `#` **collé à un mot** n'est pas un mot-clé (`do#5`, `C#`), et un `#`
+     suivi de chiffres seuls est un numéro. Sans ça, une adresse ou un accord
+     de musique deviendrait une étiquette.
+  2. La couleur est **calculée à partir du nom** (`Hashtag.tint`), jamais tirée
+     au sort ni enregistrée : `#mood` garde sa teinte dans toutes les pages,
+     dans la recherche, et après une restauration sur un téléphone neuf. La
+     stocker aurait demandé une table, une migration, et se serait perdue.
+     Ce sont les **six teintes des cartes** (`Palette`), pas une palette de
+     plus : une septième couleur inventée ici se verrait tout de suite.
+  3. Sur la page, c'est la **pastille dessinée derrière** qui porte la couleur ;
+     le mot garde l'encre du papier. Un mot coloré disparaîtrait sur l'ardoise,
+     et Compose ne sait pas donner des coins arrondis à un `SpanStyle` — un fond
+     de span est un rectangle, donc un surlignage, pas une étiquette. Les
+     pastilles sont donc dessinées à partir de la mise en page du texte, lue
+     **dans le `drawBehind`**, et le modificateur se pose **après** la marge du
+     champ : posé avant, tout est décalé de la marge. Ailleurs (aperçu d'une
+     carte, où il n'y a pas de pastille), c'est le texte qui prend la couleur.
 - **Recherche** : elle croise le texte, la couleur, ce qu'on a fait et les
   étiquettes (`data/DaySearch.kt`, testé dans `DaySearchTest`). Deux règles de
   sens : plusieurs couleurs se lisent « ou », plusieurs étiquettes « et ». Et un

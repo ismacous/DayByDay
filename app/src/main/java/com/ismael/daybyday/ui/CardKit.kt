@@ -98,6 +98,11 @@ private val Sky = Color(0xFF2E9BF0)
 private val SkyGlow = Color(0xFF8FD3FF)
 
 /**
+ * Les six teintes, dans l'ordre, pour ce qui a besoin d'une couleur sans etre
+ * une carte — les mots-cles du journal, par exemple. Meme palette partout :
+ * une septieme couleur inventee ailleurs se verrait tout de suite.
+ */
+/**
  * La teinte de chaque carte.
  *
  * Six teintes seulement, reprises dans un ordre tel que deux cartes voisines
@@ -105,6 +110,8 @@ private val SkyGlow = Color(0xFF8FD3FF)
  * identites, seulement un nuancier : c'est la **repetition** d'une petite
  * palette qui donne a une application l'air d'avoir ete dessinee.
  */
+val Palette: List<Color> = listOf(Indigo, Violet, Mint, Amber, Rose, Sky)
+
 fun cardStyle(card: DayCard): DayCardStyle = when (card) {
     DayCard.MOOD -> DayCardStyle("🎨", Indigo, IndigoGlow)
     DayCard.JOURNAL -> DayCardStyle("✍️", Indigo, IndigoGlow)

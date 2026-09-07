@@ -14,6 +14,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
+import com.ismael.daybyday.data.Hashtag
 import com.ismael.daybyday.data.RichText
 import com.ismael.daybyday.data.StyleFamily
 import com.ismael.daybyday.data.TextSpan
@@ -99,7 +100,8 @@ class SpanTransformation(
                 }
             }
 
-        if (spans.isEmpty() && held == null) return TransformedText(text, OffsetMapping.Identity)
+        // On ne peut plus sortir tot quand il n'y a aucun intervalle : les
+        // mots-cles, eux, sont relus dans le texte a chaque fois.
 
 
         val decorated = buildAnnotatedStringWithSpans(text.text, spans, rhythm)
@@ -123,13 +125,46 @@ fun buildAnnotatedStringWithSpans(
     text: String,
     spans: List<TextSpan>,
     rhythm: TextUnit? = null,
+    /**
+     * Colorer les mots-cles, ou seulement les mettre en valeur.
+     *
+     * Sur la page du journal, c'est la **pastille** dessinee derriere qui porte
+     * la couleur : le mot lui-meme garde l'encre du papier, et reste donc
+     * lisible sur l'ardoise comme sur l'ivoire. Ailleurs — l'apercu d'une
+     * carte, une ligne de resultat — il n'y a pas de pastille, alors la couleur
+     * passe dans le texte.
+     */
+    hashtagColors: Boolean = false,
 ): AnnotatedString = AnnotatedString(
     text = text,
     spanStyles = spans
         .filter { it.start < text.length && it.end <= text.length && !it.isEmpty }
-        .map { AnnotatedString.Range(it.style.toSpanStyle(), it.start, it.end) },
+        .map { AnnotatedString.Range(it.style.toSpanStyle(), it.start, it.end) } +
+        hashtagSpans(text, hashtagColors),
     paragraphStyles = if (rhythm == null) emptyList() else headingParagraphs(text, spans, rhythm),
 )
+
+/**
+ * Les mots-cles, mis en valeur.
+ *
+ * Ils ne viennent pas des intervalles enregistres : ils sont **relus dans le
+ * texte** a chaque affichage. C'est ce qui fait qu'effacer le `#` d'un mot le
+ * rend ordinaire aussitot, sans rien a nettoyer nulle part.
+ */
+private fun hashtagSpans(
+    text: String,
+    colored: Boolean,
+): List<AnnotatedString.Range<SpanStyle>> = Hashtag.rangesIn(text).map { range ->
+    val style = if (colored) {
+        SpanStyle(
+            color = hashtagTint(text.substring(range.first + 1, range.last + 1)),
+            fontWeight = FontWeight.Medium,
+        )
+    } else {
+        SpanStyle(fontWeight = FontWeight.Medium)
+    }
+    AnnotatedString.Range(style, range.first, range.last + 1)
+}
 
 /**
  * Les titres, ramenes a des lignes entieres et a une hauteur multiple du

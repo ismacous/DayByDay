@@ -45,6 +45,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ismael.daybyday.data.DayColor
 import com.ismael.daybyday.data.DayEntry
 import com.ismael.daybyday.data.DaySearch
+import com.ismael.daybyday.data.Hashtag
 import com.ismael.daybyday.data.SearchFilter
 import com.ismael.daybyday.dayByDayApp
 import java.time.LocalDate
@@ -79,6 +80,8 @@ fun SearchScreen(
     var withText by rememberSaveable { mutableStateOf(false) }
     var tagIds by remember { mutableStateOf(emptySet<Long>()) }
     var showTags by rememberSaveable { mutableStateOf(false) }
+    var hashtags by remember { mutableStateOf(emptySet<String>()) }
+    var showHashtags by rememberSaveable { mutableStateOf(false) }
 
     val allDays by remember { repository.observeAllDays() }
         .collectAsStateWithLifecycle(emptyList())
@@ -98,6 +101,7 @@ fun SearchScreen(
         withPhoto = withPhoto,
         withText = withText,
         tagIds = tagIds,
+        hashtags = hashtags,
     )
 
     val tagsByDay = remember(dayTags) {
@@ -105,6 +109,13 @@ fun SearchScreen(
     }
     val results = remember(allDays, filter, tagsByDay, mediaCounts) {
         DaySearch.matching(allDays, filter, tagsByDay, mediaCounts)
+    }
+
+    // Les mots-cles ne sont pas un catalogue : ils sont **relus** dans tout ce
+    // qui a ete ecrit. Il n'y a donc rien a tenir a jour, et un mot-cle
+    // entierement efface disparait de cette liste tout seul.
+    val knownHashtags = remember(allDays) {
+        Hashtag.counted(allDays.map { it.title + "\n" + it.note })
     }
 
     ScreenBackground(modifier = Modifier.fillMaxSize()) {
@@ -187,6 +198,49 @@ fun SearchScreen(
                         onClick = { showTags = !showTags },
                     )
                 }
+                if (knownHashtags.isNotEmpty()) {
+                    SoftChip(
+                        label = if (hashtags.isEmpty()) {
+                            "Mots-clés"
+                        } else {
+                            "Mots-clés · ${hashtags.size}"
+                        },
+                        selected = showHashtags || hashtags.isNotEmpty(),
+                        onClick = { showHashtags = !showHashtags },
+                    )
+                }
+            }
+
+            AnimatedVisibility(visible = showHashtags) {
+                Column {
+                    Spacer(Modifier.height(10.dp))
+                    // Du plus employe au moins employe : par ordre alphabetique,
+                    // la liste commencerait par un mot ecrit une fois il y a
+                    // deux ans, alors qu'on cherche presque toujours parmi ceux
+                    // dont on se sert.
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        knownHashtags.forEach { tag ->
+                            SoftChip(
+                                label = "#${tag.label} · ${tag.count}",
+                                selected = tag.key in hashtags,
+                                // Chaque mot-cle garde sa couleur, celle qu'il a
+                                // dans les pages : on le reconnait avant de le
+                                // lire.
+                                accent = hashtagTint(tag.label),
+                                onClick = {
+                                    hashtags = if (tag.key in hashtags) {
+                                        hashtags - tag.key
+                                    } else {
+                                        hashtags + tag.key
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
             }
 
             AnimatedVisibility(visible = showTags) {
@@ -236,6 +290,7 @@ fun SearchScreen(
                         withPhoto = false
                         withText = false
                         tagIds = emptySet()
+                        hashtags = emptySet()
                     }) {
                         Text("Tout effacer")
                     }

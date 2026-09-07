@@ -210,7 +210,10 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
 
     // La mise en page du texte, et de quoi convertir des points en pixels : les
     // deux servent a savoir ou se trouve le curseur dans la page.
-    var bodyLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    // La mise en page est gardee dans un `State` et pas derriere un `by` : les
+    // pastilles des mots-cles la lisent **au dessin**, et il leur faut donc
+    // l'objet, pas sa valeur du moment.
+    val bodyLayout = remember { mutableStateOf<TextLayoutResult?>(null) }
     val textTopPadding = remember(density) {
         with(density) { JournalPaper.TOP_PADDING.toPx() }
     }
@@ -377,6 +380,26 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
         )
     }
 
+    /**
+     * Insere un `#` au curseur.
+     *
+     * Avec une espace devant s'il est colle a un mot : un `#` accroche au mot
+     * precedent n'est pas un mot-cle (voir `Hashtag.rangesIn`), et le bouton
+     * ne doit pas fabriquer quelque chose qui ne marchera pas. Le curseur reste
+     * juste apres, prêt pour le mot.
+     */
+    fun insertHashtag() {
+        val at = if (hasSelection) end else start
+        val before = body.text.getOrNull(at - 1)
+        val inserted = if (before != null && (before.isLetterOrDigit() || before == '_')) " #" else "#"
+        val updated = body.text.substring(0, at) + inserted + body.text.substring(at)
+        spans = RichText.adjust(spans, body.text, updated)
+        body = body.copy(
+            text = updated,
+            selection = TextRange((at + inserted.length).coerceAtMost(updated.length)),
+        )
+    }
+
     Scaffold(
         // Le papier prend tout l'ecran. Une page teintee dans un cadre blanc
         // ne ressemblait a rien : c'est le carnet entier qui a une couleur,
@@ -469,8 +492,8 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                 // calcule donc nous-memes ou est le curseur, et on amene la
                 // page a lui — avec une marge, pour qu'on voie aussi la ligne
                 // qui suit et non le curseur colle au bord.
-                LaunchedEffect(body.selection, bodyLayout, viewportHeight) {
-                    val layout = bodyLayout ?: return@LaunchedEffect
+                LaunchedEffect(body.selection, bodyLayout.value, viewportHeight) {
+                    val layout = bodyLayout.value ?: return@LaunchedEffect
                     val caret = body.selection.end
                         .coerceIn(0, layout.layoutInput.text.length)
                     val rect = runCatching { layout.getCursorRect(caret) }.getOrNull()
@@ -584,7 +607,7 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                         // le curseur. C'est la seule facon de le suivre ici : le
                         // champ ne defile pas lui-meme, il grandit, et c'est la
                         // page autour de lui qui defile.
-                        onTextLayout = { bodyLayout = it },
+                        onTextLayout = { bodyLayout.value = it },
                         visualTransformation = run {
                             // Sans focus, le champ ne peint plus la selection : on la
                             // dessine nous-memes, sinon on colore a l'aveugle.
@@ -614,6 +637,10 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                             // dessous pose le curseur, meme loin sous le dernier mot.
                             .heightIn(min = pageHeight)
                             .padding(horizontal = 20.dp, vertical = JournalPaper.TOP_PADDING)
+                            // Apres la marge, pas avant : l'origine du dessin
+                            // doit etre celle du texte, sinon les pastilles
+                            // sont decalees de toute la marge.
+                            .hashtagChips(bodyLayout, textSize.toFloat())
                             .focusRequester(bodyFocus)
                             .onFocusChanged { state ->
                                 // Retourner ecrire referme le panneau : sinon il reste
@@ -715,6 +742,13 @@ fun JournalScreen(date: LocalDate, onBack: () -> Unit) {
                         prefixLine(marker.marker)
                         showPanel(null)
                     },
+                    onHashtag = {
+                        // Le panneau se referme et le clavier revient : on vient
+                        // d'ouvrir un mot, il faut pouvoir l'ecrire.
+                        showPanel(null)
+                        insertHashtag()
+                        bodyFocus.requestFocus()
+                    },
                     onAddPhoto = {
                         // On referme le panneau sans rendre le focus : le
                         // selecteur de photos passe devant, inutile de rappeler le
@@ -774,7 +808,9 @@ fun JournalPreview(
             )
         } else {
             Text(
-                text = buildAnnotatedStringWithSpans(body, spans),
+                // Ici les mots-cles portent leur couleur eux-memes : il n'y a
+                // pas de pastille dessinee sur une carte.
+                text = buildAnnotatedStringWithSpans(body, spans, hashtagColors = true),
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 8,
             )

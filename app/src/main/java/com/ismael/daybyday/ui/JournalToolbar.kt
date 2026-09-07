@@ -136,6 +136,8 @@ fun JournalToolbar(
     onClearFont: () -> Unit,
     onList: (ListMarker) -> Unit,
     onAddPhoto: () -> Unit,
+    /** Insere un `#` au curseur, et rouvre le clavier pour ecrire le mot. */
+    onHashtag: () -> Unit,
     photos: List<MediaItem>,
     photoFile: (MediaItem) -> File,
     onPickPhoto: (MediaItem) -> Unit,
@@ -189,6 +191,13 @@ fun JournalToolbar(
                         contentDescription = null,
                         modifier = Modifier.size(19.dp),
                     )
+                }
+
+                // Le mot-cle n'est pas une mise en forme : c'est du texte, un
+                // `#` de plus dans la phrase. Il a quand meme son bouton, parce
+                // qu'une possibilite qu'on ne voit nulle part n'existe pas.
+                ToolButton(selected = false, label = "Ajouter un mot-clé", onClick = onHashtag) {
+                    Text("#", fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
                 }
 
                 Separator()

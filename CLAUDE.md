@@ -826,6 +826,17 @@ téléphone (Samsung S25, Android 15).
   carte du jour, donc `performScrollTo()` avant `performClick()` ; et les
   onglets se visent par leur repere (`tab-stats`, `tab-money`…) et non par leur
   nom, qui peut aussi etre ecrit dans la page.
+- **L'ecran de l'annee ne s'ouvre pas dans les tests.** Douze mini-mois, environ
+  cinq cents cases : la carte graphique logicielle de l'emulateur (deux coeurs,
+  `swiftshader`) n'y survit pas. L'appareil **disparait** en plein test
+  (« device 'emulator-5554' not found »), et comme l'instrumentation entiere
+  tourne dans une seule seance, les vingt et un tests suivants ne s'executent
+  jamais — y compris ceux des migrations, les seuls qui protegent vraiment des
+  donnees. Un test qui emporte toute la seance coute plus cher que ce qu'il
+  rapporte : `CalendarUiTest` verifie donc que **la porte** existe (« voir
+  l'année » sur le nom du mois) sans la franchir. Sur le telephone, l'annee
+  s'ouvre sans broncher. Meme prudence pour tout ecran qui dessinerait autant
+  d'elements d'un coup.
 - **Une seule liste de migrations** (`AppDatabase.ALL_MIGRATIONS`), utilisee par
   l'application *et* par les tests. Quand le test en gardait une copie, ajouter
   une migration sans la recopier donnait « A migration from 5 to 22 was required

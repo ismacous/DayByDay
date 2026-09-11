@@ -27,8 +27,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.height
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -110,20 +111,38 @@ fun AppNavigation(
         // l'en-tete : rien n'est remesure pendant qu'on fait defiler.
         val density = LocalDensity.current
         val headerHeightPx = with(density) { TAB_HEADER_HEIGHT.toPx() }
-        var headerOffset by remember { mutableFloatStateOf(0f) }
+
+        // La place de l'en-tete est retenue **onglet par onglet**, et non une
+        // fois pour toutes.
+        //
+        // C'est le bug qu'on voyait : chaque onglet garde sa position de
+        // defilement quand on le quitte et la retrouve quand on y revient, mais
+        // l'en-tete, lui, etait remis en haut a chaque changement d'onglet. On
+        // revenait donc au milieu du mois avec le titre pose en travers des
+        // cartes. Une position par onglet, et les deux repartent ensemble.
+        val headerOffsets = remember { mutableStateMapOf<String, Float>() }
+        val routeKey = currentRoute.orEmpty()
+        val headerOffset = headerOffsets[routeKey] ?: 0f
+        // La route est lue **au moment du geste** : le detecteur, lui, est
+        // fabrique une seule fois, sinon chaque changement d'onglet en
+        // recreerait un et couperait le defilement en cours.
+        val scrolledRoute = rememberUpdatedState(routeKey)
         val hideOnScroll = remember(headerHeightPx) {
             object : NestedScrollConnection {
                 override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                    headerOffset = (headerOffset + available.y).coerceIn(-headerHeightPx, 0f)
+                    // Seuls les onglets portent un en-tete : retenir la
+                    // place sur une journee ou une recherche remplirait la
+                    // table de cles qui ne servent a rien.
+                    val key = scrolledRoute.value
+                    if (tabs.none { it.route == key }) return Offset.Zero
+                    val current = headerOffsets[key] ?: 0f
+                    headerOffsets[key] = (current + available.y).coerceIn(-headerHeightPx, 0f)
                     // On ne consomme rien : l'ecran defile normalement, on ne
                     // fait qu'ecouter.
                     return Offset.Zero
                 }
             }
         }
-        // Changer d'onglet remet l'en-tete en place : on arrive en haut d'une
-        // page, pas au milieu de la precedente.
-        LaunchedEffect(currentRoute) { headerOffset = 0f }
 
         // Le contenu n'est **pas** repousse au-dessus de la barre du bas : il
         // passe dessous. La barre est une pastille qui flotte, avec du vide de

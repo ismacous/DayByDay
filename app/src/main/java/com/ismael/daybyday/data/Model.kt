@@ -4,6 +4,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import java.time.DayOfWeek
+import java.time.LocalDate
 
 /**
  * Les quatre couleurs disponibles pour qualifier une journee.
@@ -109,6 +111,24 @@ enum class Prayer(val key: Int, val label: String) {
     ISHA(4, "Isha");
 
     val bit: Int get() = 1 shl key
+
+    /**
+     * Le nom de cette priere **ce jour-la**.
+     *
+     * Le vendredi, le dhuhr est la jumua. Ce n'est pas une sixieme priere qu'on
+     * ajoute : c'est la meme, au meme rang, sous son nom du vendredi. C'est
+     * pour ca que rien ne change dans le masque enregistre — un vendredi coche
+     * reste coche, et si la carte est ouverte un autre jour, elle redit
+     * simplement « Dhuhr ».
+     *
+     * Ajouter un bit aurait tout casse a la place : le compte des prieres
+     * faites, la medaille des cinq, et les journees deja ecrites.
+     */
+    fun labelOn(date: LocalDate): String =
+        if (this == DHUHR && date.dayOfWeek == DayOfWeek.FRIDAY) "Jumu'a" else label
+
+    /** Cette priere a-t-elle un nom particulier ce jour-la ? */
+    fun isSpecialOn(date: LocalDate): Boolean = labelOn(date) != label
 
     companion object {
         /** Toutes faites : les cinq bits a un. */
@@ -251,8 +271,33 @@ data class DayEntry(
     val showered: Boolean? = null,
     /** Les trois brossages, en masque de bits (voir [Brushing]). */
     val brushMask: Int? = null,
+    /**
+     * Les cartes deja **verifiees** pour cette journee, par leurs cles, separees
+     * par des virgules.
+     *
+     * Verifiee ne veut pas dire remplie, et c'est tout l'interet : « j'ai
+     * regarde cette carte, elle dit ce qu'elle doit dire » — meme si la reponse
+     * est « je n'ai rien fait ». Revenir sur la veille sert exactement a ca, et
+     * rien dans l'application ne permettait de s'en souvenir.
+     *
+     * Ca ne compte **jamais** dans la note de la journee : c'est une marque de
+     * relecture, pas une action de plus a faire.
+     */
+    val checkedCards: String = "",
 ) {
     val color: DayColor? get() = DayColor.fromKey(colorKey)
+
+    /** Les cartes verifiees, en cles. */
+    val checkedCardKeys: Set<String>
+        get() = checkedCards.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+
+    /** La journee, une fois [cardKey] marquee verifiee ou remise a verifier. */
+    fun withCheckedCard(cardKey: String, checked: Boolean): DayEntry {
+        val next = if (checked) checkedCardKeys + cardKey else checkedCardKeys - cardKey
+        // Range dans l'ordre : deux journees identiques s'ecrivent pareil, et
+        // une sauvegarde ne change pas d'un export a l'autre pour rien.
+        return copy(checkedCards = next.sorted().joinToString(","))
+    }
 
     /** Cette priere est-elle cochee ? */
     fun isPrayerDone(prayer: Prayer): Boolean = (prayerMask ?: 0) and prayer.bit != 0
@@ -325,6 +370,11 @@ data class DayEntry(
             medicalWith.isBlank() && medicalNote.isBlank() &&
             (prayerMask ?: 0) == 0 && jobApplications == null &&
             showered != true && (brushMask ?: 0) == 0 &&
+            // Une journee dont on n'a garde que « j'ai relu » n'est pas vide :
+            // c'est meme le cas le plus courant d'une journee ou il ne s'est
+            // rien passe. Sans cette ligne, le depot l'effacerait en sortant de
+            // l'ecran et la marque disparaitrait.
+            checkedCards.isBlank() &&
             filledParts.isEmpty()
 
     companion object {

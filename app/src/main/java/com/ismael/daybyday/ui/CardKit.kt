@@ -58,6 +58,7 @@ import com.ismael.daybyday.data.DayCard
 import com.ismael.daybyday.data.DayColor
 import com.ismael.daybyday.data.Brushing
 import com.ismael.daybyday.data.Prayer
+import java.time.LocalDate
 import java.util.Locale
 
 /**
@@ -643,6 +644,11 @@ fun PrayerBeads(
     mask: Int?,
     tint: Color,
     onToggle: (Prayer, Boolean) -> Unit,
+    /**
+     * La journee affichee. Elle sert au **nom** des perles, pas a leur nombre :
+     * le vendredi, celle du milieu s'appelle la jumu'a.
+     */
+    date: LocalDate,
     modifier: Modifier = Modifier,
 ) {
     val done = mask ?: 0
@@ -652,6 +658,8 @@ fun PrayerBeads(
     ) {
         Prayer.entries.forEach { prayer ->
             val checked = done and prayer.bit != 0
+            val label = prayer.labelOn(date)
+            val special = prayer.isSpecialOn(date)
             val background by animateColorAsState(
                 targetValue = if (checked) tint else tint.copy(alpha = 0.10f),
                 animationSpec = tween(Motion.NORMAL),
@@ -666,7 +674,7 @@ fun PrayerBeads(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(18.dp))
-                    .clickable(onClickLabel = prayer.label) { onToggle(prayer, !checked) }
+                    .clickable(onClickLabel = label) { onToggle(prayer, !checked) }
                     .padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -675,7 +683,19 @@ fun PrayerBeads(
                         .size(42.dp)
                         .clip(CircleShape)
                         .background(background)
-                        .border(1.5.dp, tint.copy(alpha = if (checked) 0f else 0.35f), CircleShape),
+                        .border(
+                            width = if (special) 2.dp else 1.5.dp,
+                            // La perle du vendredi garde son anneau meme
+                            // cochee : c'est ce qui la distingue des quatre
+                            // autres d'un coup d'oeil, avant meme de lire son
+                            // nom.
+                            color = when {
+                                special -> tint.copy(alpha = if (checked) 0.55f else 0.75f)
+                                checked -> tint.copy(alpha = 0f)
+                                else -> tint.copy(alpha = 0.35f)
+                            },
+                            shape = CircleShape,
+                        ),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -695,11 +715,11 @@ fun PrayerBeads(
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = prayer.label,
+                    text = label,
                     fontSize = 10.sp,
                     lineHeight = 12.sp,
-                    fontWeight = if (checked) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (checked) tint else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = if (checked || special) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (checked || special) tint else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     textAlign = TextAlign.Center,
                 )

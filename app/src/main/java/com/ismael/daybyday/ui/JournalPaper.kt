@@ -168,15 +168,27 @@ object JournalPaper {
  * Un titre est plus haut qu'une ligne : le texte qui le suit se decale alors
  * du lignage. C'est le prix d'un vrai lignage sur un texte a tailles
  * variables, et ca reste juste tant qu'on ecrit au fil de la plume.
+ *
+ * [measuredLine] est la hauteur d'une ligne **telle que le texte a fini par
+ * etre pose**, en pixels, ou `0` tant qu'on ne l'a pas encore mesuree. Ce
+ * n'est pas un detail de reglage, c'est la correction d'un vrai defaut : la
+ * hauteur demandee (28 points) tombe presque toujours sur un nombre de pixels
+ * a virgule, que le moteur de texte arrondit ligne par ligne. Un quart de
+ * pixel d'ecart ne se voit pas sur trois lignes ; sur deux cents, le texte a
+ * glisse d'une demi-ligne et les traits passent au milieu des mots. On dessine
+ * donc le lignage au pas **reel** du texte, et non a celui qu'on avait demande.
  */
 @Composable
-fun PaperLines(color: Color, modifier: Modifier = Modifier) {
+fun PaperLines(color: Color, modifier: Modifier = Modifier, measuredLine: Float = 0f) {
     Canvas(modifier = modifier) {
-        val spacing = JournalPaper.LINE_SPACING.toPx()
+        val spacing = if (measuredLine > 0f) measuredLine else JournalPaper.LINE_SPACING.toPx()
         if (spacing <= 0f) return@Canvas
         val margin = JournalPaper.SIDE_MARGIN.toPx()
 
-        var y = JournalPaper.TOP_PADDING.toPx() + spacing
+        // La marge du haut est un espace dans la page, et un espace est pose au
+        // pixel entier : le lignage part du meme endroit, pas d'un demi-pixel
+        // plus bas.
+        var y = kotlin.math.round(JournalPaper.TOP_PADDING.toPx()) + spacing
         while (y < size.height) {
             drawLine(
                 color = color,

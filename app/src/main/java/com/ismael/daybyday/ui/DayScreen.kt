@@ -117,6 +117,7 @@ import com.ismael.daybyday.ui.theme.Brand
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -231,6 +232,11 @@ fun DayScreen(
     var editingTreatment by remember { mutableStateOf<Treatment?>(null) }
     var creatingTreatment by remember { mutableStateOf(false) }
 
+    // Les cartes deja relues pour cette journee. Elles vivent dans la base et
+    // non dans les preferences : c'est une propriete de **cette journee-la**,
+    // pas un reglage de l'application.
+    var checkedCards by remember { mutableStateOf(emptySet<String>()) }
+
     // Les cartes dont le fond est ouvert : celui qui montre la semaine. L'etat
     // vit ici et non dans les preferences — ouvrir le fond d'une carte est un
     // coup d'oeil, pas un reglage.
@@ -269,8 +275,16 @@ fun DayScreen(
 
     // Le journal, **observe** et non recopie : l'apercu se met a jour a la
     // seconde ou l'ecran du journal enregistre, sans attendre un rechargement.
-    val journalDay by remember(epochDay) { repository.observeDay(date) }
-        .collectAsStateWithLifecycle(null)
+    //
+    // Le flux porte le jour auquel il repond, et pas seulement la journee
+    // trouvee. Sans ca, il n'y a aucun moyen de distinguer « cette journee n'a
+    // pas de texte » de « la reponse n'est pas encore arrivee » : les deux
+    // valent `null`. C'est exactement ce qui faisait rejouer la medaille.
+    val journalState by remember(epochDay) {
+        repository.observeDay(date).map { epochDay to it }
+    }.collectAsStateWithLifecycle(null)
+    val journalLoaded = journalState?.first == epochDay
+    val journalDay = journalState?.takeIf { it.first == epochDay }?.second
     val title = journalDay?.title.orEmpty()
     val note = journalDay?.note.orEmpty()
     val noteSpansEncoded = journalDay?.noteSpans.orEmpty()
@@ -314,6 +328,7 @@ fun DayScreen(
         prayerMask = prayerMask,
         showered = showered,
         brushMask = brushMask,
+        checkedCards = checkedCards.sorted().joinToString(","),
     )
 
     /** Applique la couleur d'un moment, puis recalcule la couleur du jour. */
@@ -348,6 +363,7 @@ fun DayScreen(
         showered = entry?.showered
         brushMask = entry?.brushMask
         jobApplications = entry?.jobApplications
+        checkedCards = entry?.checkedCardKeys.orEmpty()
         expandedCards = emptySet()
         loadedFor = epochDay
     }
@@ -383,14 +399,23 @@ fun DayScreen(
     // resultat. Meme regle que pour les pas : la premiere valeur vue ne fete
     // rien, c'est le passage du vide au texte qui compte.
     //
-    // Le `loadedFor` n'est pas un detail, c'est **le** piege : les champs
-    // partent vides et se remplissent une fraction de seconde plus tard, quand
-    // la journee arrive de la base. Sans cette garde, ouvrir une journee deja
-    // ecrite ressemblait exactement a l'ecrire — vide, puis rempli — et la
-    // medaille repartait a chaque ouverture.
+    // Le piege est toujours le meme, et il a deux etages : les champs partent
+    // vides et se remplissent une fraction de seconde plus tard, donc ouvrir
+    // une journee deja ecrite ressemble trait pour trait a l'ecrire. La
+    // premiere version se gardait de ca en attendant `loadedFor` — le
+    // chargement des **autres** champs — ce qui laissait passer le cas ou le
+    // journal, lui, n'avait pas encore repondu.
     var noteSeen by remember(epochDay) { mutableStateOf<Boolean?>(null) }
-    LaunchedEffect(note, title, loadedFor) {
-        if (loadedFor != epochDay) return@LaunchedEffect
+    LaunchedEffect(note, title, journalLoaded) {
+        // On attend la **premiere reponse du journal lui-meme**, et non le
+        // chargement des autres champs. Les deux allaient chercher la meme
+        // journee chacun de son cote, et rien ne disait lequel arriverait le
+        // premier : quand le chargement gagnait, le journal etait encore vide a
+        // cet instant, on notait « pas de texte », le flux repondait une
+        // fraction de seconde plus tard — et le passage du vide au texte
+        // relancait la medaille. D'ou une medaille qui revenait au hasard, en
+        // passant d'une journee a l'autre avec les fleches.
+        if (!journalLoaded) return@LaunchedEffect
         val written = note.isNotBlank() || title.isNotBlank()
         val before = noteSeen
         noteSeen = written
@@ -443,6 +468,13 @@ fun DayScreen(
         medicalWith,
         medicalNote,
         jobApplications,
+        checkedCards,
+        // Ces trois-la n'etaient enregistres qu'en quittant l'ecran : une
+        // priere cochee juste avant qu'Android ne ferme l'application etait
+        // perdue. Elles suivent maintenant le meme chemin que le reste.
+        prayerMask,
+        showered,
+        brushMask,
     ) {
         if (loadedFor != epochDay) return@LaunchedEffect
         delay(SAVE_DEBOUNCE_MS)
@@ -678,6 +710,43 @@ fun DayScreen(
                 )
             }
 
+            // Ou en est la relecture de cette journee. La ligne ne s'affiche
+            // qu'une fois la premiere carte verifiee : tant qu'on n'a rien
+            // marque, un « 0 sur 11 » en haut de chaque journee ressemblerait a
+            // un devoir a rendre, et ce n'en est pas un.
+            val checkedCount = visibleCards.count { it.key in checkedCards }
+            if (checkedCount > 0) {
+                val allChecked = checkedCount == visibleCards.size
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = Verified,
+                        modifier = Modifier.size(15.dp),
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        text = if (allChecked) {
+                            "Journée relue en entier"
+                        } else {
+                            "$checkedCount carte(s) vérifiée(s) sur ${visibleCards.size}"
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Verified,
+                    )
+                    // Le seul moyen de repartir a zero quand toute la
+                    // journee a ete relue : sans lui, une journee entierement
+                    // verifiee le resterait pour toujours.
+                    TextButton(onClick = { checkedCards = emptySet() }) {
+                        Text("Tout décocher", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+
             if (isBirthday) {
                 Text(
                     text = "🎂 Ton anniversaire",
@@ -712,6 +781,14 @@ fun DayScreen(
                 DayCardShell(
                     card = card,
                     collapsed = card in collapsedCards,
+                    checked = card.key in checkedCards,
+                    onCheckedChange = { verified ->
+                        checkedCards = if (verified) {
+                            checkedCards + card.key
+                        } else {
+                            checkedCards - card.key
+                        }
+                    },
                     summary = summaryFor(card),
                     // Une seule carte porte la couleur : celle de l'humeur, qui
                     // est la raison d'etre de la page. Les autres restent
@@ -1154,6 +1231,7 @@ fun DayScreen(
                             PrayerCardBody(
                                 mask = prayerMask,
                                 tint = tint,
+                                date = date,
                                 onToggle = { prayer, done ->
                                     val before = prayerMask ?: 0
                                     val after = currentEntry(epochDay).withPrayer(prayer, done)

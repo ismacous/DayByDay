@@ -51,6 +51,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -252,6 +253,17 @@ fun JournalScreen(
     val ink = JournalPaper.ink(paper)
     val accent = MaterialTheme.colorScheme.primary
     val rhythm = with(density) { JournalPaper.LINE_SPACING.toSp() }
+
+    // Le pas reel du texte, mesure sur la page elle-meme. Tant qu'aucun
+    // paragraphe n'a ete pose, il vaut zero et tout le monde retombe sur la
+    // valeur demandee — c'est le cas d'une page encore vide, ou il n'y a de
+    // toute facon rien a decaler.
+    var measuredLine by remember { mutableFloatStateOf(0f) }
+    val lineHeight = if (measuredLine > 0f) {
+        with(density) { measuredLine.toDp() }
+    } else {
+        JournalPaper.LINE_SPACING
+    }
     val baseFont = JournalPaper.font(fontCode).fontFamily()
     val pageStyle = PageStyle(
         ink = ink,
@@ -1145,6 +1157,7 @@ fun JournalScreen(
                         PaperLines(
                             color = JournalPaper.line(lineIndex),
                             modifier = Modifier.matchParentSize(),
+                            measuredLine = measuredLine,
                         )
                     }
                     if (selectedPhoto != null && snapToGrid) {
@@ -1170,7 +1183,10 @@ fun JournalScreen(
                         blocks = blocks,
                         style = pageStyle,
                         pageHeight = pageHeight,
-                        lineHeight = JournalPaper.LINE_SPACING,
+                        // La poignee et les traits font une ligne **reelle**,
+                        // pas une ligne theorique : un pixel de plus sur chaque
+                        // paragraphe court et la page entiere glisse.
+                        lineHeight = lineHeight,
                         voiceNotes = voiceNotes,
                         focusedKey = focusedKey,
                         pendingFocus = pendingFocus,
@@ -1200,6 +1216,11 @@ fun JournalScreen(
                         onPlaced = { key, top, height ->
                             blockTops[key] = top
                             blockHeights[key] = height
+                        },
+                        onLineMeasured = { advance ->
+                            if (advance > 0f && kotlin.math.abs(advance - measuredLine) > 0.01f) {
+                                measuredLine = advance
+                            }
                         },
                         onDragStart = ::startDrag,
                         onDrag = ::dragBy,
@@ -1414,6 +1435,19 @@ fun JournalScreen(
 }
 
 /**
+ * Le pas reel d'une ligne de ce texte, en pixels.
+ *
+ * On lit l'ecart entre deux lignes plutot que la hauteur d'une seule : c'est
+ * exactement ce que le lignage doit reproduire, et c'est la seule mesure qui
+ * ne depende ni de la police ni de la taille choisie.
+ */
+private fun TextLayoutResult.lineAdvance(): Float = when {
+    lineCount >= 2 -> getLineTop(1) - getLineTop(0)
+    lineCount == 1 -> getLineBottom(0) - getLineTop(0)
+    else -> 0f
+}
+
+/**
  * La page : ses blocs, les uns sous les autres.
  *
  * Elle ne decide de rien — pas plus que les champs de texte. Elle place, elle
@@ -1444,6 +1478,8 @@ private fun PageColumn(
     onFocused: (Long, Boolean) -> Unit,
     onFocusHandled: () -> Unit,
     onPlaced: (Long, Float, Float) -> Unit,
+    /** La hauteur reelle d'une ligne de texte, en pixels, des qu'on la connait. */
+    onLineMeasured: (Float) -> Unit,
     onDragStart: (Long) -> Unit,
     onDrag: (Float) -> Unit,
     onDragEnd: () -> Unit,
@@ -1551,7 +1587,17 @@ private fun PageColumn(
                                     heldSelection = heldSelection
                                         .takeIf { focusedKey == block.key },
                                     onValueChange = { onValueChange(block.key, it) },
-                                    onLayout = { layout.value = it },
+                                    onLayout = {
+                                        layout.value = it
+                                        // Seuls les paragraphes **sans mise en
+                                        // forme** servent de metre : un mot
+                                        // ecrit plus grand rend sa ligne plus
+                                        // haute, et mesurer dessus decalerait
+                                        // tout le lignage au lieu de le caler.
+                                        if (block.spans.isEmpty()) {
+                                            onLineMeasured(it.lineAdvance())
+                                        }
+                                    },
                                     onFocus = { onFocused(block.key, it) },
                                     onOpenDay = onOpenDay,
                                     onOpenHashtag = onOpenHashtag,

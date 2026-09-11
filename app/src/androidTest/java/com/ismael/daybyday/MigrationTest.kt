@@ -78,6 +78,7 @@ class MigrationTest {
                 AppDatabase.MIGRATION_18_19,
                 AppDatabase.MIGRATION_19_20,
                 AppDatabase.MIGRATION_20_21,
+                AppDatabase.MIGRATION_21_22,
             )
             .build()
 
@@ -100,6 +101,15 @@ class MigrationTest {
                 // Les nouveaux champs existent et sont simplement vides.
                 assertEquals(null, day?.sportLevel)
                 assertEquals(null, day?.weightKg)
+                // Une journee d'avant les cartes verifiees arrive « pas encore
+                // verifiee », et non « tout verifie » : la colonne est vide, et
+                // la marque se pose ensuite comme sur n'importe quelle journee.
+                assertEquals("", day?.checkedCards)
+                assertEquals(emptySet<String>(), day?.checkedCardKeys)
+                dao.upsertDay(day!!.withCheckedCard("priere", true))
+                assertEquals(setOf("priere"), dao.dayOnce(20000)?.checkedCardKeys)
+                dao.upsertDay(dao.dayOnce(20000)!!.withCheckedCard("priere", false))
+                assertEquals(emptySet<String>(), dao.dayOnce(20000)?.checkedCardKeys)
                 assertEquals(1, dao.mediaForDay(20000).size)
                 // La photo d'origine survit et n'a pas encore de place sur la
                 // page : elle sera rangee a la premiere ouverture du journal.

@@ -3,6 +3,7 @@ package com.ismael.daybyday.ui
 import android.app.TimePickerDialog
 import android.content.Context
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -14,6 +15,9 @@ import androidx.compose.animation.SizeTransform
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +37,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -43,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +59,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -66,6 +74,8 @@ import com.ismael.daybyday.data.DoseTime
 import com.ismael.daybyday.data.Brushing
 import com.ismael.daybyday.data.Prayer
 import com.ismael.daybyday.data.Treatment
+import java.time.DayOfWeek
+import java.time.LocalDate
 import java.util.Locale
 
 /**
@@ -102,6 +112,23 @@ fun DayCardShell(
      * c'est-a-dire en regardant la carte qui derange.
      */
     onOrganize: () -> Unit = {},
+    /**
+     * La carte a-t-elle ete **verifiee** pour cette journee ?
+     *
+     * Relire la veille — « est-ce que j'ai bien coche mes prieres, mes sorties,
+     * mes depenses ? » — n'est pas la meme chose que remplir la journee, et ca
+     * ne laissait aucune trace : on recommencait la meme relecture le
+     * lendemain. Un geste lateral sur la carte pose la marque, le meme geste
+     * l'enleve.
+     *
+     * Le choix de ne **pas** griser : une carte grisee se lit comme une carte
+     * desactivee, et c'est le contraire de ce qu'on veut dire — une carte
+     * verifiee reste tout a fait modifiable. Elle prend donc une coche, un bord
+     * vert et une encre un peu retenue, ce qui se voit d'un coup d'oeil en
+     * descendant la page sans rien rendre illisible.
+     */
+    checked: Boolean = false,
+    onCheckedChange: (Boolean) -> Unit = {},
     /** L'etat de la carte, en quelques mots. Rien a dire : `null`. */
     summary: String? = null,
     /**
@@ -150,15 +177,68 @@ fun DayCardShell(
         }
     }
 
+    val haptics = LocalHapticFeedback.current
+    val checkEdge by animateFloatAsState(
+        targetValue = if (checked) 1f else 0f,
+        animationSpec = tween(Motion.NORMAL),
+        label = "verifiee",
+    )
+    // Le decalage du doigt, en pixels. Une simple valeur et non une animation :
+    // pendant le geste, la carte suit le doigt, il n'y a rien a animer. C'est
+    // seulement au relachement qu'elle revient toute seule.
+    var slide by remember { mutableFloatStateOf(0f) }
+    val swipePx = with(density) { CHECK_SWIPE.toPx() }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            // Le geste lateral, dans les **deux** sens. Un sens pour cocher et
+            // l'autre pour decocher obligerait a se souvenir lequel est lequel ;
+            // ici on pousse la carte, elle bascule, et on la repousse pour
+            // revenir. C'est le geste que fait la main sans y penser.
+            .draggable(
+                orientation = Orientation.Horizontal,
+                state = rememberDraggableState { delta ->
+                    // La carte ne part jamais tres loin : au-dela du seuil, on
+                    // a deja ce qu'on est venu chercher, et la laisser filer
+                    // hors de l'ecran ferait croire qu'elle s'en va.
+                    val limit = swipePx * 1.4f
+                    slide = (slide + delta).coerceIn(-limit, limit)
+                },
+                onDragStopped = {
+                    if (kotlin.math.abs(slide) >= swipePx) {
+                        // Une secousse au moment ou ca bascule : on le sent
+                        // avant de le voir.
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onCheckedChange(!checked)
+                    }
+                    animate(slide, 0f, animationSpec = tween(Motion.NORMAL)) { value, _ ->
+                        slide = value
+                    }
+                },
+            )
+            // Lu **dans** la couche graphique : la carte glisse sans que rien
+            // ne soit remesure a chaque image.
+            .graphicsLayer { translationX = slide }
             .brandShadow(elevation = 10.dp, shape = shape, color = style.tint)
             .clip(shape)
             .background(surface)
-            .then(if (moodBrush != null) Modifier.background(moodBrush) else Modifier.cardGlow(style)),
+            .then(if (moodBrush != null) Modifier.background(moodBrush) else Modifier.cardGlow(style))
+            // Le bord vert est **dessine**, pas ajoute comme une colonne : il ne
+            // pousse rien et la carte garde exactement la meme place, verifiee
+            // ou non. Sinon toute la page bougerait a chaque geste.
+            .drawBehind {
+                if (checkEdge <= 0f) return@drawBehind
+                drawRect(
+                    color = Verified.copy(alpha = checkEdge),
+                    size = Size(CHECK_EDGE.toPx(), size.height),
+                )
+            }
+            // Une carte verifiee retient un peu son encre — juste assez pour
+            // se distinguer en descendant la page, pas au point de devenir
+            // grise : elle reste tout a fait modifiable.
+            .graphicsLayer { alpha = 1f - 0.14f * checkEdge },
     ) {
-        val haptics = LocalHapticFeedback.current
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -224,6 +304,30 @@ fun DayCardShell(
                             maxLines = 1,
                         )
                     }
+                }
+            }
+            // La coche est aussi un **bouton**. Le geste lateral ne se devine
+            // pas, et un geste qu'on ne devine pas ne doit jamais etre le seul
+            // chemin : une fois la carte verifiee, la coche est la, et elle
+            // s'appuie pour revenir en arriere.
+            if (checked) {
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(Verified.copy(alpha = 0.16f))
+                        .clickable(onClickLabel = "Ne plus marquer comme vérifiée") {
+                            onCheckedChange(false)
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = "Carte vérifiée",
+                        tint = Verified,
+                        modifier = Modifier.size(16.dp),
+                    )
                 }
             }
             Spacer(Modifier.width(8.dp))
@@ -393,11 +497,17 @@ private fun TimeButton(
  * ete touche est une journee dont on ne sait rien, et le texte le dit.
  */
 @Composable
-fun PrayerCardBody(mask: Int?, tint: Color, onToggle: (Prayer, Boolean) -> Unit) {
+fun PrayerCardBody(
+    mask: Int?,
+    tint: Color,
+    date: LocalDate,
+    onToggle: (Prayer, Boolean) -> Unit,
+) {
     val done = mask ?: 0
     val count = Prayer.entries.count { done and it.bit != 0 }
+    val friday = date.dayOfWeek == DayOfWeek.FRIDAY
 
-    PrayerBeads(mask = mask, tint = tint, onToggle = onToggle)
+    PrayerBeads(mask = mask, tint = tint, onToggle = onToggle, date = date)
 
     Spacer(Modifier.height(14.dp))
     TrackBar(progress = count / Prayer.entries.size.toFloat(), tint = tint)
@@ -412,6 +522,16 @@ fun PrayerCardBody(mask: Int?, tint: Color, onToggle: (Prayer, Boolean) -> Unit)
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    // Une ligne le vendredi, et rien les autres jours : la carte dit ce que ce
+    // jour-la a de particulier, sans jamais demander de comptes.
+    if (friday) {
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Vendredi : le dhuhr, c'est la jumu'a.",
+            style = MaterialTheme.typography.labelMedium,
+            color = tint,
+        )
+    }
 }
 
 /**
@@ -681,3 +801,23 @@ private fun sleepComment(minutes: Int): String = when {
     minutes <= 9 * 60 -> "Nuit dans la moyenne."
     else -> "Nuit longue."
 }
+
+/**
+ * Le vert de « c'est verifie ».
+ *
+ * Le meme que celui des bonnes journees ([DayColor.GREEN]) : l'application n'a
+ * pas besoin d'un septieme vert, et celui-la veut deja dire « ca va » partout
+ * ailleurs.
+ */
+val Verified = Color(0xFF15C48E)
+
+/** La largeur du bord vert d'une carte verifiee. */
+private val CHECK_EDGE = 5.dp
+
+/**
+ * De combien il faut pousser une carte pour la faire basculer.
+ *
+ * Assez pour qu'un doigt qui derape en faisant defiler la page ne coche rien,
+ * assez peu pour que le geste reste un geste et non un deplacement.
+ */
+private val CHECK_SWIPE = 72.dp

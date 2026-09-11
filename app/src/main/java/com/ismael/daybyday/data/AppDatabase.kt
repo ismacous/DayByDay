@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Version du schema. Affichee dans les reglages, a propos, pour savoir ce que
  * fait tourner le telephone en cas de probleme.
  */
-const val DATABASE_VERSION = 21
+const val DATABASE_VERSION = 22
 
 @Database(
     entities = [
@@ -603,6 +603,26 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Les cartes verifiees d'une journee.
+         *
+         * Une colonne de texte plutot qu'une table a part : c'est une liste de
+         * cles courtes attachee a une journee, elle est lue et ecrite en meme
+         * temps que le reste de la ligne, et on ne l'interroge jamais toute
+         * seule. Une table demanderait une jointure a chaque ouverture pour
+         * porter la meme chose.
+         *
+         * Vide par defaut : toutes les journees deja ecrites arrivent « pas
+         * encore verifiees », ce qui est exactement vrai.
+         */
+        val MIGRATION_21_22 = object : Migration(21, 22) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE day_entries ADD COLUMN checkedCards TEXT NOT NULL DEFAULT ''"
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -633,6 +653,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_18_19,
                     MIGRATION_19_20,
                     MIGRATION_20_21,
+                    MIGRATION_21_22,
                 )
                 .build()
                 .also { instance = it }

@@ -7,6 +7,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.DayOfWeek
+import java.time.LocalDate
 
 /**
  * Les cinq prieres, rangees en masque de bits.
@@ -82,5 +84,47 @@ class PrayerTest {
     fun `tout decocher rend la journee vide a nouveau`() {
         val entry = day.copy(prayerMask = 0)
         assertTrue(entry.isEmpty)
+    }
+
+    @Test
+    fun `le vendredi, le dhuhr s appelle la jumua`() {
+        val friday = LocalDate.of(2026, 9, 11)
+        assertEquals(DayOfWeek.FRIDAY, friday.dayOfWeek)
+
+        assertEquals("Jumu'a", Prayer.DHUHR.labelOn(friday))
+        assertTrue(Prayer.DHUHR.isSpecialOn(friday))
+    }
+
+    @Test
+    fun `les autres jours, le dhuhr reste le dhuhr`() {
+        val thursday = LocalDate.of(2026, 9, 10)
+
+        assertEquals("Dhuhr", Prayer.DHUHR.labelOn(thursday))
+        assertFalse(Prayer.DHUHR.isSpecialOn(thursday))
+    }
+
+    @Test
+    fun `aucune autre priere ne change de nom le vendredi`() {
+        val friday = LocalDate.of(2026, 9, 11)
+
+        Prayer.entries.filter { it != Prayer.DHUHR }.forEach { prayer ->
+            assertEquals(prayer.label, prayer.labelOn(friday))
+            assertFalse(prayer.isSpecialOn(friday))
+        }
+    }
+
+    @Test
+    fun `la jumua ne change ni les bits ni le compte`() {
+        // C'est **la** garantie de ce changement : un vendredi coche est un
+        // dhuhr coche. Ajouter une sixieme priere aurait casse le compte des
+        // cinq, la medaille, et toutes les journees deja ecrites.
+        val friday = LocalDate.of(2026, 9, 11)
+        val entry = day.copy(prayerMask = day.withPrayer(Prayer.DHUHR, true))
+
+        assertEquals(5, Prayer.entries.size)
+        assertEquals(2, Prayer.DHUHR.bit)
+        assertEquals(1, entry.prayersDone)
+        assertTrue(entry.isPrayerDone(Prayer.DHUHR))
+        assertEquals("Jumu'a", Prayer.DHUHR.labelOn(friday))
     }
 }

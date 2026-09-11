@@ -623,6 +623,41 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Toutes les migrations, dans l'ordre.
+         *
+         * **Une seule liste**, et c'est le but : la base l'utilise, et les tests
+         * la rejouent. Tant qu'il y en avait deux — une ici, une recopiee dans
+         * le test — ajouter une migration et oublier de la recopier donnait un
+         * test rouge qui n'avait rien a voir avec ce qu'on venait d'ecrire :
+         * « A migration from 5 to 22 was required but not found ». La liste est
+         * declaree **apres** les migrations qu'elle contient : dans un objet
+         * Kotlin, ce qui est declare plus haut est construit en premier.
+         */
+        val ALL_MIGRATIONS: Array<Migration> = arrayOf(
+            MIGRATION_1_2,
+            MIGRATION_2_3,
+            MIGRATION_3_4,
+            MIGRATION_4_5,
+            MIGRATION_5_6,
+            MIGRATION_6_7,
+            MIGRATION_7_8,
+            MIGRATION_8_9,
+            MIGRATION_9_10,
+            MIGRATION_10_11,
+            MIGRATION_11_12,
+            MIGRATION_12_13,
+            MIGRATION_13_14,
+            MIGRATION_14_15,
+            MIGRATION_15_16,
+            MIGRATION_16_17,
+            MIGRATION_17_18,
+            MIGRATION_18_19,
+            MIGRATION_19_20,
+            MIGRATION_20_21,
+            MIGRATION_21_22,
+        )
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -632,29 +667,7 @@ abstract class AppDatabase : RoomDatabase() {
                 AppDatabase::class.java,
                 NAME,
             )
-                .addMigrations(
-                    MIGRATION_1_2,
-                    MIGRATION_2_3,
-                    MIGRATION_3_4,
-                    MIGRATION_4_5,
-                    MIGRATION_5_6,
-                    MIGRATION_6_7,
-                    MIGRATION_7_8,
-                    MIGRATION_8_9,
-                    MIGRATION_9_10,
-                    MIGRATION_10_11,
-                    MIGRATION_11_12,
-                    MIGRATION_12_13,
-                    MIGRATION_13_14,
-                    MIGRATION_14_15,
-                    MIGRATION_15_16,
-                    MIGRATION_16_17,
-                    MIGRATION_17_18,
-                    MIGRATION_18_19,
-                    MIGRATION_19_20,
-                    MIGRATION_20_21,
-                    MIGRATION_21_22,
-                )
+                .addMigrations(*ALL_MIGRATIONS)
                 .build()
                 .also { instance = it }
         }

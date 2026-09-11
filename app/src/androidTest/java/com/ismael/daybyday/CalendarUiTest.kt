@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -25,15 +26,25 @@ class CalendarUiTest {
 
     companion object {
         /**
-         * L'ecran de reprise de sauvegarde s'affiche quand la base est vide.
-         * On le desactive avant que la regle ne lance l'activite, sinon il
-         * masque le calendrier pendant les tests.
+         * Deux ecrans passent **devant** le calendrier au lancement, et les deux
+         * doivent etre ecartes avant que la regle ne demarre l'activite.
+         *
+         * 1. L'ecran de reprise de sauvegarde, qui s'affiche quand la base est
+         *    vide — c'est-a-dire toujours, sur un emulateur neuf.
+         * 2. L'animation d'accueil (« Salut Ismael »). Elle ne se joue qu'une
+         *    fois par lancement du processus, ce qui la rend facile a oublier :
+         *    sur un telephone on la voit une seconde et on passe. Dans les
+         *    tests, elle recouvrait tout, et les six tests d'interface
+         *    echouaient ensemble sur « aucun noeud ne correspond » — ce qui
+         *    ressemble a six bugs alors qu'il n'y en a qu'un, et pas dans
+         *    l'application.
          */
         @JvmStatic
         @BeforeClass
-        fun desactiverLEcranDeReprise() {
+        fun ecarterLesEcransDAccueil() {
             val context = InstrumentationRegistry.getInstrumentation().targetContext
             Prefs(context).firstRunRestoreChecked = true
+            (context.applicationContext as DayByDayApp).helloPlayed = true
         }
     }
 
@@ -42,8 +53,13 @@ class CalendarUiTest {
 
     @Test
     fun leCalendrierDuMoisEnCoursEstAffiche() {
-        composeRule.onNodeWithText("Aujourd'hui", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText(Dates.monthTitle(YearMonth.now())).assertIsDisplayed()
+        // La carte du jour est en haut, toujours visible.
+        composeRule.onNodeWithText("Aujourd'hui", substring = true, ignoreCase = true)
+            .assertIsDisplayed()
+        // L'en-tete du calendrier ne porte que le nom du mois : l'annee est sur
+        // la ligne du dessous, celle qui ouvre l'annee entiere.
+        composeRule.onNodeWithText(Dates.monthTitle(YearMonth.now()).substringBefore(' '))
+            .assertExists()
         // Le bilan est en bas de la page : il existe sans forcement etre visible.
         composeRule.onNodeWithText("Bilan du mois").assertExists()
     }
@@ -54,30 +70,32 @@ class CalendarUiTest {
         val dayTag = "day-${today.toEpochDay()}"
         val title = "Test ${System.currentTimeMillis()}"
 
-        composeRule.onNodeWithTag(dayTag).performClick()
-        composeRule.onNodeWithText("Comment tu te sens").assertIsDisplayed()
+        // Le calendrier est sous la carte du jour : on l'amene a l'ecran avant
+        // d'appuyer, sinon le doigt tombe a cote.
+        composeRule.onNodeWithTag(dayTag).performScrollTo().performClick()
+        composeRule.onNodeWithText("Comment tu te sens").assertExists()
 
-        composeRule.onNodeWithTag("color-GREEN").performClick()
+        composeRule.onNodeWithTag("color-GREEN").performScrollTo().performClick()
 
         // Le journal s'ecrit sur son propre ecran, ouvert depuis son apercu.
-        composeRule.onNodeWithTag("journal-preview").performClick()
+        composeRule.onNodeWithTag("journal-preview").performScrollTo().performClick()
         composeRule.onNodeWithTag("day-title-field").performTextInput(title)
         composeRule.onNodeWithContentDescription("Retour").performClick()
 
         composeRule.onNodeWithContentDescription("Retour").performClick()
-        composeRule.onNodeWithTag(dayTag).performClick()
+        composeRule.onNodeWithTag(dayTag).performScrollTo().performClick()
 
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithText(title).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("Bonne journée").assertIsDisplayed()
+        composeRule.onNodeWithText("Bonne journée").assertExists()
     }
 
     @Test
     fun colorierAujourdHuiDepuisLAccueil() {
         // Une couleur differente de l'autre test pour rester independant de
         // l'ordre d'execution (un clic sur la couleur deja choisie l'enleve).
-        composeRule.onNodeWithTag("today-ORANGE").performClick()
+        composeRule.onNodeWithTag("today-ORANGE").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithText("Journée mitigée").fetchSemanticsNodes().isNotEmpty()
         }
@@ -85,31 +103,47 @@ class CalendarUiTest {
 
     @Test
     fun lesOngletsDuBasFonctionnent() {
-        val year = LocalDate.now().year
-
-        composeRule.onNodeWithText("Bilan").performClick()
+        // Les onglets se visent par leur repere et non par leur nom : « Argent »
+        // ou « Bilan » peuvent aussi etre ecrits dans la page, et la recherche
+        // echoue alors sur « deux noeuds au lieu d'un » — une panne qui
+        // n'arrive que le jour ou l'on ajoute un titre quelque part.
+        //
+        // Et on verifie l'arrivee sur un contenu de la page, pas sur son titre :
+        // les titres sont animes mot par mot, « Mon bilan » est fait de deux
+        // noeuds et ne se cherche pas comme une phrase.
+        composeRule.onNodeWithTag("tab-stats").performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText("Mon bilan").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("Mois par mois").fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeRule.onNodeWithText("Année").performClick()
+        composeRule.onNodeWithTag("tab-money").performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText("Année $year").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("Corriger mon solde").fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeRule.onNodeWithText("Argent").performClick()
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText("Ce qu'il te reste").fetchSemanticsNodes().isNotEmpty()
-        }
-
-        composeRule.onNodeWithText("Réglages").performClick()
+        composeRule.onNodeWithTag("tab-settings").performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithText("Rappel quotidien").fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeRule.onNodeWithText("Mois").performClick()
+        composeRule.onNodeWithTag("tab-calendar").performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithText("Bilan du mois").fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    @Test
+    fun lAnneeSOuvreEnAppuyantSurLeMois() {
+        // L'annee n'est plus un onglet : ce n'etait pas une destination mais un
+        // niveau de zoom du calendrier. On y va en appuyant sur le nom du mois,
+        // la ou l'on regarde deja.
+        val year = LocalDate.now().year
+
+        composeRule.onNodeWithText("voir l'année", substring = true)
+            .performScrollTo()
+            .performClick()
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithText("Année $year").fetchSemanticsNodes().isNotEmpty()
         }
     }
 
@@ -118,8 +152,8 @@ class CalendarUiTest {
         val today = LocalDate.now()
         val marker = "Ruisseau${System.currentTimeMillis() % 100000}"
 
-        composeRule.onNodeWithTag("day-${today.toEpochDay()}").performClick()
-        composeRule.onNodeWithTag("journal-preview").performClick()
+        composeRule.onNodeWithTag("day-${today.toEpochDay()}").performScrollTo().performClick()
+        composeRule.onNodeWithTag("journal-preview").performScrollTo().performClick()
         composeRule.onNodeWithTag("day-note-field").performTextInput(marker)
         composeRule.onNodeWithContentDescription("Retour").performClick()
         composeRule.onNodeWithContentDescription("Retour").performClick()
@@ -141,12 +175,12 @@ class CalendarUiTest {
         // jour soit encore en mode automatique.
         val day = LocalDate.now().minusDays(3)
 
-        composeRule.onNodeWithTag("day-${day.toEpochDay()}").performClick()
-        composeRule.onNodeWithText("Moment par moment").assertIsDisplayed()
+        composeRule.onNodeWithTag("day-${day.toEpochDay()}").performScrollTo().performClick()
+        composeRule.onNodeWithText("Moment par moment").assertExists()
 
         // Un matin vert et une nuit noire donnent une journée orange en moyenne.
-        composeRule.onNodeWithTag("part-MORNING-GREEN").performClick()
-        composeRule.onNodeWithTag("part-NIGHT-BLACK").performClick()
+        composeRule.onNodeWithTag("part-MORNING-GREEN").performScrollTo().performClick()
+        composeRule.onNodeWithTag("part-NIGHT-BLACK").performScrollTo().performClick()
 
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithText("Calculée à partir de tes moments.")

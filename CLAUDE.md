@@ -816,6 +816,21 @@ téléphone (Samsung S25, Android 15).
   modèle à suivre pour toute autre « carte d'événement » : changer ce qui
   s'affiche ce jour-là, jamais ce qui est enregistré.
 
+- **Les tests d'interface doivent ecarter les deux ecrans d'accueil.** La
+  reprise de sauvegarde (base vide) **et** l'animation « Salut … »
+  (`helloPlayed`, remis a faux a chaque lancement du processus) passent devant
+  le calendrier. Sans les deux lignes du `@BeforeClass` de `CalendarUiTest`, les
+  six tests echouent ensemble sur « aucun noeud ne correspond » — ce qui
+  ressemble a six bugs alors qu'il n'y en a qu'un, et pas dans l'application.
+  Deux autres regles tirees de la meme panne : un jour du calendrier vit sous la
+  carte du jour, donc `performScrollTo()` avant `performClick()` ; et les
+  onglets se visent par leur repere (`tab-stats`, `tab-money`…) et non par leur
+  nom, qui peut aussi etre ecrit dans la page.
+- **Une seule liste de migrations** (`AppDatabase.ALL_MIGRATIONS`), utilisee par
+  l'application *et* par les tests. Quand le test en gardait une copie, ajouter
+  une migration sans la recopier donnait « A migration from 5 to 22 was required
+  but not found » — un echec qui n'a rien a voir avec ce qu'on vient d'ecrire.
+
 ## Construire et tester
 
 ```bash

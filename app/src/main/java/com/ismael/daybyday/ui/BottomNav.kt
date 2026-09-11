@@ -50,6 +50,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ismael.daybyday.ui.theme.Brand
@@ -320,6 +321,10 @@ private fun NavTab(
             .onGloballyPositioned { coordinates ->
                 onCenter(coordinates.positionInRoot().x + coordinates.size.width / 2f)
             }
+            // Un repere pour les tests : viser le **nom** de l'onglet marchait
+            // tant qu'aucune page ne contenait le meme mot, ce qui n'est vrai
+            // que par chance.
+            .testTag("tab-${item.route}")
             .clip(CircleShape)
             .clickable(
                 interactionSource = interaction,

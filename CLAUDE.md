@@ -102,6 +102,14 @@ téléphone (Samsung S25, Android 15).
   dans le code : Samsung endort les applications, d'où la ligne « Mise en veille
   par Android », le rappel d'essai, et la ligne « Prochain rappel » des Réglages
   — qui sépare « rien n'est programmé » de « c'est programmé mais étouffé ».
+- **La place de l'en-tête se retient onglet par onglet.** Chaque onglet garde sa
+  position de défilement quand on le quitte et la retrouve quand on y revient
+  (`restoreState`), mais l'en-tête, lui, était remis en haut à chaque changement
+  d'onglet. On revenait donc au milieu du mois avec le titre posé en travers des
+  cartes. `AppNavigation` garde une position **par route** (`headerOffsets`) :
+  les deux repartent ensemble. Un seul `NestedScrollConnection` sert tout le
+  monde, et il lit la route courante par `rememberUpdatedState` — le refabriquer
+  à chaque changement d'onglet couperait le défilement en cours.
 - **Titre des onglets** : il vit **au-dessus** du `NavHost` (`TabHeader` dans
   `AppNavigation`), pas dans chaque écran. Avant, passer du bilan à l'argent
   détruisait « Mon bilan » pour reconstruire « Mon argent » et tout l'en-tête
@@ -769,6 +777,44 @@ téléphone (Samsung S25, Android 15).
 - Les tests d'interface partagent la base réelle de l'émulateur : deux tests ne
   doivent pas toucher la même journée avec la même couleur (un second appui
   l'enlève).
+
+- **Les médailles se déclenchent au passage, et « pas encore chargé » n'est pas
+  « vide ».** C'est le même piège deux fois. Les champs d'une journée partent
+  vides et se remplissent une fraction de seconde plus tard : sans garde, ouvrir
+  une journée déjà écrite ressemble trait pour trait à l'écrire, et la médaille
+  repart. La première version attendait `loadedFor` — le chargement des *autres*
+  champs — ce qui laissait passer le cas où le journal, lui, n'avait pas encore
+  répondu : deux lectures de la même journée, chacune de son côté, et rien ne
+  disait laquelle arriverait la première. D'où une médaille qui revenait au
+  hasard en passant d'un jour à l'autre avec les flèches. Le flux du journal
+  porte donc **le jour auquel il répond** (`epochDay to entry`), ce qui distingue
+  enfin « cette journée n'a pas de texte » de « la réponse n'est pas arrivée » —
+  les deux valaient `null`. Toute nouvelle médaille lue depuis un flux doit faire
+  pareil.
+- **Le lignage du journal suit le pas *mesuré* du texte, pas celui qu'on
+  demande.** La hauteur de ligne voulue (28 points) tombe presque toujours sur un
+  nombre de pixels à virgule, et le moteur de texte arrondit **chaque ligne** au
+  pixel. Un quart de pixel d'écart ne se voit pas sur trois lignes ; sur deux
+  cents, le texte a glissé d'une demi-ligne et les traits passent au milieu des
+  mots — plus la page était longue, plus le décalage était grand. `PageColumn`
+  remonte donc l'écart réel entre deux lignes (`lineAdvance()`, mesuré sur un
+  paragraphe **sans mise en forme** : un mot écrit plus grand fausserait tout), et
+  `PaperLines` dessine à ce pas-là. La poignée des blocs et les traits de
+  séparation prennent la même hauteur, sinon chaque paragraphe court ajouterait
+  son pixel.
+- **Une carte « vérifiée » n'est pas une carte remplie.** Le geste latéral sur
+  une carte de la journée dit « je l'ai relue », rien de plus : ça ne remplit
+  rien, ça ne compte **jamais** dans la note, et la marque vit dans la journée
+  (`DayEntry.checkedCards`) et non dans les préférences — c'est une propriété de
+  *ce jour-là*. Deux conséquences à ne pas défaire : une journée dont on n'a
+  gardé que « j'ai relu » n'est pas vide (sinon `saveDay` l'efface en quittant
+  l'écran et la marque disparaît), et la coche de l'en-tête doit rester, parce
+  qu'un geste qu'on ne devine pas ne doit jamais être le seul chemin.
+- **Le vendredi, le dhuhr s'appelle la jumu'a** (`Prayer.labelOn`). C'est un
+  **nom**, pas une sixième prière : le masque, les bits, le compte des cinq et la
+  médaille ne bougent pas, et un vendredi coché reste un dhuhr coché. C'est le
+  modèle à suivre pour toute autre « carte d'événement » : changer ce qui
+  s'affiche ce jour-là, jamais ce qui est enregistré.
 
 ## Construire et tester
 

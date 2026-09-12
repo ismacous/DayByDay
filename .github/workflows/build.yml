@@ -86,6 +86,19 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # La compilation se fait **avant** d'allumer l'emulateur, et c'est le
+      # coeur du probleme qui rendait ces tests inutilisables. Lancee depuis le
+      # script de l'emulateur, elle compilait Kotlin et KSP pendant qu'une
+      # machine virtuelle Android de plusieurs gigaoctets tournait a cote : le
+      # noyau tuait l'emulateur au pic, sans rien ecrire dans le journal. On
+      # voyait seulement l'appareil disparaitre en plein test
+      # (« device 'emulator-5554' not found »), et la seance s'arretait la,
+      # vingt tests avant la fin. Compile d'abord, l'emulateur ne fait plus
+      # qu'installer et jouer.
+      - name: Compiler avant d'allumer l'emulateur
+        timeout-minutes: 20
+        run: ./gradlew --no-daemon assembleDebug assembleDebugAndroidTest
+
       # Le demarrage de l'emulateur echoue souvent sur les machines de GitHub :
       # adb ne voit jamais l'appareil apparaitre ("Timeout waiting for emulator
       # to boot") et le job echoue sans avoir lance un seul test. Passer de
@@ -105,7 +118,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           cores: 2
-          ram-size: 4096M
+          ram-size: 3072M
           disk-size: 6G
           disable-animations: true
           emulator-boot-timeout: 600
@@ -123,7 +136,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           cores: 2
-          ram-size: 4096M
+          ram-size: 3072M
           disk-size: 6G
           disable-animations: true
           emulator-boot-timeout: 600

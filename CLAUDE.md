@@ -826,6 +826,15 @@ téléphone (Samsung S25, Android 15).
   carte du jour, donc `performScrollTo()` avant `performClick()` ; et les
   onglets se visent par leur repere (`tab-stats`, `tab-money`…) et non par leur
   nom, qui peut aussi etre ecrit dans la page.
+- **La compilation se fait avant d'allumer l'emulateur.** Lancee depuis le
+  script de l'emulateur, elle compilait Kotlin et KSP pendant qu'une machine
+  virtuelle Android tournait a cote : au pic, le noyau tuait l'emulateur sans
+  rien ecrire dans le journal. On voyait seulement l'appareil disparaitre en
+  plein test (« device 'emulator-5554' not found ») et la seance s'arreter la,
+  vingt tests avant la fin — ce qui ressemble a un test casse alors que c'est la
+  machine qui manque de memoire. D'ou l'etape « Compiler avant d'allumer
+  l'emulateur » et les trois gigaoctets (et non quatre) de l'AVD : la machine de
+  GitHub en a sept en tout.
 - **L'ecran de l'annee ne s'ouvre pas dans les tests.** Douze mini-mois, environ
   cinq cents cases : la carte graphique logicielle de l'emulateur (deux coeurs,
   `swiftshader`) n'y survit pas. L'appareil **disparait** en plein test

@@ -7,7 +7,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.ismael.daybyday.R
 import com.ismael.daybyday.coach.CoachEngine
-import com.ismael.daybyday.coach.CoachRule
 import com.ismael.daybyday.coach.CoachSnapshot
 import com.ismael.daybyday.coach.Nudge
 import com.ismael.daybyday.coach.NudgeSurface
@@ -152,20 +151,20 @@ object Reminders {
             memory = memory,
             surface = NudgeSurface.NOTIFICATION,
             maxNotifications = if (forced) Int.MAX_VALUE else prefs.coachNotificationsPerDay,
-        ) ?: if (forced) {
-            // Un essai ne doit jamais rester muet : sinon on ne sait pas si la
-            // notification est bloquee ou s'il n'y avait rien a dire.
-            Nudge(CoachRule.HELLO, "C'est un essai : si tu vois ça, le coup de pouce fonctionne.")
-        } else {
-            return
-        }
+        )
+        // Un essai ne doit jamais rester muet : sinon on ne sait pas si la
+        // notification est bloquee ou s'il n'y avait simplement rien a dire.
+        if (nudge == null && !forced) return
+        val title = nudge?.title ?: "Un petit mot"
+        val text = nudge?.text
+            ?: "C'est un essai : si tu vois ça, le coup de pouce fonctionne."
 
         val notification = NotificationCompat
             .Builder(context.applicationContext, CoachWorker.CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(nudge.title)
-            .setContentText(nudge.text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(nudge.text))
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
             .setContentIntent(openApp(context, null, REQUEST_COACH))
@@ -177,7 +176,7 @@ object Reminders {
         }.isSuccess
 
         // Le quota n'est consomme que si la notification est reellement partie.
-        if (posted && !forced) {
+        if (posted && !forced && nudge != null) {
             CoachEngine.markShown(app.coach, nudge, NudgeSurface.NOTIFICATION, today.toEpochDay())
         }
     }

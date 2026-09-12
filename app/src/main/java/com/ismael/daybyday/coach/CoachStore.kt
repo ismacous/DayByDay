@@ -28,25 +28,17 @@ class CoachStore(context: Context) : CoachMemory {
         editor.apply()
     }
 
-    override fun isDismissed(surface: NudgeSurface, epochDay: Long): Boolean =
-        prefs.getLong(dismissKey(surface), NEVER) == epochDay
+    override fun popupsShown(epochDay: Long): Int = countFor(KEY_POPUP_DAY, KEY_POPUP_COUNT, epochDay)
 
-    override fun dismiss(surface: NudgeSurface, epochDay: Long) {
-        prefs.edit().putLong(dismissKey(surface), epochDay).apply()
+    override fun recordPopup(epochDay: Long) {
+        bump(KEY_POPUP_DAY, KEY_POPUP_COUNT, epochDay)
     }
 
     override fun notificationsSent(epochDay: Long): Int =
-        if (prefs.getLong(KEY_NOTIFICATION_DAY, NEVER) == epochDay) {
-            prefs.getInt(KEY_NOTIFICATION_COUNT, 0)
-        } else {
-            0
-        }
+        countFor(KEY_NOTIFICATION_DAY, KEY_NOTIFICATION_COUNT, epochDay)
 
     override fun recordNotification(epochDay: Long) {
-        prefs.edit()
-            .putLong(KEY_NOTIFICATION_DAY, epochDay)
-            .putInt(KEY_NOTIFICATION_COUNT, notificationsSent(epochDay) + 1)
-            .apply()
+        bump(KEY_NOTIFICATION_DAY, KEY_NOTIFICATION_COUNT, epochDay)
     }
 
     /** Remet tout a zero : tous les messages redeviennent disponibles. */
@@ -54,14 +46,29 @@ class CoachStore(context: Context) : CoachMemory {
         prefs.edit().clear().apply()
     }
 
+    /**
+     * Un compteur qui se remet a zero en changeant de jour : on garde le jour
+     * a cote du nombre plutot qu'une cle par date, sinon les preferences
+     * grossiraient d'une ligne par journee pour toujours.
+     */
+    private fun countFor(dayKey: String, countKey: String, epochDay: Long): Int =
+        if (prefs.getLong(dayKey, NEVER) == epochDay) prefs.getInt(countKey, 0) else 0
+
+    private fun bump(dayKey: String, countKey: String, epochDay: Long) {
+        prefs.edit()
+            .putLong(dayKey, epochDay)
+            .putInt(countKey, countFor(dayKey, countKey, epochDay) + 1)
+            .apply()
+    }
+
     private fun shownKey(slug: String) = "vu_$slug"
 
     private fun variantKey(slug: String) = "variante_$slug"
 
-    private fun dismissKey(surface: NudgeSurface) = "ferme_${surface.name}"
-
     private companion object {
         const val NEVER = Long.MIN_VALUE
+        const val KEY_POPUP_DAY = "popup_jour"
+        const val KEY_POPUP_COUNT = "popup_nombre"
         const val KEY_NOTIFICATION_DAY = "notif_jour"
         const val KEY_NOTIFICATION_COUNT = "notif_nombre"
     }

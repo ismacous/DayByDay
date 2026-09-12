@@ -288,6 +288,11 @@ fun AppNavigation(
                 }
             }
 
+            // Le coup de pouce est pose **au-dessus de tout**, en dehors du
+            // NavHost : il doit pouvoir apparaitre sur n'importe quel onglet,
+            // et ne pas disparaitre parce que l'ecran dessous se recompose.
+            CoachHost(surface = coachSurfaceFor(currentRoute))
+
             if (showTabs) {
                 TabHeader(
                     route = currentRoute,

@@ -94,6 +94,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ismael.daybyday.data.Badge
 import com.ismael.daybyday.data.DayCard
+import com.ismael.daybyday.coach.CoachEngine
+import com.ismael.daybyday.coach.CoachRule
+import com.ismael.daybyday.coach.CoachSnapshot
+import com.ismael.daybyday.coach.Nudge
 import com.ismael.daybyday.coach.NudgeSurface
 import com.ismael.daybyday.data.DayColor
 import com.ismael.daybyday.data.DayEntry
@@ -123,6 +127,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import java.time.LocalTime
 import java.util.Locale
 
 private const val SAVE_DEBOUNCE_MS = 400L
@@ -250,6 +255,16 @@ fun DayScreen(
     // rejouerait chaque fois.
     var celebration by remember { mutableStateOf<Badge?>(null) }
 
+    /**
+     * La fete de la journee bouclee.
+     *
+     * Elle vit ici et non dans [CoachHost] parce qu'elle repond a un **geste**
+     * — la derniere carte qu'on vient de verifier — et non a l'ouverture d'un
+     * ecran. Meme regle que les medailles : au passage, jamais a l'affichage.
+     */
+    var completion by remember { mutableStateOf<Nudge?>(null) }
+    var everythingCheckedBefore by remember { mutableStateOf<Boolean?>(null) }
+
     // Les pas ne sont pas saisis : ils montent tout seuls pendant qu'on
     // regarde. Pour feter le passage et non l'arrivee sur la page, on retient
     // la derniere valeur **vue** — la premiere lecture ne declenche jamais
@@ -372,6 +387,41 @@ fun DayScreen(
         expandedCards = emptySet()
         loadedFor = epochDay
     }
+
+    /**
+     * Toutes les cartes affichees viennent-elles d'etre verifiees ?
+     *
+     * Le garde qui compte est `loadedFor != epochDay` : avant que la journee ne
+     * revienne de la base, `checkedCards` est vide, et le passage
+     * « vide -> tout coche » du chargement ressemble trait pour trait a celui
+     * du dernier geste. C'est exactement le piege des medailles.
+     *
+     * `everythingCheckedBefore` repart a `null` en changeant de jour : ouvrir
+     * une journee deja bouclee ne doit rien rejouer.
+     */
+    LaunchedEffect(epochDay, loadedFor, checkedCards, visibleCards) {
+        if (loadedFor != epochDay) return@LaunchedEffect
+        val complete = visibleCards.isNotEmpty() && visibleCards.all { it.key in checkedCards }
+        val before = everythingCheckedBefore
+        everythingCheckedBefore = complete
+        if (before == false && complete) {
+            completion = CoachEngine.forRule(
+                snapshot = CoachSnapshot.build(
+                    today = date,
+                    hourOfDay = LocalTime.now().hour,
+                    firstName = app.prefs.firstName,
+                    birthDate = app.prefs.birthDate,
+                    entries = emptyList(),
+                    tags = emptyList(),
+                    links = emptyList(),
+                ),
+                memory = app.coach,
+                rule = CoachRule.DAY_COMPLETE,
+            )
+        }
+    }
+
+    LaunchedEffect(epochDay) { everythingCheckedBefore = null }
 
     // Pas et temps d'ecran, lus en local. Ces deux mesures bougent toute la
     // journee : on les relit a chaque retour dans l'application, et toutes les
@@ -779,16 +829,6 @@ fun DayScreen(
                 MemoryCard(
                     memory = souvenir,
                     onOpen = { epochDay = souvenir.date.toEpochDay() },
-                )
-            }
-
-            // Le mot du coup de pouce, au-dessus des cartes et seulement sur
-            // aujourd'hui : les messages parlent au present, ils n'ont aucun
-            // sens sur une journee qu'on relit.
-            if (date == LocalDate.now()) {
-                CoachSpot(
-                    surface = NudgeSurface.DAY,
-                    modifier = Modifier.padding(top = 14.dp),
                 )
             }
 
@@ -1558,6 +1598,21 @@ fun DayScreen(
         // pousse rien et ne fait sauter aucune carte.
         celebration?.let { badge ->
             Celebration(badge = badge, onDone = { celebration = null })
+        }
+
+        completion?.let { nudge ->
+            CoachPopup(
+                nudge = nudge,
+                onDismiss = {
+                    CoachEngine.markShown(
+                        memory = app.coach,
+                        nudge = nudge,
+                        surface = NudgeSurface.DAY,
+                        epochDay = date.toEpochDay(),
+                    )
+                    completion = null
+                },
+            )
         }
     }
 

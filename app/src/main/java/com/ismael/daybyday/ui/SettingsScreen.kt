@@ -113,7 +113,6 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
     var coachMinute by remember { mutableIntStateOf(prefs.coachMinute) }
     var coachTwoPerDay by remember { mutableStateOf(prefs.coachTwoPerDay) }
     var coachPreview by remember { mutableStateOf<Nudge?>(null) }
-    var coachPreviewAsked by remember { mutableStateOf(false) }
 
     var weeklyEnabled by remember { mutableStateOf(prefs.weeklyReviewEnabled) }
     var weeklyHour by remember { mutableIntStateOf(prefs.weeklyReviewHour) }
@@ -660,24 +659,18 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
                 )
 
                 val coachSnapshot = rememberCoachSnapshot()
-                if (coachPreviewAsked) {
-                    Spacer(Modifier.height(6.dp))
-                    val preview = coachPreview
-                    if (preview != null) {
-                        CoachPreviewBubble(preview)
-                    } else {
-                        Text(
-                            "Rien à te dire là tout de suite. C'est plutôt bon signe.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(
                     onClick = {
-                        coachPreview = coachSnapshot?.let { CoachEngine.preview(it) }
-                        coachPreviewAsked = true
+                        // L'essai montre la **vraie** bulle, pas un apercu :
+                        // c'est le seul moyen de juger de ce qu'on verra.
+                        val nudge = coachSnapshot?.let { CoachEngine.preview(it) }
+                        if (nudge == null) {
+                            scope.launch {
+                                snackbar.showSnackbar("Rien à te dire là tout de suite.")
+                            }
+                        }
+                        coachPreview = nudge
                     },
                     enabled = coachSnapshot != null,
                     modifier = Modifier.fillMaxWidth(),
@@ -699,7 +692,6 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
                     onClick = {
                         app.coach.forgetEverything()
                         coachPreview = null
-                        coachPreviewAsked = false
                         scope.launch { snackbar.showSnackbar("Le coup de pouce a tout oublié.") }
                     },
                     modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -998,6 +990,11 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
             }
         },
     )
+
+    // L'essai du coup de pouce : la vraie bulle, par-dessus les reglages.
+    coachPreview?.let { nudge ->
+        CoachPopup(nudge = nudge, onDismiss = { coachPreview = null })
+    }
 
     if (showPinDialog) {
         PinDialog(

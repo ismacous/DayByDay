@@ -2,10 +2,12 @@ package com.ismael.daybyday.coach
 
 import com.ismael.daybyday.data.DayCard
 import com.ismael.daybyday.data.DayColor
+import com.ismael.daybyday.data.DayPart
 import com.ismael.daybyday.data.DayEntry
 import com.ismael.daybyday.data.DayTagCrossRef
 import com.ismael.daybyday.data.DoseTaken
 import com.ismael.daybyday.data.FoodLevel
+import com.ismael.daybyday.data.MoneyCategory
 import com.ismael.daybyday.data.MoneyEntry
 import com.ismael.daybyday.data.Prayer
 import com.ismael.daybyday.data.SportLevel
@@ -24,7 +26,12 @@ data class CoachDay(
     val epochDay: Long,
     val colorKey: Int? = null,
     val colorManual: Boolean = false,
-    val partCount: Int = 0,
+    /**
+     * Les quatre moments, dans l'ordre matin, apres-midi, soir, nuit.
+     * `null` pour un moment non rempli — c'est ce qui permet de dire quel
+     * moment de la journee est le plus dur **sans** compter les trous.
+     */
+    val partScores: List<Int?> = listOf(null, null, null, null),
     val sportLevel: Int? = null,
     val foodLevel: Int? = null,
     val wentOut: Boolean? = null,
@@ -47,9 +54,18 @@ data class CoachDay(
     val mediaCount: Int = 0,
     /** Nombre de prises de traitement cochees ce jour-la. */
     val dosesTaken: Int = 0,
-    /** Depenses du jour en centimes, en valeur positive. */
+    /**
+     * Depenses du jour en centimes, en valeur positive, **corrections de solde
+     * exclues** : une correction n'est pas une depense, et la compter ferait
+     * dire n'importe quoi aux comparaisons de mois.
+     */
     val spentCents: Long = 0,
+    /** Rentrees du jour en centimes, corrections de solde exclues. */
+    val earnedCents: Long = 0,
 ) {
+    /** Nombre de moments remplis dans la journee. */
+    val partCount: Int get() = partScores.count { it != null }
+
     val color: DayColor? get() = DayColor.fromKey(colorKey)
 
     val score: Int? get() = color?.score
@@ -86,6 +102,14 @@ data class CoachSnapshot(
      * carte ne doit rien couter, pas plus ici que dans la note.
      */
     val hiddenCardKeys: Set<String> = emptySet(),
+    /**
+     * Les jours ou au moins un mouvement d'argent est enregistre.
+     *
+     * A part, et pas deduit des journees : un mouvement peut exister un jour
+     * qui n'a aucune autre ligne, et c'est justement ces jours-la qu'il faut
+     * voir pour savoir depuis quand le suivi decroche.
+     */
+    val moneyDays: Set<Long> = emptySet(),
 ) {
     val todayEpochDay: Long = today.toEpochDay()
 
@@ -164,10 +188,18 @@ data class CoachSnapshot(
                 .mapNotNull { link -> slugById[link.tagId]?.let { link.epochDay to it } }
                 .groupBy({ it.first }, { it.second })
                 .mapValues { (_, slugs) -> slugs.toSet() }
-            val spentByDay = money
+            // Les corrections de solde sortent des deux cotes : ce n'est ni une
+            // depense ni une rentree, c'est une remise a zero du compteur.
+            val realMoney = money.filter { it.category != MoneyCategory.ADJUSTMENT }
+            val spentByDay = realMoney
                 .filter { it.amountCents < 0 }
                 .groupBy { it.epochDay }
                 .mapValues { (_, list) -> -list.sumOf { it.amountCents } }
+            val earnedByDay = realMoney
+                .filter { it.amountCents > 0 }
+                .groupBy { it.epochDay }
+                .mapValues { (_, list) -> list.sumOf { it.amountCents } }
+            val moneyDays = realMoney.map { it.epochDay }.toSet()
             val dosesByDay = doses.groupingBy { it.epochDay }.eachCount()
 
             val days = entries.associate { entry ->
@@ -175,7 +207,7 @@ data class CoachSnapshot(
                     epochDay = entry.epochDay,
                     colorKey = entry.colorKey,
                     colorManual = entry.colorManual == true,
-                    partCount = entry.filledParts.size,
+                    partScores = DayPart.entries.map { part -> entry.partColorKey(part) },
                     sportLevel = entry.sportLevel,
                     foodLevel = entry.foodLevel,
                     wentOut = entry.wentOut,
@@ -195,6 +227,7 @@ data class CoachSnapshot(
                     mediaCount = mediaCounts[entry.epochDay] ?: 0,
                     dosesTaken = dosesByDay[entry.epochDay] ?: 0,
                     spentCents = spentByDay[entry.epochDay] ?: 0L,
+                    earnedCents = earnedByDay[entry.epochDay] ?: 0L,
                 )
             }
 
@@ -206,6 +239,7 @@ data class CoachSnapshot(
                 days = days,
                 hasActiveTreatments = treatments.any { it.active },
                 hiddenCardKeys = hiddenCards.map { it.key }.toSet(),
+                moneyDays = moneyDays,
             )
         }
     }

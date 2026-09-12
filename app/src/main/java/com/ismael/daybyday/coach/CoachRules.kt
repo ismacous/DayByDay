@@ -1,10 +1,12 @@
 package com.ismael.daybyday.coach
 
 import com.ismael.daybyday.data.DayColor
+import com.ismael.daybyday.data.DayPart
 import com.ismael.daybyday.data.SportLevel
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
+import java.util.Locale
 
 /**
  * Le coeur de l'algorithme : il regarde la photo du moment et dresse la liste
@@ -44,7 +46,9 @@ object CoachRules {
         out += upswingRules(snapshot)
         out += factorRules(snapshot, findings)
         out += habitRules(snapshot)
-        out += workAndMoneyRules(snapshot)
+        out += workRules(snapshot)
+        out += moneyRules(snapshot)
+        out += statsRules(snapshot, findings)
         out += fillingRules(snapshot)
         out += smallTalkRules(snapshot)
         // Une carte masquee ne parle plus : masquer « Prieres » ou
@@ -334,9 +338,9 @@ object CoachRules {
         return out
     }
 
-    // --- Travail et argent --------------------------------------------------
+    // --- Travail --------------------------------------------------------------
 
-    private fun workAndMoneyRules(snapshot: CoachSnapshot): List<NudgeCandidate> {
+    private fun workRules(snapshot: CoachSnapshot): List<NudgeCandidate> {
         val out = mutableListOf<NudgeCandidate>()
         val today = snapshot.todayDay
 
@@ -358,17 +362,6 @@ object CoachRules {
         }
 
         if (today.spentCents >= BIG_SPENDING_CENTS) out += NudgeCandidate(CoachRule.BIG_SPENDING)
-
-        val dayOfMonth = snapshot.today.dayOfMonth
-        if (dayOfMonth >= 10) {
-            val thisMonth = snapshot.spentBetween(snapshot.today.withDayOfMonth(1), snapshot.today)
-            val previousStart = snapshot.today.minusMonths(1).withDayOfMonth(1)
-            val previousEnd = previousStart.plusDays((dayOfMonth - 1).toLong())
-            val lastMonth = snapshot.spentBetween(previousStart, previousEnd)
-            if (lastMonth > 0 && thisMonth <= lastMonth * 0.8) {
-                out += NudgeCandidate(CoachRule.CALM_MONEY)
-            }
-        }
         return out
     }
 
@@ -430,9 +423,152 @@ object CoachRules {
         if (today.dayOfWeek == DayOfWeek.FRIDAY && snapshot.hourOfDay >= 15) {
             out += NudgeCandidate(CoachRule.WEEKEND)
         }
-
-        out += NudgeCandidate(CoachRule.HELLO)
         return out
+    }
+
+    // --- Argent ---------------------------------------------------------------
+
+    /**
+     * Ce qu'on regarde quand on ouvre l'onglet Argent, et rien d'autre.
+     *
+     * Une remarque sur l'argent posee au milieu du calendrier ne se lit pas :
+     * elle arrive quand on pense a autre chose. Ces regles ne s'affichent donc
+     * que la ou les chiffres sont sous les yeux.
+     */
+    private fun moneyRules(snapshot: CoachSnapshot): List<NudgeCandidate> {
+        val out = mutableListOf<NudgeCandidate>()
+        val today = snapshot.today
+        val dayOfMonth = today.dayOfMonth
+
+        val recentIncome = snapshot.sumCentsOver(5) { it.earnedCents }
+        if (recentIncome >= INCOME_WORTH_MENTIONING) {
+            out += NudgeCandidate(
+                rule = CoachRule.MONEY_INCOME,
+                values = mapOf("montant" to formatMoney(recentIncome)),
+            )
+        }
+
+        val monthStart = today.withDayOfMonth(1)
+        val monthSpent = snapshot.spentBetween(monthStart, today)
+        val monthEarned = snapshot.earnedBetween(monthStart, today)
+        val net = monthEarned - monthSpent
+
+        // Mettre de cote ne se propose qu'a partir du milieu du mois : avant,
+        // le solde ne veut rien dire, les grosses depenses n'ont pas eu lieu.
+        if (dayOfMonth >= 12 && net >= SAVING_WORTH_MENTIONING) {
+            out += NudgeCandidate(
+                rule = CoachRule.MONEY_SAVING,
+                values = mapOf("montant" to formatMoney(net)),
+            )
+        }
+
+        if (dayOfMonth >= 10) {
+            val previousStart = today.minusMonths(1).withDayOfMonth(1)
+            val previousEnd = previousStart.plusDays((dayOfMonth - 1).toLong())
+            val lastMonth = snapshot.spentBetween(previousStart, previousEnd)
+            if (lastMonth > 0) {
+                val extra = monthSpent - lastMonth
+                if (extra >= SAVING_WORTH_MENTIONING && monthSpent >= lastMonth * 1.2) {
+                    out += NudgeCandidate(
+                        rule = CoachRule.MONEY_HEAVY,
+                        values = mapOf("montant" to formatMoney(extra)),
+                    )
+                }
+                if (monthSpent <= lastMonth * 0.8) out += NudgeCandidate(CoachRule.CALM_MONEY)
+            }
+        }
+
+        // Le suivi qui decroche : seulement s'il a deja servi, sinon on
+        // reclamerait un carnet de comptes a quelqu'un qui n'en tient pas.
+        val moneyIsTracked = snapshot.moneyDays.count { it >= snapshot.todayEpochDay - 90 } >= 5
+        val sinceMovement = (0..60).firstOrNull { back ->
+            snapshot.moneyDays.contains(snapshot.todayEpochDay - back)
+        }
+        if (moneyIsTracked && sinceMovement != null && sinceMovement >= 10) {
+            out += NudgeCandidate(CoachRule.MONEY_QUIET, mapOf("n" to sinceMovement.toString()))
+        }
+        return out
+    }
+
+    // --- Bilan ----------------------------------------------------------------
+
+    /**
+     * Des lectures qu'on ne ferait pas soi-meme, la ou on vient justement
+     * chercher a comprendre.
+     */
+    private fun statsRules(
+        snapshot: CoachSnapshot,
+        findings: List<FactorFinding>,
+    ): List<NudgeCandidate> {
+        val out = mutableListOf<NudgeCandidate>()
+        val noted = snapshot.days.values.count { it.isNoted }
+
+        if (noted < YOUNG_HISTORY) {
+            out += NudgeCandidate(CoachRule.STATS_YOUNG, mapOf("n" to noted.toString()))
+            // Tout le reste du bilan a besoin de matiere : inutile de commenter
+            // une tendance calculee sur trois journees.
+            return out
+        }
+
+        findings.firstOrNull { it.delta >= CoachFactors.MIN_DELTA }?.let { finding ->
+            out += NudgeCandidate(
+                rule = CoachRule.STATS_TOP_FACTOR,
+                values = mapOf(
+                    "constat" to finding.factor.constat,
+                    "ecart" to formatDelta(finding.delta),
+                ),
+            )
+        }
+
+        hardestPart(snapshot)?.let(out::add)
+
+        val recent = snapshot.averageOver(0, 29)
+        val previous = snapshot.averageOver(30, 59)
+        if (snapshot.notedCount(0, 29) >= 10 && snapshot.notedCount(30, 59) >= 10 &&
+            recent != null && previous != null
+        ) {
+            val change = recent - previous
+            if (change >= TREND_THRESHOLD) {
+                out += NudgeCandidate(
+                    rule = CoachRule.STATS_TREND_UP,
+                    values = mapOf("ecart" to formatDelta(change)),
+                )
+            } else if (change <= -TREND_THRESHOLD) {
+                out += NudgeCandidate(
+                    rule = CoachRule.STATS_TREND_DOWN,
+                    values = mapOf("ecart" to formatDelta(-change)),
+                )
+            }
+        }
+        return out
+    }
+
+    /**
+     * Le moment de la journee qui traine systematiquement en bas.
+     *
+     * On ne le dit que s'il se detache vraiment des autres : un ecart de deux
+     * dixiemes entre le matin et le soir n'est pas une information, c'est du
+     * bruit.
+     */
+    private fun hardestPart(snapshot: CoachSnapshot): NudgeCandidate? {
+        val averages = DayPart.entries.map { part ->
+            val scores = snapshot.days.values
+                .filter { it.isNoted }
+                .mapNotNull { it.partScores.getOrNull(part.ordinal) }
+            part to if (scores.size >= PART_MIN_DAYS) scores.average() else null
+        }
+        if (averages.any { it.second == null }) return null
+
+        val sorted = averages.mapNotNull { (part, average) -> average?.let { part to it } }
+            .sortedBy { it.second }
+        val (worstPart, worstAverage) = sorted.first()
+        val others = sorted.drop(1).map { it.second }
+        if (others.average() - worstAverage < PART_THRESHOLD) return null
+
+        return NudgeCandidate(
+            rule = CoachRule.STATS_HARD_PART,
+            values = mapOf("moment" to worstPart.label.lowercase()),
+        )
     }
 
     // --- Petits outils ---------------------------------------------------------
@@ -448,6 +584,32 @@ object CoachRules {
 
     /** 150 euros dans la journee : au-dela, ca vaut le coup d'en dire un mot. */
     private const val BIG_SPENDING_CENTS = 15_000L
+
+    /** 50 euros rentres : en dessous, en parler serait du bruit. */
+    private const val INCOME_WORTH_MENTIONING = 5_000L
+
+    /** 50 euros d'ecart sur un mois : le seuil a partir duquel ca se dit. */
+    private const val SAVING_WORTH_MENTIONING = 5_000L
+
+    /** En dessous de trente journees notees, le bilan ne compare rien de solide. */
+    private const val YOUNG_HISTORY = 30
+
+    /** Ecart de moyenne a partir duquel une tendance se raconte. */
+    private const val TREND_THRESHOLD = 0.3
+
+    /** Il faut ce nombre de journees pour qu'un moment ait une moyenne fiable. */
+    private const val PART_MIN_DAYS = 10
+
+    /** Ecart minimum entre le pire moment et les autres, sinon c'est du bruit. */
+    private const val PART_THRESHOLD = 0.3
+
+    /** Un montant en centimes, lisible : « 1 250,00 € ». */
+    fun formatMoney(cents: Long): String =
+        String.format(Locale.FRANCE, "%,.2f €", cents / 100.0).replace('\u00A0', ' ')
+
+    /** Un ecart de moyenne, sur l'echelle 0-3 des couleurs. */
+    fun formatDelta(delta: Double): String =
+        String.format(Locale.FRANCE, "%.1f", kotlin.math.abs(delta))
 
     fun monthLabel(month: YearMonth): String = monthNames[month.monthValue - 1]
 
@@ -489,9 +651,23 @@ private fun CoachSnapshot.medianOf(count: Int, value: (CoachDay) -> Int?): Int? 
 
 /** Depenses cumulees entre deux dates, bornes comprises. */
 private fun CoachSnapshot.spentBetween(start: LocalDate, end: LocalDate): Long =
-    days.values
-        .filter { it.epochDay >= start.toEpochDay() && it.epochDay <= end.toEpochDay() }
-        .sumOf { it.spentCents }
+    centsBetween(start, end) { it.spentCents }
+
+/** Rentrees cumulees entre deux dates, bornes comprises. */
+private fun CoachSnapshot.earnedBetween(start: LocalDate, end: LocalDate): Long =
+    centsBetween(start, end) { it.earnedCents }
+
+private fun CoachSnapshot.centsBetween(
+    start: LocalDate,
+    end: LocalDate,
+    value: (CoachDay) -> Long,
+): Long = days.values
+    .filter { it.epochDay >= start.toEpochDay() && it.epochDay <= end.toEpochDay() }
+    .sumOf(value)
+
+/** Somme d'un montant sur les [count] derniers jours, aujourd'hui inclus. */
+private fun CoachSnapshot.sumCentsOver(count: Int, value: (CoachDay) -> Long): Long =
+    (0 until count).sumOf { back -> days[todayEpochDay - back]?.let(value) ?: 0L }
 
 /**
  * Nombre de jours non notes juste avant aujourd'hui. Une journee jamais

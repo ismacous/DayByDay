@@ -68,6 +68,12 @@ téléphone (Samsung S25, Android 15).
    masquée fait taire ses règles — masquer une carte ne doit rien coûter, ici
    comme dans la note. Les prières et la recherche d'emploi ne déclenchent que
    du positif. Voir les règles d'écriture en tête de `coach/CoachMessages.kt`.
+8. **Chaque phrase du coup de pouce doit se comprendre seule.** Elle apparaît
+   dans une bulle sans titre, parfois dans une notification : il n'y a aucun
+   contexte autour. « Les cinq, 6 jours d'affilée » ne veut rien dire ; « Tes
+   cinq prières, six jours de suite » oui. Chaque situation déclare donc les
+   mots que ses phrases doivent contenir (`CoachRule.subjects`), et un test le
+   vérifie — c'est le garde-fou, pas la relecture.
 
 ## Architecture
 

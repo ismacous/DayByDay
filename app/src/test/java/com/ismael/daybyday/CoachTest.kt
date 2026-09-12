@@ -17,6 +17,7 @@ import com.ismael.daybyday.data.DayColor
 import com.ismael.daybyday.data.DayEntry
 import com.ismael.daybyday.data.DayTagCrossRef
 import com.ismael.daybyday.data.DoseTaken
+import com.ismael.daybyday.data.MoneyCategory
 import com.ismael.daybyday.data.MoneyEntry
 import com.ismael.daybyday.data.Prayer
 import com.ismael.daybyday.data.SportLevel
@@ -92,6 +93,8 @@ class CoachTest {
         sleepEndMinutes = sleepTo,
         partMorning = parts.getOrNull(0)?.key,
         partAfternoon = parts.getOrNull(1)?.key,
+        partEvening = parts.getOrNull(2)?.key,
+        partNight = parts.getOrNull(3)?.key,
     )
 
     private fun link(back: Int, slug: String) =
@@ -126,6 +129,19 @@ class CoachTest {
     private fun rulesOf(snapshot: CoachSnapshot): List<CoachRule> =
         CoachRules.candidates(snapshot).map { it.rule }
 
+    /** Deux journees noires de suite : il y a forcement quelque chose a dire. */
+    private fun talkingSnapshot() = snapshotOf(
+        listOf(day(0, DayColor.BLACK), day(1, DayColor.BLACK)) +
+            (2..10).map { day(it, DayColor.ORANGE) },
+    )
+
+    /** Un mouvement d'argent, [back] jours en arriere. */
+    private fun money(back: Int, cents: Long, category: MoneyCategory) = MoneyEntry(
+        epochDay = today.toEpochDay() - back,
+        amountCents = cents,
+        categoryKey = category.key,
+    )
+
     // --- Le catalogue de phrases ------------------------------------------
 
     @Test
@@ -152,6 +168,52 @@ class CoachTest {
                 assertFalse("Il reste un trou dans ${rule.slug} : ${nudge!!.text}", nudge.text.contains("{"))
             }
         }
+    }
+
+    @Test
+    fun `chaque phrase se comprend toute seule`() {
+        // C'est le test le plus important du fichier. Une bulle apparait sans
+        // titre et sans rien autour ; une notification encore moins. « Les
+        // cinq, 6 jours d'affilée » ne veut rien dire hors contexte, et c'est
+        // exactement ce qui s'etait glisse dans la premiere version.
+        CoachRule.entries.forEach { rule ->
+            CoachMessages.variantsFor(rule).forEach { phrase ->
+                assertTrue(
+                    "Trop courte pour se comprendre seule (${rule.slug}) : $phrase",
+                    phrase.length >= 30,
+                )
+                assertTrue(
+                    "Ne commence pas par une majuscule (${rule.slug}) : $phrase",
+                    phrase.first().isUpperCase(),
+                )
+                assertTrue(
+                    "Ne finit pas par une ponctuation (${rule.slug}) : $phrase",
+                    phrase.last() in ".!?»",
+                )
+                if (rule.subjects.isNotEmpty()) {
+                    val names = rule.subjects.any { phrase.lowercase().contains(it.lowercase()) }
+                    assertTrue(
+                        "Ne nomme pas son sujet ${rule.subjects} (${rule.slug}) : $phrase",
+                        names,
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `toute situation qui parle d'un sujet le nomme`() {
+        // Les situations sans mot impose sont l'exception, pas la regle : si
+        // la liste grossit, c'est que le catalogue redevient telegraphique.
+        val withoutSubject = CoachRule.entries.filter { it.subjects.isEmpty() }
+        assertTrue("Trop de situations sans sujet : $withoutSubject", withoutSubject.size <= 3)
+    }
+
+    @Test
+    fun `la journee bouclee a de quoi ne pas se repeter`() {
+        // C'est la seule situation qui peut revenir tous les jours : c'est donc
+        // elle qui s'userait le plus vite.
+        assertTrue(CoachMessages.variantsFor(CoachRule.DAY_COMPLETE).size >= 20)
     }
 
     @Test
@@ -442,37 +504,145 @@ class CoachTest {
         assertEquals("5", candidate!!.values["n"])
     }
 
+    // --- Argent : la ou on regarde justement ces chiffres --------------------
+
+    @Test
+    fun `une rentree d'argent se remarque, et seulement dans l'onglet Argent`() {
+        val entries = (0..20).map { day(it, DayColor.ORANGE) }
+        val income = listOf(money(2, 120_000L, MoneyCategory.SALARY))
+
+        val candidate = CoachRules.candidates(snapshotOf(entries, money = income))
+            .firstOrNull { it.rule == CoachRule.MONEY_INCOME }
+        assertNotNull(candidate)
+        assertTrue(candidate!!.values["montant"]!!.contains("1 200"))
+
+        // Elle n'a rien a faire au milieu du calendrier.
+        assertFalse(CoachRule.MONEY_INCOME.surfaces.contains(NudgeSurface.STATS))
+        assertTrue(CoachRule.MONEY_INCOME.surfaces.contains(NudgeSurface.MONEY))
+    }
+
+    @Test
+    fun `une correction de solde n'est ni une depense ni une rentree`() {
+        // Sans ca, remettre le compteur juste apres une depense la compterait
+        // une seconde fois, a l'envers.
+        val entries = (0..20).map { day(it, DayColor.ORANGE) }
+        val adjustments = listOf(money(1, 90_000L, MoneyCategory.ADJUSTMENT))
+        assertFalse(
+            rulesOf(snapshotOf(entries, money = adjustments)).contains(CoachRule.MONEY_INCOME),
+        )
+    }
+
+    @Test
+    fun `un mois dans le vert propose de mettre de cote`() {
+        val entries = (0..20).map { day(it, DayColor.ORANGE) }
+        val movements = listOf(
+            money(8, 150_000L, MoneyCategory.SALARY),
+            money(5, -30_000L, MoneyCategory.FOOD),
+        )
+        val candidate = CoachRules.candidates(snapshotOf(entries, money = movements))
+            .firstOrNull { it.rule == CoachRule.MONEY_SAVING }
+        assertNotNull(candidate)
+        assertEquals(NudgeTone.NUDGE, CoachRule.MONEY_SAVING.tone)
+    }
+
+    @Test
+    fun `on ne reclame un suivi d'argent qu'a qui en tient un`() {
+        val entries = (0..40).map { day(it, DayColor.ORANGE) }
+
+        // Personne n'a jamais rien note : on se tait.
+        assertFalse(rulesOf(snapshotOf(entries)).contains(CoachRule.MONEY_QUIET))
+
+        // Le suivi existe, mais plus rien depuis deux semaines.
+        val past = (20..30).map { money(it, -2_000L, MoneyCategory.FOOD) }
+        val candidate = CoachRules.candidates(snapshotOf(entries, money = past))
+            .firstOrNull { it.rule == CoachRule.MONEY_QUIET }
+        assertNotNull(candidate)
+        assertEquals("20", candidate!!.values["n"])
+    }
+
+    // --- Bilan ----------------------------------------------------------------
+
+    @Test
+    fun `le bilan dit d'abord qu'il n'a pas assez de matiere`() {
+        val young = snapshotOf((0..9).map { day(it, DayColor.ORANGE) })
+        val rules = rulesOf(young)
+        assertTrue(rules.contains(CoachRule.STATS_YOUNG))
+        // Et rien d'autre du bilan : commenter une tendance sur dix journees
+        // serait pire que de se taire.
+        assertFalse(rules.contains(CoachRule.STATS_TREND_UP))
+        assertFalse(rules.contains(CoachRule.STATS_TREND_DOWN))
+        assertFalse(rules.contains(CoachRule.STATS_HARD_PART))
+    }
+
+    @Test
+    fun `le bilan repere le moment de la journee le plus dur`() {
+        // Les matins noirs, le reste de la journee correct.
+        val entries = (0..40).map { back ->
+            day(
+                back, DayColor.ORANGE,
+                parts = listOf(DayColor.BLACK, DayColor.GREEN, DayColor.GREEN, DayColor.GREEN),
+            )
+        }
+        val candidate = CoachRules.candidates(snapshotOf(entries))
+            .firstOrNull { it.rule == CoachRule.STATS_HARD_PART }
+        assertNotNull(candidate)
+        assertEquals("matin", candidate!!.values["moment"])
+    }
+
+    @Test
+    fun `le bilan ne designe aucun moment quand ils se valent`() {
+        val entries = (0..40).map { back ->
+            day(
+                back, DayColor.ORANGE,
+                parts = listOf(DayColor.ORANGE, DayColor.ORANGE, DayColor.ORANGE, DayColor.ORANGE),
+            )
+        }
+        assertFalse(rulesOf(snapshotOf(entries)).contains(CoachRule.STATS_HARD_PART))
+    }
+
+    @Test
+    fun `le bilan raconte la tendance des trente derniers jours`() {
+        // Trente jours corrects, puis trente jours durs avant.
+        val entries = (0..59).map { back ->
+            day(back, if (back < 30) DayColor.GREEN else DayColor.RED)
+        }
+        val candidate = CoachRules.candidates(snapshotOf(entries))
+            .firstOrNull { it.rule == CoachRule.STATS_TREND_UP }
+        assertNotNull(candidate)
+        assertFalse(rulesOf(snapshotOf(entries)).contains(CoachRule.STATS_TREND_DOWN))
+    }
+
     // --- Le choix du message ------------------------------------------------
 
     @Test
     fun `une situation deja vue attend son tour`() {
-        val entries = (0..10).map { day(it, DayColor.ORANGE) }
-        val snapshot = snapshotOf(entries)
+        val snapshot = talkingSnapshot()
         val memory = TemporaryCoachMemory()
 
-        val first = CoachEngine.choose(snapshot, memory, NudgeSurface.HOME)
+        val first = CoachEngine.choose(snapshot, memory, NudgeSurface.MONTH)
         assertNotNull(first)
-        CoachEngine.markShown(memory, first!!, NudgeSurface.HOME, snapshot.todayEpochDay)
+        CoachEngine.markShown(memory, first!!, NudgeSurface.MONTH, snapshot.todayEpochDay)
 
         // Le meme jour, la carte ne change pas de discours.
-        val sameDay = CoachEngine.choose(snapshot, memory, NudgeSurface.HOME)
+        val sameDay = CoachEngine.choose(snapshot, memory, NudgeSurface.MONTH)
         assertEquals(first.rule, sameDay?.rule)
         assertEquals(first.text, sameDay?.text)
 
         // Le lendemain, le delai d'attente de la regle s'applique.
         val tomorrow = snapshot.copy(today = today.plusDays(1))
-        val next = CoachEngine.choose(tomorrow, memory, NudgeSurface.HOME)
+        val next = CoachEngine.choose(tomorrow, memory, NudgeSurface.MONTH)
         assertTrue(next == null || next.rule != first.rule)
     }
 
     @Test
-    fun `le message ferme a la main ne revient pas le jour meme`() {
-        val snapshot = snapshotOf((0..10).map { day(it, DayColor.ORANGE) })
+    fun `l'apparition du jour ne revient pas une seconde fois`() {
+        val snapshot = talkingSnapshot()
         val memory = TemporaryCoachMemory()
 
-        assertNotNull(CoachEngine.choose(snapshot, memory, NudgeSurface.HOME))
-        memory.dismiss(NudgeSurface.HOME, snapshot.todayEpochDay)
-        assertNull(CoachEngine.choose(snapshot, memory, NudgeSurface.HOME))
+        val first = CoachEngine.choose(snapshot, memory, NudgeSurface.MONTH)
+        assertNotNull(first)
+        CoachEngine.markShown(memory, first!!, NudgeSurface.MONTH, snapshot.todayEpochDay)
+        assertNull(CoachEngine.choose(snapshot, memory, NudgeSurface.MONTH))
     }
 
     @Test
@@ -493,21 +663,57 @@ class CoachTest {
     }
 
     @Test
-    fun `une journee sans rien a dire ne declenche pas de notification`() {
-        val snapshot = snapshotOf((0..10).map { day(it, DayColor.ORANGE, note = "ok") })
-
-        // Dans l'application, on dit quand meme bonjour.
-        assertEquals(
-            CoachRule.HELLO,
-            CoachEngine.choose(snapshot, TemporaryCoachMemory(), NudgeSurface.HOME)?.rule,
+    fun `une journee sans rien a dire ne fait apparaitre personne`() {
+        // Il n'y a plus de phrase de politesse : une bulle qui interrompt pour
+        // dire « rien de special aujourd'hui » est exactement ce qui fait qu'on
+        // arrete de lire les suivantes. Trente-cinq journees banales : assez
+        // pour que le bilan ne se plaigne pas non plus du manque de matiere.
+        val snapshot = snapshotOf(
+            (0..34).map { day(it, DayColor.ORANGE, note = "ok") },
         )
-        // Mais on ne reveille pas le telephone pour ca.
-        assertNull(CoachEngine.choose(snapshot, TemporaryCoachMemory(), NudgeSurface.NOTIFICATION))
+        NudgeSurface.entries.forEach { surface ->
+            assertNull(
+                "Rien a dire, et pourtant ça parle sur $surface",
+                CoachEngine.choose(snapshot, TemporaryCoachMemory(), surface),
+            )
+        }
+    }
+
+    @Test
+    fun `une seule apparition par jour`() {
+        val entries = listOf(day(0, DayColor.BLACK), day(1, DayColor.BLACK)) +
+            (2..10).map { day(it, DayColor.ORANGE) }
+        val snapshot = snapshotOf(entries)
+        val memory = TemporaryCoachMemory()
+
+        val first = CoachEngine.choose(snapshot, memory, NudgeSurface.MONTH)
+        assertNotNull(first)
+        CoachEngine.markShown(memory, first!!, NudgeSurface.MONTH, snapshot.todayEpochDay)
+
+        // Plus rien aujourd'hui, sur aucun ecran : le quota est celui de la
+        // journee, pas celui de l'ecran.
+        NudgeSurface.SCREENS.forEach { surface ->
+            assertNull(CoachEngine.choose(snapshot, memory, surface))
+        }
+    }
+
+    @Test
+    fun `la fete de la journee bouclee ne consomme pas le quota`() {
+        val snapshot = snapshotOf((0..10).map { day(it, DayColor.ORANGE) })
+        val memory = TemporaryCoachMemory()
+
+        val party = CoachEngine.forRule(snapshot, memory, CoachRule.DAY_COMPLETE)
+        assertNotNull(party)
+        CoachEngine.markShown(memory, party!!, NudgeSurface.DAY, snapshot.todayEpochDay)
+        assertEquals(0, memory.popupsShown(snapshot.todayEpochDay))
+
+        // Et elle ne se rejoue pas le meme jour.
+        assertNull(CoachEngine.forRule(snapshot, memory, CoachRule.DAY_COMPLETE))
     }
 
     @Test
     fun `chaque message part sur la bonne surface`() {
-        val snapshot = snapshotOf((0..10).map { day(it, DayColor.ORANGE) })
+        val snapshot = talkingSnapshot()
         NudgeSurface.entries.forEach { surface ->
             val nudge = CoachEngine.choose(snapshot, TemporaryCoachMemory(), surface)
             if (nudge != null) assertTrue(surface in nudge.rule.surfaces)
@@ -516,13 +722,13 @@ class CoachTest {
 
     @Test
     fun `l'apercu des reglages ne consomme rien`() {
-        val snapshot = snapshotOf((0..10).map { day(it, DayColor.ORANGE) })
+        val snapshot = talkingSnapshot()
         val memory = TemporaryCoachMemory()
 
         CoachEngine.preview(snapshot)
         CoachEngine.preview(snapshot)
-        assertNull(memory.lastShown(CoachRule.HELLO.slug))
-        assertNotNull(CoachEngine.choose(snapshot, memory, NudgeSurface.HOME))
+        assertEquals(0, memory.popupsShown(snapshot.todayEpochDay))
+        assertNotNull(CoachEngine.choose(snapshot, memory, NudgeSurface.MONTH))
     }
 
     // --- Les garde-fous ------------------------------------------------------
@@ -530,10 +736,12 @@ class CoachTest {
     @Test
     fun `une base vide ne fait pas planter l'algorithme`() {
         val snapshot = snapshotOf(emptyList())
-        val candidates = CoachRules.candidates(snapshot)
-        assertTrue(candidates.isNotEmpty())
-        assertEquals(CoachRule.HELLO, candidates.last().rule)
-        assertNotNull(CoachEngine.choose(snapshot, TemporaryCoachMemory(), NudgeSurface.HOME))
+        // Une seule chose a dire sur une base vide, et seulement dans le
+        // bilan : qu'il n'y a pas encore de quoi comparer.
+        val rules = rulesOf(snapshot)
+        assertEquals(listOf(CoachRule.STATS_YOUNG), rules)
+        assertNotNull(CoachEngine.choose(snapshot, TemporaryCoachMemory(), NudgeSurface.STATS))
+        assertNull(CoachEngine.choose(snapshot, TemporaryCoachMemory(), NudgeSurface.MONTH))
     }
 
     @Test

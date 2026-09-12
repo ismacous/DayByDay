@@ -1,6 +1,7 @@
 package com.ismael.daybyday
 
 import com.ismael.daybyday.data.DayEntry
+import com.ismael.daybyday.data.Jumua
 import com.ismael.daybyday.data.Prayer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -87,44 +88,52 @@ class PrayerTest {
     }
 
     @Test
-    fun `le vendredi, le dhuhr s appelle la jumua`() {
-        val friday = LocalDate.of(2026, 9, 11)
-        assertEquals(DayOfWeek.FRIDAY, friday.dayOfWeek)
+    fun `la jumua ne touche ni les bits ni le compte des cinq`() {
+        // C'est **la** garantie : la jumu'a est une chose a part, pas une
+        // sixieme priere. Le masque, la medaille et les journees deja ecrites
+        // ne bougent pas d'un pouce.
+        val entry = day.copy(prayerMask = day.withPrayer(Prayer.DHUHR, true), jumua = true)
 
-        assertEquals("Jumu'a", Prayer.DHUHR.labelOn(friday))
-        assertTrue(Prayer.DHUHR.isSpecialOn(friday))
+        assertEquals(5, Prayer.entries.size)
+        assertEquals(31, Prayer.ALL_DONE)
+        assertEquals(2, Prayer.DHUHR.bit)
+        assertEquals(1, entry.prayersDone)
+        assertTrue(entry.isPrayerDone(Prayer.DHUHR))
     }
 
     @Test
-    fun `les autres jours, le dhuhr reste le dhuhr`() {
-        val thursday = LocalDate.of(2026, 9, 10)
+    fun `on peut avoir fait le dhuhr sans la jumua`() {
+        // Le dhuhr chez soi un vendredi, sans etre alle a la mosquee : les deux
+        // se notent separement, c'est tout l'interet du bouton en plus.
+        val entry = day.copy(prayerMask = day.withPrayer(Prayer.DHUHR, true), jumua = false)
 
-        assertEquals("Dhuhr", Prayer.DHUHR.labelOn(thursday))
-        assertFalse(Prayer.DHUHR.isSpecialOn(thursday))
+        assertTrue(entry.isPrayerDone(Prayer.DHUHR))
+        assertEquals(false, entry.jumua)
     }
 
     @Test
-    fun `aucune autre priere ne change de nom le vendredi`() {
-        val friday = LocalDate.of(2026, 9, 11)
+    fun `la question ne se pose que le vendredi`() {
+        assertTrue(Jumua.concerns(LocalDate.of(2026, 9, 11)))
+        assertEquals(DayOfWeek.FRIDAY, Jumua.DAY)
 
-        Prayer.entries.filter { it != Prayer.DHUHR }.forEach { prayer ->
-            assertEquals(prayer.label, prayer.labelOn(friday))
-            assertFalse(prayer.isSpecialOn(friday))
+        (12..17).forEach { jour ->
+            val date = LocalDate.of(2026, 9, jour)
+            assertFalse(Jumua.concerns(date))
         }
     }
 
     @Test
-    fun `la jumua ne change ni les bits ni le compte`() {
-        // C'est **la** garantie de ce changement : un vendredi coche est un
-        // dhuhr coche. Ajouter une sixieme priere aurait casse le compte des
-        // cinq, la medaille, et toutes les journees deja ecrites.
-        val friday = LocalDate.of(2026, 9, 11)
-        val entry = day.copy(prayerMask = day.withPrayer(Prayer.DHUHR, true))
+    fun `un vendredi d avant cette version ne dit pas non`() {
+        // `null` et `false` ne veulent pas dire la meme chose : une journee
+        // d'avant la colonne est une journee dont on ne sait rien.
+        assertNull(day.jumua)
+    }
 
-        assertEquals(5, Prayer.entries.size)
-        assertEquals(2, Prayer.DHUHR.bit)
-        assertEquals(1, entry.prayersDone)
-        assertTrue(entry.isPrayerDone(Prayer.DHUHR))
-        assertEquals("Jumu'a", Prayer.DHUHR.labelOn(friday))
+    @Test
+    fun `une journee ou il n y a que la jumua n est pas vide`() {
+        assertTrue(day.isEmpty)
+        assertFalse(day.copy(jumua = true).isEmpty)
+        // Repondre « non » n'est pas remplir la journee.
+        assertTrue(day.copy(jumua = false).isEmpty)
     }
 }

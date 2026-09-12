@@ -112,28 +112,32 @@ enum class Prayer(val key: Int, val label: String) {
 
     val bit: Int get() = 1 shl key
 
-    /**
-     * Le nom de cette priere **ce jour-la**.
-     *
-     * Le vendredi, le dhuhr est la jumua. Ce n'est pas une sixieme priere qu'on
-     * ajoute : c'est la meme, au meme rang, sous son nom du vendredi. C'est
-     * pour ca que rien ne change dans le masque enregistre — un vendredi coche
-     * reste coche, et si la carte est ouverte un autre jour, elle redit
-     * simplement « Dhuhr ».
-     *
-     * Ajouter un bit aurait tout casse a la place : le compte des prieres
-     * faites, la medaille des cinq, et les journees deja ecrites.
-     */
-    fun labelOn(date: LocalDate): String =
-        if (this == DHUHR && date.dayOfWeek == DayOfWeek.FRIDAY) "Jumu'a" else label
-
-    /** Cette priere a-t-elle un nom particulier ce jour-la ? */
-    fun isSpecialOn(date: LocalDate): Boolean = labelOn(date) != label
-
     companion object {
         /** Toutes faites : les cinq bits a un. */
         val ALL_DONE: Int = entries.fold(0) { mask, prayer -> mask or prayer.bit }
     }
+}
+
+/**
+ * La jumu'a : la priere du vendredi a la mosquee.
+ *
+ * Elle ne remplace pas le dhuhr et ne le renomme pas — c'etait la premiere
+ * version, et elle etait fausse : on peut tres bien faire son dhuhr chez soi
+ * **sans** etre alle a la mosquee. Ce sont donc deux choses, et le vendredi la
+ * carte en propose une de plus.
+ *
+ * Elle vit dans sa propre colonne et **pas** dans le masque des prieres. Y
+ * ajouter un sixieme bit aurait fait dire au masque autre chose que ce qu'il
+ * dit — « les cinq prieres faites » — et casse du meme coup le compte sur
+ * cinq, la medaille, et la lecture des journees deja ecrites.
+ */
+object Jumua {
+    /** Le jour ou la question se pose. */
+    val DAY: DayOfWeek = DayOfWeek.FRIDAY
+
+    fun concerns(date: LocalDate): Boolean = date.dayOfWeek == DAY
+
+    const val LABEL: String = "Jumu'a"
 }
 
 /**
@@ -272,6 +276,11 @@ data class DayEntry(
     /** Les trois brossages, en masque de bits (voir [Brushing]). */
     val brushMask: Int? = null,
     /**
+     * La jumu'a, le vendredi (voir [Jumua]). `null` les autres jours, et les
+     * vendredis ou la question n'a pas ete touchee.
+     */
+    val jumua: Boolean? = null,
+    /**
      * Les cartes deja **verifiees** pour cette journee, par leurs cles, separees
      * par des virgules.
      *
@@ -369,7 +378,7 @@ data class DayEntry(
             waterGlasses == null && mealsNote.isBlank() && snackNote.isBlank() &&
             medicalWith.isBlank() && medicalNote.isBlank() &&
             (prayerMask ?: 0) == 0 && jobApplications == null &&
-            showered != true && (brushMask ?: 0) == 0 &&
+            showered != true && (brushMask ?: 0) == 0 && jumua != true &&
             // Une journee dont on n'a garde que « j'ai relu » n'est pas vide :
             // c'est meme le cas le plus courant d'une journee ou il ne s'est
             // rien passe. Sans cette ligne, le depot l'effacerait en sortant de

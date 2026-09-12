@@ -57,6 +57,7 @@ import com.ismael.daybyday.R
 import com.ismael.daybyday.data.DayCard
 import com.ismael.daybyday.data.DayColor
 import com.ismael.daybyday.data.Brushing
+import com.ismael.daybyday.data.Jumua
 import com.ismael.daybyday.data.Prayer
 import java.time.LocalDate
 import java.util.Locale
@@ -645,21 +646,24 @@ fun PrayerBeads(
     tint: Color,
     onToggle: (Prayer, Boolean) -> Unit,
     /**
-     * La journee affichee. Elle sert au **nom** des perles, pas a leur nombre :
-     * le vendredi, celle du milieu s'appelle la jumu'a.
+     * La journee affichee : le vendredi, une perle de plus apparait au bout de
+     * la rangee, la jumu'a.
      */
     date: LocalDate,
+    /** La jumu'a de ce vendredi, ou `null` les autres jours. */
+    jumua: Boolean?,
+    onJumua: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val done = mask ?: 0
+    val friday = Jumua.concerns(date)
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Prayer.entries.forEach { prayer ->
             val checked = done and prayer.bit != 0
-            val label = prayer.labelOn(date)
-            val special = prayer.isSpecialOn(date)
+            val label = prayer.label
             val background by animateColorAsState(
                 targetValue = if (checked) tint else tint.copy(alpha = 0.10f),
                 animationSpec = tween(Motion.NORMAL),
@@ -683,19 +687,7 @@ fun PrayerBeads(
                         .size(42.dp)
                         .clip(CircleShape)
                         .background(background)
-                        .border(
-                            width = if (special) 2.dp else 1.5.dp,
-                            // La perle du vendredi garde son anneau meme
-                            // cochee : c'est ce qui la distingue des quatre
-                            // autres d'un coup d'oeil, avant meme de lire son
-                            // nom.
-                            color = when {
-                                special -> tint.copy(alpha = if (checked) 0.55f else 0.75f)
-                                checked -> tint.copy(alpha = 0f)
-                                else -> tint.copy(alpha = 0.35f)
-                            },
-                            shape = CircleShape,
-                        ),
+                        .border(1.5.dp, tint.copy(alpha = if (checked) 0f else 0.35f), CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -718,8 +710,68 @@ fun PrayerBeads(
                     text = label,
                     fontSize = 10.sp,
                     lineHeight = 12.sp,
-                    fontWeight = if (checked || special) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (checked || special) tint else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = if (checked) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (checked) tint else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+
+        // La jumu'a : une perle **de plus**, et seulement le vendredi. Ce n'est
+        // pas le dhuhr sous un autre nom — on peut faire son dhuhr chez soi
+        // sans etre alle a la mosquee, et c'est justement la difference qu'on
+        // veut pouvoir noter.
+        if (friday) {
+            val checked = jumua == true
+            val background by animateColorAsState(
+                targetValue = if (checked) tint else tint.copy(alpha = 0.10f),
+                animationSpec = tween(Motion.NORMAL),
+                label = "jumua",
+            )
+            val markScale by animateFloatAsState(
+                targetValue = if (checked) 1f else 0f,
+                animationSpec = Motion.softSpring(),
+                label = "coche-jumua",
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(18.dp))
+                    .clickable(onClickLabel = Jumua.LABEL) { onJumua(!checked) }
+                    .padding(vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(background)
+                        // Un anneau plein meme decochee : elle n'est pas du
+                        // meme rang que les cinq, et ca se voit sans le lire.
+                        .border(2.dp, tint.copy(alpha = if (checked) 0f else 0.6f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = null,
+                        tint = readableOn(tint),
+                        modifier = Modifier
+                            .size(20.dp)
+                            .graphicsLayer {
+                                scaleX = markScale
+                                scaleY = markScale
+                                alpha = markScale
+                            },
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = Jumua.LABEL,
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (checked) tint else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     textAlign = TextAlign.Center,
                 )

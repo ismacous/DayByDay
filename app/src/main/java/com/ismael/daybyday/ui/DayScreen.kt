@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -228,6 +229,7 @@ fun DayScreen(
     var prayerMask by remember { mutableStateOf<Int?>(null) }
     var showered by remember { mutableStateOf<Boolean?>(null) }
     var brushMask by remember { mutableStateOf<Int?>(null) }
+    var jumua by remember { mutableStateOf<Boolean?>(null) }
     var jobApplications by remember { mutableStateOf<Int?>(null) }
     var editingTreatment by remember { mutableStateOf<Treatment?>(null) }
     var creatingTreatment by remember { mutableStateOf(false) }
@@ -328,6 +330,7 @@ fun DayScreen(
         prayerMask = prayerMask,
         showered = showered,
         brushMask = brushMask,
+        jumua = jumua,
         checkedCards = checkedCards.sorted().joinToString(","),
     )
 
@@ -363,6 +366,7 @@ fun DayScreen(
         showered = entry?.showered
         brushMask = entry?.brushMask
         jobApplications = entry?.jobApplications
+        jumua = entry?.jumua
         checkedCards = entry?.checkedCardKeys.orEmpty()
         expandedCards = emptySet()
         loadedFor = epochDay
@@ -475,6 +479,7 @@ fun DayScreen(
         prayerMask,
         showered,
         brushMask,
+        jumua,
     ) {
         if (loadedFor != epochDay) return@LaunchedEffect
         delay(SAVE_DEBOUNCE_MS)
@@ -710,14 +715,17 @@ fun DayScreen(
                 )
             }
 
-            // Ou en est la relecture de cette journee. La ligne ne s'affiche
-            // qu'une fois la premiere carte verifiee : tant qu'on n'a rien
-            // marque, un « 0 sur 11 » en haut de chaque journee ressemblerait a
-            // un devoir a rendre, et ce n'en est pas un.
+            // Ou en est la relecture de cette journee. Une ligne, rien de plus :
+            // pas de bouton a cote, qui faisait a lui seul toute la hauteur de
+            // la rangee et repoussait la page entiere vers le bas. On decoche
+            // une carte par sa coche, la ou elle est.
+            //
+            // Elle ne s'affiche qu'une fois la premiere carte verifiee : tant
+            // qu'on n'a rien marque, un « 0 sur 11 » en haut de chaque journee
+            // ressemblerait a un devoir a rendre, et ce n'en est pas un.
             val checkedCount = visibleCards.count { it.key in checkedCards }
             if (checkedCount > 0) {
-                val allChecked = checkedCount == visibleCards.size
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically,
@@ -730,7 +738,7 @@ fun DayScreen(
                     )
                     Spacer(Modifier.width(5.dp))
                     Text(
-                        text = if (allChecked) {
+                        text = if (checkedCount == visibleCards.size) {
                             "Journée relue en entier"
                         } else {
                             "$checkedCount carte(s) vérifiée(s) sur ${visibleCards.size}"
@@ -738,12 +746,6 @@ fun DayScreen(
                         style = MaterialTheme.typography.labelMedium,
                         color = Verified,
                     )
-                    // Le seul moyen de repartir a zero quand toute la
-                    // journee a ete relue : sans lui, une journee entierement
-                    // verifiee le resterait pour toujours.
-                    TextButton(onClick = { checkedCards = emptySet() }) {
-                        Text("Tout décocher", style = MaterialTheme.typography.labelMedium)
-                    }
                 }
             }
 
@@ -757,11 +759,17 @@ fun DayScreen(
             }
 
             if (date != LocalDate.now()) {
+                // Un bouton au gabarit reduit : au gabarit normal il reserve
+                // quarante-huit points de haut et pousse toute la page vers le
+                // bas, pour trois mots.
                 TextButton(
                     onClick = { epochDay = LocalDate.now().toEpochDay() },
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .height(34.dp),
                 ) {
-                    Text("Aller à aujourd'hui")
+                    Text("Aller à aujourd'hui", style = MaterialTheme.typography.labelLarge)
                 }
             }
 
@@ -852,13 +860,15 @@ fun DayScreen(
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
                             )
-                            if (parts.isNotEmpty()) {
+                            // Trois mots, et seulement dans le cas qui ne se
+                            // devine pas. Une couleur calculee n'a rien a
+                            // annoncer : les moments sont juste en dessous.
+                            // Expliquer en plus comment revenir en arriere
+                            // prenait deux lignes pour apprendre un geste qui
+                            // s'apprend en le faisant une fois.
+                            if (parts.isNotEmpty() && colorManual) {
                                 Text(
-                                    text = if (colorManual) {
-                                        "Choisie à la main. Touche-la à nouveau pour revenir à la moyenne de tes moments."
-                                    } else {
-                                        "Calculée à partir de tes moments."
-                                    },
+                                    text = "Choisie à la main",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -872,11 +882,6 @@ fun DayScreen(
                             Text(
                                 "Moment par moment",
                                 style = MaterialTheme.typography.titleMedium,
-                            )
-                            Text(
-                                "Ton humeur bouge dans la journée : la couleur du jour se calcule à partir d'ici.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Spacer(Modifier.height(12.dp))
                             DayPart.entries.forEach { part ->
@@ -1232,6 +1237,8 @@ fun DayScreen(
                                 mask = prayerMask,
                                 tint = tint,
                                 date = date,
+                                jumua = jumua,
+                                onJumua = { jumua = it },
                                 onToggle = { prayer, done ->
                                     val before = prayerMask ?: 0
                                     val after = currentEntry(epochDay).withPrayer(prayer, done)

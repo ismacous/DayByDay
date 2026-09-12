@@ -36,7 +36,7 @@ object Backup {
 
     private const val JSON_NAME = "daybyday.json"
     private const val MEDIA_PREFIX = "media/"
-    private const val FORMAT_VERSION = 9
+    private const val FORMAT_VERSION = 10
 
     const val AUTO_BACKUP_NAME = "DayByDay-sauvegarde-auto.zip"
 
@@ -119,6 +119,7 @@ object Backup {
                     .put("showered", day.showered ?: JSONObject.NULL)
                     .put("brushMask", day.brushMask ?: JSONObject.NULL)
                     .put("checkedCards", day.checkedCards)
+                    .put("jumua", day.jumua ?: JSONObject.NULL)
             )
         }
         root.put("days", daysJson)
@@ -413,6 +414,7 @@ object Backup {
                         // Absente des sauvegardes d'avant les cartes verifiees :
                         // la journee revient « pas encore verifiee ».
                         checkedCards = item.optString("checkedCards", ""),
+                        jumua = if (item.isNull("jumua")) null else item.getBoolean("jumua"),
                     )
                 }
 

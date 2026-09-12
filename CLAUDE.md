@@ -810,11 +810,22 @@ téléphone (Samsung S25, Android 15).
   gardé que « j'ai relu » n'est pas vide (sinon `saveDay` l'efface en quittant
   l'écran et la marque disparaît), et la coche de l'en-tête doit rester, parce
   qu'un geste qu'on ne devine pas ne doit jamais être le seul chemin.
-- **Le vendredi, le dhuhr s'appelle la jumu'a** (`Prayer.labelOn`). C'est un
-  **nom**, pas une sixième prière : le masque, les bits, le compte des cinq et la
-  médaille ne bougent pas, et un vendredi coché reste un dhuhr coché. C'est le
-  modèle à suivre pour toute autre « carte d'événement » : changer ce qui
-  s'affiche ce jour-là, jamais ce qui est enregistré.
+- **La jumu'a est une case en plus, pas le dhuhr renommé.** La première version
+  renommait la perle du dhuhr le vendredi : c'était faux, et Ismael l'a corrigé —
+  on peut très bien faire son dhuhr chez soi **sans** être allé à la mosquée. Ce
+  sont donc deux choses, et le vendredi la carte propose une perle de plus
+  (`Jumua`, colonne `day_entries.jumua`). Elle n'est **pas** un sixième bit de
+  `prayerMask` : ce masque dit « les cinq prières faites », et lui faire dire
+  autre chose casserait le compte sur cinq, la médaille et la lecture des
+  journées déjà écrites. C'est le modèle des « cartes d'événement » : ce jour-là,
+  la carte propose quelque chose de plus — jamais quelque chose à la place.
+- **Pas de petits textes explicatifs sous les commandes.** « Ton humeur bouge
+  dans la journée : la couleur du jour se calcule à partir d'ici », « Touche-la
+  à nouveau pour revenir à la moyenne » — Ismael les a fait retirer, et la raison
+  vaut pour tous ceux qu'on serait tenté d'ajouter : ça prend de la place et ça
+  infantilise. Un libellé qui porte une **information** reste (« Choisie à la
+  main », « 3 sur 5 ») ; une phrase qui explique comment se servir d'un bouton,
+  non — le geste s'apprend en le faisant une fois.
 
 - **Les tests d'interface doivent ecarter les deux ecrans d'accueil.** La
   reprise de sauvegarde (base vide) **et** l'animation « Salut … »

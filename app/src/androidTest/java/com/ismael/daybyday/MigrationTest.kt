@@ -85,6 +85,9 @@ class MigrationTest {
                 // verifiee », et non « tout verifie » : la colonne est vide, et
                 // la marque se pose ensuite comme sur n'importe quelle journee.
                 assertEquals("", day?.checkedCards)
+                // La jumu'a n'existait pas : la journee ne dit pas « non », elle
+                // ne dit rien.
+                assertEquals(null, day?.jumua)
                 assertEquals(emptySet<String>(), day?.checkedCardKeys)
                 dao.upsertDay(day!!.withCheckedCard("priere", true))
                 assertEquals(setOf("priere"), dao.dayOnce(20000)?.checkedCardKeys)

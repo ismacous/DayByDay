@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Version du schema. Affichee dans les reglages, a propos, pour savoir ce que
  * fait tourner le telephone en cas de probleme.
  */
-const val DATABASE_VERSION = 22
+const val DATABASE_VERSION = 23
 
 @Database(
     entities = [
@@ -624,6 +624,22 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
+         * La jumu'a du vendredi.
+         *
+         * Sa propre colonne, et non un sixieme bit dans `prayerMask` : le
+         * masque dit « les cinq prieres faites », et lui faire dire autre chose
+         * aurait casse le compte sur cinq, la medaille, et la lecture des
+         * journees deja ecrites. `null` partout au depart — un vendredi d'avant
+         * cette version n'est pas un vendredi sans jumu'a, c'est un vendredi
+         * dont on ne sait rien.
+         */
+        val MIGRATION_22_23 = object : Migration(22, 23) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE day_entries ADD COLUMN jumua INTEGER")
+            }
+        }
+
+        /**
          * Toutes les migrations, dans l'ordre.
          *
          * **Une seule liste**, et c'est le but : la base l'utilise, et les tests
@@ -656,6 +672,7 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_19_20,
             MIGRATION_20_21,
             MIGRATION_21_22,
+            MIGRATION_22_23,
         )
 
         @Volatile

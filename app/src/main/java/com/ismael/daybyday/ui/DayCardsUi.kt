@@ -74,7 +74,6 @@ import com.ismael.daybyday.data.DoseTime
 import com.ismael.daybyday.data.Brushing
 import com.ismael.daybyday.data.Prayer
 import com.ismael.daybyday.data.Treatment
-import java.time.DayOfWeek
 import java.time.LocalDate
 import java.util.Locale
 
@@ -501,13 +500,21 @@ fun PrayerCardBody(
     mask: Int?,
     tint: Color,
     date: LocalDate,
+    jumua: Boolean?,
+    onJumua: (Boolean) -> Unit,
     onToggle: (Prayer, Boolean) -> Unit,
 ) {
     val done = mask ?: 0
     val count = Prayer.entries.count { done and it.bit != 0 }
-    val friday = date.dayOfWeek == DayOfWeek.FRIDAY
 
-    PrayerBeads(mask = mask, tint = tint, onToggle = onToggle, date = date)
+    PrayerBeads(
+        mask = mask,
+        tint = tint,
+        onToggle = onToggle,
+        date = date,
+        jumua = jumua,
+        onJumua = onJumua,
+    )
 
     Spacer(Modifier.height(14.dp))
     TrackBar(progress = count / Prayer.entries.size.toFloat(), tint = tint)
@@ -522,16 +529,6 @@ fun PrayerCardBody(
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    // Une ligne le vendredi, et rien les autres jours : la carte dit ce que ce
-    // jour-la a de particulier, sans jamais demander de comptes.
-    if (friday) {
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Vendredi : le dhuhr, c'est la jumu'a.",
-            style = MaterialTheme.typography.labelMedium,
-            color = tint,
-        )
-    }
 }
 
 /**

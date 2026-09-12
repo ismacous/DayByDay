@@ -603,9 +603,18 @@ object CoachRules {
     /** Ecart minimum entre le pire moment et les autres, sinon c'est du bruit. */
     private const val PART_THRESHOLD = 0.3
 
-    /** Un montant en centimes, lisible : « 1 250,00 € ». */
+    /**
+     * Un montant en centimes, lisible : « 1 250,00 € ».
+     *
+     * Les deux espaces insecables sont ramenees a une espace normale : selon la
+     * version de Java, le separateur de milliers francais est U+00A0 **ou**
+     * U+202F (espace fine). Sans ca, un montant affiche correctement reste
+     * introuvable des qu'on le cherche dans le texte.
+     */
     fun formatMoney(cents: Long): String =
-        String.format(Locale.FRANCE, "%,.2f €", cents / 100.0).replace('\u00A0', ' ')
+        String.format(Locale.FRANCE, "%,.2f €", cents / 100.0)
+            .replace('\u00A0', ' ')
+            .replace('\u202F', ' ')
 
     /** Un ecart de moyenne, sur l'echelle 0-3 des couleurs. */
     fun formatDelta(delta: Double): String =

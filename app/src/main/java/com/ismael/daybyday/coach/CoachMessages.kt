@@ -253,11 +253,11 @@ object CoachMessages {
         ),
 
         CoachRule.BEST_MONTH to listOf(
-            "{mois} est ton meilleur mois de cette dernière année.",
+            "Ton meilleur mois de cette dernière année, c'est {mois}.",
             "Meilleure moyenne mensuelle des douze derniers mois : {mois}.",
-            "{mois} passe devant les autres mois de l'année. Va voir ton Bilan, ça se voit bien.",
+            "Le mois de {mois} passe devant tous les autres de l'année. Va voir ton Bilan, ça se voit bien.",
             "Aucun mois de cette année n'était monté aussi haut que {mois}.",
-            "{mois} tient le haut du classement de tes derniers mois.",
+            "Le mois de {mois} tient le haut du classement de tes derniers mois.",
         ),
 
         // --- Ce qui va avec les bonnes journees --------------------------
@@ -268,7 +268,7 @@ object CoachMessages {
             "Petite idée du jour : {quoi}. Tes bonnes journées vont souvent avec ça.",
             "Tes journées notées montrent que ça se passe mieux {constat}. Aujourd'hui, {quoi}, c'est jouable ?",
             "Si tu cherches quoi faire : {quoi}. Dans tes journées, ça revient souvent quand ça va bien.",
-            "{constat}, tes journées sont en moyenne plus hautes. Tu veux tenter de {quoi} ?",
+            "En moyenne, {constat}, tes journées sont plus hautes. Tu veux tenter de {quoi} ?",
         ),
 
         CoachRule.FACTOR_TODAY to listOf(
@@ -276,13 +276,13 @@ object CoachMessages {
             "C'est coché aujourd'hui — d'après tes journées, {constat} c'est plutôt bon signe.",
             "Bien vu : {constat}, la moyenne de tes journées est plus haute que d'habitude.",
             "Ça revient souvent dans tes bonnes journées, et c'est coché aujourd'hui.",
-            "{constat}, tes journées se passent rarement mal. Et c'est le cas aujourd'hui.",
+            "D'habitude, {constat}, tes journées se passent rarement mal. Et c'est coché aujourd'hui.",
         ),
 
         CoachRule.FACTOR_HEAVY to listOf(
             "À noter, sans jugement : {constat}, tes journées sont en moyenne un peu plus basses.",
             "Juste une observation : {constat}, la moyenne de tes journées descend un peu. À toi de voir ce que tu en fais.",
-            "{constat}, tes journées sont souvent un peu plus dures. Ça ne veut pas dire que c'est la cause.",
+            "En moyenne, {constat}, tes journées sont un peu plus dures. Ça ne veut pas dire que c'est la cause.",
             "Sur tes données, {constat} tes journées tirent un peu vers le bas. C'est un constat, pas un reproche.",
             "Pour info seulement : {constat}, tes journées sont un peu en dessous de ta moyenne.",
         ),
@@ -396,7 +396,7 @@ object CoachMessages {
             "Le lien le plus net de tes journées : {constat}, elles sont meilleures de {ecart} point en moyenne.",
             "Sur toutes tes journées notées, c'est {constat} que l'écart est le plus grand : {ecart} point de mieux.",
             "Ce qui ressort le plus de tes journées : {constat}, elles montent de {ecart} point en moyenne. Ça ne prouve pas une cause, mais ça se remarque.",
-            "{constat}, tes journées gagnent {ecart} point de moyenne. C'est le plus gros écart de tout ton suivi.",
+            "En moyenne, {constat}, tes journées gagnent {ecart} point. C'est le plus gros écart de tout ton suivi.",
         ),
 
         CoachRule.STATS_HARD_PART to listOf(
@@ -464,9 +464,9 @@ object CoachMessages {
 
         CoachRule.NEW_MONTH to listOf(
             "Nouveau mois : {mois} commence. Page blanche sur ton calendrier.",
-            "{mois} commence aujourd'hui. Rien à rattraper du mois d'avant.",
+            "Le mois de {mois} commence aujourd'hui. Rien à rattraper du mois d'avant.",
             "On est au premier jour de {mois}. Le mois précédent est rangé dans ton bilan.",
-            "{mois} démarre aujourd'hui. Aucun objectif imposé.",
+            "Le mois de {mois} démarre aujourd'hui. Aucun objectif imposé.",
             "Nouveau mois qui s'ouvre : {mois}. On repart de zéro sur la grille.",
         ),
 

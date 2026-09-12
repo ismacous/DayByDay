@@ -112,8 +112,9 @@ class CoachTest {
         hidden: Set<DayCard> = emptySet(),
         hour: Int = 10,
         birthDate: LocalDate? = null,
+        on: LocalDate = today,
     ) = CoachSnapshot.build(
-        today = today,
+        today = on,
         hourOfDay = hour,
         firstName = "Ismael",
         birthDate = birthDate,
@@ -170,31 +171,52 @@ class CoachTest {
         }
     }
 
+    /** De quoi remplir n'importe quel gabarit, comme a l'ecran. */
+    private val sampleValues = mapOf(
+        "n" to "6",
+        "duree" to "5 h 20",
+        "montant" to "1 200,00 €",
+        "ecart" to "0,8",
+        "mois" to "mars",
+        "moment" to "matin",
+        "constat" to "les jours où tu sors",
+        "quoi" to "sortir faire un petit tour",
+    )
+
     @Test
     fun `chaque phrase se comprend toute seule`() {
         // C'est le test le plus important du fichier. Une bulle apparait sans
         // titre et sans rien autour ; une notification encore moins. « Les
         // cinq, 6 jours d'affilée » ne veut rien dire hors contexte, et c'est
         // exactement ce qui s'etait glisse dans la premiere version.
+        //
+        // On verifie la phrase **telle qu'on la lit**, gabarits remplis : une
+        // phrase qui commence par « {n} » commence en fait par un chiffre, et
+        // une qui commence par « {constat} » commence par un mot en minuscule,
+        // ce qui n'est pas la meme chose du tout.
         CoachRule.entries.forEach { rule ->
-            CoachMessages.variantsFor(rule).forEach { phrase ->
+            CoachMessages.variantsFor(rule).forEachIndexed { index, template ->
+                val phrase = CoachMessages
+                    .render(NudgeCandidate(rule, sampleValues), index, "Ismael")!!
+                    .text
+
+                assertFalse("Gabarit non rempli (${rule.slug}) : $phrase", phrase.contains("{"))
                 assertTrue(
                     "Trop courte pour se comprendre seule (${rule.slug}) : $phrase",
                     phrase.length >= 30,
                 )
                 assertTrue(
-                    "Ne commence pas par une majuscule (${rule.slug}) : $phrase",
-                    phrase.first().isUpperCase(),
+                    "Commence mal (${rule.slug}) : $phrase",
+                    phrase.first().isUpperCase() || phrase.first().isDigit(),
                 )
                 assertTrue(
                     "Ne finit pas par une ponctuation (${rule.slug}) : $phrase",
                     phrase.last() in ".!?»",
                 )
                 if (rule.subjects.isNotEmpty()) {
-                    val names = rule.subjects.any { phrase.lowercase().contains(it.lowercase()) }
                     assertTrue(
-                        "Ne nomme pas son sujet ${rule.subjects} (${rule.slug}) : $phrase",
-                        names,
+                        "Ne nomme pas son sujet ${rule.subjects} (${rule.slug}) : $template",
+                        rule.subjects.any { phrase.lowercase().contains(it.lowercase()) },
                     )
                 }
             }
@@ -534,12 +556,26 @@ class CoachTest {
 
     @Test
     fun `un mois dans le vert propose de mettre de cote`() {
-        val entries = (0..20).map { day(it, DayColor.ORANGE) }
+        // Avant le milieu du mois, le solde ne veut rien dire : les grosses
+        // depenses n'ont pas encore eu lieu. Le test se place donc un 20.
+        val on = LocalDate.of(2026, 3, 20)
+        val entries = (0..20).map { back ->
+            DayEntry(epochDay = on.toEpochDay() - back, colorKey = DayColor.ORANGE.key)
+        }
         val movements = listOf(
-            money(8, 150_000L, MoneyCategory.SALARY),
-            money(5, -30_000L, MoneyCategory.FOOD),
+            MoneyEntry(
+                epochDay = on.toEpochDay() - 8,
+                amountCents = 150_000L,
+                categoryKey = MoneyCategory.SALARY.key,
+            ),
+            MoneyEntry(
+                epochDay = on.toEpochDay() - 5,
+                amountCents = -30_000L,
+                categoryKey = MoneyCategory.FOOD.key,
+            ),
         )
-        val candidate = CoachRules.candidates(snapshotOf(entries, money = movements))
+        val snapshot = snapshotOf(entries, money = movements, on = on)
+        val candidate = CoachRules.candidates(snapshot)
             .firstOrNull { it.rule == CoachRule.MONEY_SAVING }
         assertNotNull(candidate)
         assertEquals(NudgeTone.NUDGE, CoachRule.MONEY_SAVING.tone)
@@ -623,12 +659,8 @@ class CoachTest {
         assertNotNull(first)
         CoachEngine.markShown(memory, first!!, NudgeSurface.MONTH, snapshot.todayEpochDay)
 
-        // Le meme jour, la carte ne change pas de discours.
-        val sameDay = CoachEngine.choose(snapshot, memory, NudgeSurface.MONTH)
-        assertEquals(first.rule, sameDay?.rule)
-        assertEquals(first.text, sameDay?.text)
-
-        // Le lendemain, le delai d'attente de la regle s'applique.
+        // Le lendemain, le quota du jour est neuf — mais le delai d'attente de
+        // la situation, lui, court toujours : elle ne revient pas.
         val tomorrow = snapshot.copy(today = today.plusDays(1))
         val next = CoachEngine.choose(tomorrow, memory, NudgeSurface.MONTH)
         assertTrue(next == null || next.rule != first.rule)

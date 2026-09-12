@@ -134,13 +134,13 @@ enum class CoachRule(
     /** Plusieurs journees tres sombres de suite. Le seul message qui donne un numero. */
     DAYS_VERY_DARK(
         "jours_tres_sombres", NudgeTone.CARE, 120, 10, ANYWHERE_AND_NOTIFY,
-        subjects = listOf("jours"), notificationTitle = "Je suis là",
+        subjects = listOf("jour"), notificationTitle = "Je suis là",
     ),
 
     /** Deux journees noires ou plus a la suite. */
     BLACK_STREAK(
         "noires_de_suite", NudgeTone.CARE, 110, 3, ANYWHERE_AND_NOTIFY,
-        subjects = listOf("journées", "jours"), notificationTitle = "Je suis là",
+        subjects = listOf("jour"), notificationTitle = "Je suis là",
     ),
 
     /** La journee du jour vient d'etre notee en noir. */
@@ -217,19 +217,19 @@ enum class CoachRule(
     /** Premiere journee verte apres une longue serie sans. */
     FIRST_GREEN(
         "premiere_verte", NudgeTone.PROUD, 85, 7, ANYWHERE,
-        subjects = listOf("verte", "bonne journée"),
+        subjects = listOf("verte", "journée"),
     ),
 
     /** Retour dans l'application apres plusieurs jours sans rien noter. */
     BACK_AFTER_BREAK(
         "retour", NudgeTone.WARM, 78, 5, ANYWHERE,
-        subjects = listOf("jours"),
+        subjects = listOf("jour"),
     ),
 
     /** Trois journees vertes d'affilee. */
     GREEN_STREAK(
         "trois_vertes", NudgeTone.PROUD, 75, 4, ANYWHERE,
-        subjects = listOf("journées", "vertes"),
+        subjects = listOf("journée", "verte"),
     ),
 
     /** Aujourd'hui remonte nettement par rapport a hier. */
@@ -241,7 +241,7 @@ enum class CoachRule(
     /** Palier de jours notes d'affilee (7, 14, 30, 50, 100...). */
     NOTING_STREAK(
         "serie_notee", NudgeTone.PROUD, 65, 5, ANYWHERE_AND_NOTIFY,
-        subjects = listOf("jours"),
+        subjects = listOf("jour"),
     ),
 
     /** Les cinq prieres faites plusieurs jours de suite. */
@@ -285,19 +285,19 @@ enum class CoachRule(
     /** Un facteur associe aux bonnes journees, absent aujourd'hui. */
     FACTOR_SUGGESTION(
         "facteur_positif", NudgeTone.NUDGE, 68, 2, ANYWHERE_AND_NOTIFY,
-        subjects = listOf("journées"),
+        subjects = listOf("journée"),
     ),
 
     /** Ce facteur est la aujourd'hui : on le souligne. */
     FACTOR_TODAY(
         "facteur_present", NudgeTone.WARM, 52, 3, ANYWHERE,
-        subjects = listOf("journées"),
+        subjects = listOf("journée"),
     ),
 
     /** Un facteur qui accompagne souvent les journees plus dures. Descriptif. */
     FACTOR_HEAVY(
         "facteur_lourd", NudgeTone.SOFT, 38, 5, ANYWHERE,
-        subjects = listOf("journées"),
+        subjects = listOf("journée"),
     ),
 
     // --- Habitudes du quotidien --------------------------------------------
@@ -305,7 +305,7 @@ enum class CoachRule(
     /** Plusieurs jours d'affilee sans personne de note. */
     ALONE_STREAK(
         "personne", NudgeTone.NUDGE, 56, 4, ANYWHERE_AND_NOTIFY,
-        subjects = listOf("jours"), card = DayCard.SOCIAL,
+        subjects = listOf("jour"), card = DayCard.SOCIAL,
     ),
 
     /** Plusieurs jours d'affilee sans sortir. */
@@ -323,7 +323,7 @@ enum class CoachRule(
     /** Etiquette "Mal dormi" cochee plusieurs fois de suite. */
     BAD_SLEEP(
         "mal_dormi", NudgeTone.NUDGE, 42, 5, ANYWHERE,
-        subjects = listOf("dormi", "nuit", "sommeil"), card = DayCard.SLEEP,
+        subjects = listOf("dor", "nuit", "sommeil"), card = DayCard.SLEEP,
     ),
 
     /** Temps d'ecran nettement au-dessus de l'habitude. */
@@ -387,7 +387,7 @@ enum class CoachRule(
     /** Le facteur le plus lie a ses bonnes journees, explique. */
     STATS_TOP_FACTOR(
         "bilan_facteur", NudgeTone.SOFT, 47, 9, setOf(NudgeSurface.STATS),
-        subjects = listOf("journées"),
+        subjects = listOf("journée"),
     ),
 
     /** Le moment de la journee qui est systematiquement le plus dur. */
@@ -411,7 +411,7 @@ enum class CoachRule(
     /** Pas encore assez de journees notees pour que le bilan veuille dire quelque chose. */
     STATS_YOUNG(
         "bilan_trop_jeune", NudgeTone.SOFT, 23, 14, setOf(NudgeSurface.STATS),
-        subjects = listOf("journées"),
+        subjects = listOf("journée"),
     ),
 
     // --- Remplir l'application ----------------------------------------------

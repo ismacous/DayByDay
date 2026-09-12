@@ -225,6 +225,11 @@ private fun Medal(
                 }
                 .drawBehind {
                     val side = size.width
+                    // Une boite pas encore mesuree ne se dessine pas : un
+                    // degrade de rayon zero n'existe pas, et Android le refuse
+                    // en fermant l'application. Meme piege que la bulle du
+                    // coup de pouce.
+                    if (side <= 0f) return@drawBehind
                     val centerX = size.width / 2f
                     val centerY = side / 2f
                     val radius = side / 2f

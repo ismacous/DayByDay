@@ -24,6 +24,8 @@ import com.ismael.daybyday.data.SportLevel
 import com.ismael.daybyday.data.Tag
 import com.ismael.daybyday.data.TagCatalog
 import com.ismael.daybyday.data.Treatment
+import com.ismael.daybyday.ui.haloRadius
+import com.ismael.daybyday.ui.presenceRadius
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -221,6 +223,47 @@ class CoachTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun `une felicitation felicite vraiment`() {
+        // Le deuxieme reproche d'Ismael, apres les phrases telegraphiques :
+        // « Tes cinq prieres, six jours de suite. C'est une regularite qui se
+        // remarque. » n'est pas un compliment, c'est un releve — « un resume en
+        // attendant notre mort ». Un ton PROUD ou CHEER doit donc porter un mot
+        // d'elan, et c'est ce test qui le tient, pas la relecture.
+        CoachRule.entries
+            .filter { it.tone == NudgeTone.PROUD || it.tone == NudgeTone.CHEER }
+            .forEach { rule ->
+                CoachMessages.variantsFor(rule).forEachIndexed { index, _ ->
+                    val phrase = CoachMessages
+                        .render(NudgeCandidate(rule, sampleValues), index, "Ismael")!!
+                        .text
+                        .lowercase()
+
+                    assertTrue(
+                        "Felicitation sans elan (${rule.slug}) : $phrase",
+                        CoachMessages.LIFT_WORDS.any { phrase.contains(it) },
+                    )
+                }
+            }
+    }
+
+    @Test
+    fun `le disque de la bulle a toujours un rayon`() {
+        // Le crash qui fermait l'application deux secondes apres son ouverture :
+        // a la premiere image, l'arrivee de la bulle vaut zero, le rayon tombait
+        // a zero, et Android refuse un degrade radial de rayon nul. On balaie
+        // toute l'arrivee et toute la respiration plutot que de regarder l'ecran.
+        for (appear in 0..20) {
+            for (breath in 0..20) {
+                val radius = presenceRadius(74f, breath / 20f, appear / 20f)
+                assertTrue("Rayon nul a $appear/$breath : $radius", radius > 0f)
+            }
+        }
+        // Et une boite pas encore mesuree ne doit pas plus faire tomber l'appli.
+        assertTrue(presenceRadius(0f, 0f, 0f) > 0f)
+        assertTrue(haloRadius(0f) > 0f)
     }
 
     @Test

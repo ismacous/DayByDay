@@ -12,6 +12,14 @@ package com.ismael.daybyday.coach
  * suite » oui. C'est pour ca que chaque situation declare ses [CoachRule.subjects]
  * et qu'un test verifie que **toutes** ses phrases les contiennent.
  *
+ * **La deuxieme regle : une felicitation doit feliciter.** « Tes cinq prieres,
+ * six jours de suite. C'est une regularite qui se remarque. » est un releve,
+ * pas un compliment — Ismael l'a dit mieux que moi : ca fait « un resume en
+ * attendant notre mort ». Un ami ne fait pas l'inventaire de ce que tu as
+ * fait, il te dit que c'est bien et il te pousse. Chaque phrase de ton
+ * [NudgeTone.PROUD] ou [NudgeTone.CHEER] porte donc un mot d'elan
+ * ([LIFT_WORDS]) et un test le verifie : le garde-fou, pas la relecture.
+ *
  * Les autres regles d'ecriture, a garder si tu en ajoutes :
  * - on tutoie, on reste simple, on ne fait jamais la morale ;
  * - un constat n'est jamais un reproche (« ca fait trois jours », pas « tu
@@ -23,12 +31,28 @@ package com.ismael.daybyday.coach
  *   souligner ce qui va bien ; annoncer qu'elle est cassee punirait exactement
  *   les journees qu'il ne faut pas punir. C'est la meme regle que pour les
  *   medailles.
+ * - l'energie monte avec le ton, elle ne s'invente pas partout : on encourage
+ *   fort quand ca va bien, on reste calme et present quand c'est noir. Crier
+ *   « bravo » un jour noir serait la pire des fausses notes.
  *
  * Les valeurs entre accolades sont remplacees au moment de l'affichage :
  * `{n}`, `{quoi}`, `{constat}`, `{prenom}`, `{duree}`, `{mois}`, `{montant}`,
  * `{moment}`, `{ecart}`.
  */
 object CoachMessages {
+
+    /**
+     * Les mots d'elan : de la vie, de l'energie, de la volonte.
+     *
+     * Chaque phrase de felicitation doit en contenir au moins un. Ce n'est pas
+     * une liste de synonymes a rallonge — vingt mots suffisent, et les revoir
+     * de temps en temps vaut mieux que de laisser passer une phrase plate.
+     */
+    val LIFT_WORDS = listOf(
+        "bravo", "chapeau", "respect", "fier", "force", "continue", "garde",
+        "savoure", "kiffe", "énorme", "solide", "réussi", "gagné", "mérit",
+        "profite", "tiens bon", "allez", "beau", "belle", "paye", "assure",
+    )
 
     private val messages: Map<CoachRule, List<String>> = mapOf(
 
@@ -37,30 +61,32 @@ object CoachMessages {
         // jours, donc c'est elle qui s'userait le plus vite.
 
         CoachRule.DAY_COMPLETE to listOf(
-            "Toutes tes cartes sont vérifiées. La journée est bouclée, tu peux fermer l'appli tranquille.",
-            "Journée complète : chaque carte est passée en revue. C'est proprement fait.",
-            "Tu as relu toute ta journée, carte par carte. Ça demande plus de discipline que ça n'en a l'air.",
-            "Et voilà, la journée est entièrement vérifiée. Rien ne traîne.",
-            "Toutes les cartes sont cochées. Ta journée est rangée.",
-            "Journée bouclée. Tu as pris le temps de regarder chaque carte, et ça compte.",
-            "Tout est vérifié pour aujourd'hui. Tu peux passer à autre chose l'esprit tranquille.",
-            "Chaque carte de la journée est relue. Beau travail de fond.",
-            "La journée est complète. Même les jours où il ne s'est rien passé, la relire change quelque chose.",
-            "Toutes tes cartes y sont passées. C'est le genre de régularité qui se voit sur des mois.",
-            "Journée entièrement vérifiée. Tu construis quelque chose de solide, jour après jour.",
-            "Tout est à jour dans ta journée. Voilà, c'est fini pour aujourd'hui.",
-            "Tes cartes sont toutes cochées. Une journée de plus mise au propre.",
-            "Journée complète. Ce n'est pas rien de tenir ça un jour comme un autre.",
-            "Toutes les cartes sont passées. Ta journée est en ordre.",
-            "Tu as bouclé la journée entière. Le genre de chose qu'on ne fait pas par hasard.",
-            "Chaque carte est vérifiée. Ta journée est propre, tu peux la laisser là.",
-            "Journée terminée et relue en entier. Bien joué.",
-            "Toutes tes cartes sont revues. Ce petit geste-là, personne ne le voit à part toi — et moi.",
-            "La journée est complète. Rien à rattraper demain.",
-            "Tout est coché. Ta journée est finie pour de bon.",
+            "Toutes tes cartes sont vérifiées, la journée est bouclée. Bravo, tu es allé au bout !",
+            "Journée complète, carte par carte. Chapeau, franchement !",
+            "Tu as relu toute ta journée. Aller au bout comme ça, c'est une vraie force !",
+            "Et voilà, toute la journée est vérifiée. Bravo, rien ne traîne derrière toi !",
+            "Toutes les cartes sont cochées. Ta journée est rangée, savoure ça !",
+            "Journée bouclée, chaque carte passée en revue. Continue comme ça, c'est du solide !",
+            "Tout est vérifié pour aujourd'hui. Bravo, tu peux souffler l'esprit tranquille !",
+            "Chaque carte de la journée y est passée. Respect, c'est du beau travail !",
+            "La journée est complète. Même un jour ordinaire, tenir ça, c'est fort — bravo !",
+            "Toutes tes cartes sont vérifiées. Continue comme ça, dans six mois tu verras la différence !",
+            "Journée entièrement vérifiée. Tu construis quelque chose de solide, jour après jour !",
+            "Tout est à jour dans ta journée. Bravo, c'est plié pour aujourd'hui !",
+            "Tes cartes sont toutes cochées. Une journée de plus au propre, chapeau !",
+            "Journée complète. Tenir ça un jour comme un autre, c'est une sacrée force !",
+            "Toutes les cartes sont passées. Ta journée est en ordre, bravo !",
+            "Tu as bouclé la journée entière. Ça ne se fait pas par hasard : chapeau !",
+            "Chaque carte est vérifiée. Belle rigueur — ta journée est nickel !",
+            "Journée terminée et relue en entier. Bravo, tu gères vraiment !",
+            "Toutes tes cartes sont revues. Ce geste-là, personne ne le voit à part toi et moi : respect !",
+            "La journée est complète. Rien à rattraper demain, savoure !",
+            "Tout est coché, ta journée est finie pour de bon. Allez, bravo !",
         ),
 
         // --- Soutien quand c'est dur -------------------------------------
+        // Ici, pas d'elan : quelqu'un qui crie « bravo » un jour noir n'a pas
+        // compris ou il met les pieds. Ce qu'on apporte, c'est une presence.
 
         CoachRule.DAYS_VERY_DARK to listOf(
             "Ça fait {n} jours que tes journées sont très sombres. Tu n'as rien à prouver à personne, et tu n'as pas à tenir ça tout seul. Si tu veux parler à quelqu'un, même en pleine nuit, le 3114 répond gratuitement.",
@@ -72,7 +98,7 @@ object CoachMessages {
 
         CoachRule.BLACK_STREAK to listOf(
             "{n} journées noires de suite. Je ne vais pas te dire que ça va aller, mais je le note avec toi : c'est dur en ce moment.",
-            "Ça fait {n} jours que tes journées sont très lourdes. Tu n'es pas obligé de faire quoi que ce soit de plus aujourd'hui que de la passer.",
+            "Ça fait {n} jours que tes journées sont très lourdes. Tu n'as rien de plus à faire aujourd'hui que de la passer.",
             "{n} journées sombres à la suite. Si tu as pu ouvrir l'appli, c'est déjà que tu tiens quelque chose.",
             "{n} journées noires d'affilée. Ça arrive, et ça passe, même si là tout de suite ça ne se voit pas.",
             "{n} journées noires. Aujourd'hui, le minimum suffit : boire, manger un truc, respirer. Le reste peut attendre.",
@@ -108,7 +134,7 @@ object CoachMessages {
             "Journée difficile aujourd'hui. Elle est notée, tu peux la poser maintenant.",
             "Ta journée est en rouge. C'était dur, et tu n'as pas besoin d'en faire plus.",
             "Journée difficile notée. Qu'elle soit rouge et pas noire, c'est déjà une info.",
-            "Dure, cette journée. Repose-toi si tu peux.",
+            "Dure, cette journée. Repose-toi si tu peux, tu as fait le nécessaire en la notant.",
             "Journée compliquée aujourd'hui. Tu n'as pas à la rattraper ce soir.",
         ),
 
@@ -121,30 +147,32 @@ object CoachMessages {
         ),
 
         // --- Sante et soin de soi ----------------------------------------
+        // Des propositions, jamais des ordres — mais proposees comme un pote
+        // le ferait, avec un peu d'entrain.
 
         CoachRule.MEDS_MISSING to listOf(
             "Aucune prise de traitement cochée depuis {n} jours. Tu les as pris ?",
             "Ton traitement n'est plus coché depuis {n} jours — peut-être juste un oubli de case ?",
-            "{n} jours sans prise de traitement cochée. Si tu l'as pris, coche-le ; sinon, c'est peut-être le moment.",
+            "{n} jours sans prise de traitement cochée. Si tu l'as pris, coche-le ; sinon, c'est le moment idéal.",
             "Petit point traitement : rien de coché depuis {n} jours.",
-            "Ça fait {n} jours que ton traitement n'est plus coché. Pas de sermon, juste un rappel.",
+            "Ça fait {n} jours que ton traitement n'est plus coché. Pas de sermon, juste un coup de coude amical.",
         ),
 
         CoachRule.SHOWER_MISSING to listOf(
-            "Ça fait {n} jours sans douche cochée. Tu te sens d'attaque pour en prendre une aujourd'hui ?",
-            "Une douche, ça ne te dit rien là tout de suite ? Même rapide, ça compte.",
-            "Pas de douche cochée depuis {n} jours. Si c'est trop, te laver le visage à l'eau froide, c'est déjà quelque chose.",
-            "Une idée sans obligation : une douche. Souvent on se sent un peu mieux après.",
+            "Ça fait {n} jours sans douche cochée. Tu te sens d'attaque pour en prendre une ?",
+            "Allez, une douche ? Même rapide, on en ressort toujours un peu mieux.",
+            "Pas de douche cochée depuis {n} jours. Si c'est trop, l'eau froide sur le visage, c'est déjà une victoire.",
+            "Une idée sans obligation : une bonne douche. C'est souvent le truc qui relance une journée.",
             "Tu penses pouvoir prendre une douche aujourd'hui ? Si c'est non, c'est non, on en reparlera.",
-            "{n} jours sans douche cochée. Ça arrive quand l'énergie n'est pas là. Aujourd'hui, c'est possible ?",
+            "{n} jours sans douche cochée. Ça arrive quand l'énergie n'est pas là. Aujourd'hui, c'est jouable ?",
         ),
 
         CoachRule.BRUSHING_LOW to listOf(
-            "Tu n'as pas coché de brossage de dents depuis {n} jours. Un seul, ce soir, ça suffirait.",
-            "{n} jours sans te brosser les dents d'après tes cartes. Deux minutes, et c'est fait.",
+            "Tu n'as pas coché de brossage de dents depuis {n} jours. Un seul, ce soir, et c'est gagné.",
+            "{n} jours sans te brosser les dents d'après tes cartes. Deux minutes, et c'est plié.",
             "Tes dents attendent depuis {n} jours. Même un brossage sur trois, c'est mieux que zéro.",
             "Rien de coché côté brossage de dents depuis {n} jours. Sans reproche : juste au cas où ça se serait perdu dans les journées.",
-            "{n} jours sans brossage de dents coché. Si tu passes devant le lavabo tout à l'heure, c'est l'occasion.",
+            "{n} jours sans brossage de dents coché. Si tu passes devant le lavabo tout à l'heure, saute dessus.",
         ),
 
         CoachRule.SHORT_NIGHTS to listOf(
@@ -152,12 +180,12 @@ object CoachMessages {
             "Tu dors environ {duree} par nuit ces derniers jours. Ne juge pas trop tes journées, elles partent avec un handicap.",
             "Des nuits courtes en ce moment : {duree} en moyenne. Si tu peux lever le pied aujourd'hui, fais-le.",
             "Tu dors autour de {duree} par nuit ces temps-ci. Une sieste courte en début d'après-midi ne casse pas la nuit suivante.",
-            "{duree} de sommeil par nuit, c'est peu. C'est peut-être le premier truc à regarder avant le reste.",
+            "{duree} de sommeil par nuit, c'est peu. C'est peut-être le premier levier à tirer avant tout le reste.",
         ),
 
         CoachRule.LATE_NIGHTS to listOf(
             "Tu t'es couché après minuit {n} nuits d'affilée. Pas de leçon, juste un constat.",
-            "Ça fait {n} nuits que tu te couches très tard. Tu veux essayer de couper les écrans un peu plus tôt ce soir ?",
+            "Ça fait {n} nuits que tu te couches très tard. Tu veux tenter de couper les écrans plus tôt ce soir ?",
             "{n} nuits tardives à la suite. Les journées d'après le sentent souvent.",
             "Couché très tard {n} nuits de suite. Si demain est libre, ce n'est pas grave du tout.",
             "{n} soirs de suite couché passé minuit. Ton corps s'en souvient même si toi non.",
@@ -172,92 +200,93 @@ object CoachMessages {
         ),
 
         // --- Ce qui remonte ----------------------------------------------
+        // Le coeur du sujet : quand ca va, on le dit fort.
 
         CoachRule.FIRST_GREEN to listOf(
-            "Première journée verte depuis {n} jours. Je la note en gras.",
-            "Ça faisait {n} jours qu'il n'y avait pas eu de journée verte. Celle-là compte.",
-            "Une journée verte, enfin, après {n} jours. Essaie de te souvenir de ce qu'il y avait dedans.",
-            "{n} jours que j'attendais une bonne journée comme celle-ci. Bien joué.",
-            "Journée verte après {n} jours de traversée. C'est la preuve que ça bouge encore.",
+            "Première journée verte depuis {n} jours ! Bravo, celle-là je la note en gras.",
+            "{n} jours que j'attendais ça : une journée verte. Savoure-la, tu l'as méritée !",
+            "Enfin une journée verte, après {n} jours. Chapeau d'avoir tenu jusqu'ici !",
+            "Une journée verte après {n} jours de traversée. C'est la preuve que ça bouge encore — continue !",
+            "{n} jours, et te voilà avec une journée verte. Garde bien en tête ce qu'il y avait dedans !",
         ),
 
         CoachRule.BACK_AFTER_BREAK to listOf(
-            "Content de te revoir. {n} jours sans rien noter, et alors : on reprend où tu veux.",
-            "Te revoilà. Pas besoin de rattraper les {n} jours manquants, commence par aujourd'hui.",
-            "{n} jours d'absence, aucune importance. Ton calendrier n'est pas un devoir.",
-            "Ça faisait {n} jours. Si tu te souviens des couleurs de ces jours-là, tu peux les remplir ; sinon on repart d'ici.",
-            "De retour après {n} jours. Les trous font partie de l'histoire eux aussi.",
+            "Content de te revoir ! {n} jours sans rien noter, et alors : on reprend où tu veux.",
+            "Te revoilà. Pas besoin de rattraper les {n} jours manquants, on repart d'aujourd'hui.",
+            "{n} jours d'absence, aucune importance. Ton calendrier n'est pas un devoir à rendre.",
+            "Ça faisait {n} jours. Si tu te souviens des couleurs de ces jours-là, remplis-les ; sinon on repart d'ici.",
+            "De retour après {n} jours, et c'est très bien comme ça. Les trous font partie de l'histoire eux aussi.",
         ),
 
         CoachRule.GREEN_STREAK to listOf(
-            "{n} journées vertes d'affilée. Regarde ce que tu as fait de différent ces jours-là.",
-            "{n} bonnes journées à la suite, ce n'est pas un hasard. Continue pareil.",
-            "{n} journées vertes de suite. Je te le dis parce que c'est facile de ne pas le remarquer soi-même.",
-            "{n} bonnes journées d'affilée. Note dans ton journal ce qui tourne bien en ce moment, ça servira plus tard.",
-            "{n} journées vertes d'affilée. Profites-en sans culpabiliser.",
+            "{n} journées vertes d'affilée ! Bravo, regarde bien ce que tu fais de différent en ce moment.",
+            "{n} bonnes journées à la suite, et ce n'est pas un hasard. Continue exactement pareil !",
+            "{n} journées vertes de suite. Chapeau — c'est le genre de chose qu'on ne remarque pas tout seul.",
+            "{n} bonnes journées d'affilée. Savoure, tu l'as gagné !",
+            "{n} journées vertes d'affilée. Franchement bravo, profite sans culpabiliser.",
         ),
 
         CoachRule.REBOUND to listOf(
-            "Ta journée remonte nettement par rapport à hier. Ça fait du bien de le voir écrit.",
-            "Hier était dur, aujourd'hui beaucoup moins. Voilà exactement pourquoi ça vaut le coup de noter.",
-            "Nette remontée par rapport à hier. Ces bascules-là arrivent plus souvent que tu ne crois.",
-            "Grosse différence avec hier, dans le bon sens.",
-            "Aujourd'hui est bien au-dessus d'hier. Garde ça en tête le prochain jour noir.",
+            "Ta journée remonte franchement par rapport à hier. Bravo, ça fait plaisir à voir !",
+            "Hier était dur, aujourd'hui beaucoup moins. Chapeau d'avoir traversé ça !",
+            "Belle remontée par rapport à hier. Garde ça en tête le prochain jour sombre !",
+            "Grosse différence avec hier, et dans le bon sens. Bravo !",
+            "Tu es bien au-dessus d'hier. Ça, c'est ta force : ça repart — continue !",
         ),
 
         CoachRule.NOTING_STREAK to listOf(
-            "{n} jours notés d'affilée. Tenir un suivi comme ça, beaucoup n'y arrivent pas trois jours.",
-            "{n} jours de suite sans en louper un seul. Ça commence à faire de vraies données.",
-            "{n} jours notés d'affilée. C'est ça qui rend ton onglet Bilan utile.",
-            "{n} jours à la suite dans ton calendrier. Rien que pour la régularité, chapeau.",
-            "{n} jours notés sans interruption. Tu construis quelque chose, même les jours où tu n'en as pas l'impression.",
+            "{n} jours notés d'affilée ! Bravo, beaucoup ne tiennent pas trois jours.",
+            "{n} jours de suite sans en louper un. Chapeau, ça commence à faire de vraies données !",
+            "{n} jours notés d'affilée. Continue, c'est ça qui rend ton bilan vraiment utile !",
+            "{n} jours à la suite dans ton calendrier. Rien que pour la régularité : respect.",
+            "{n} jours notés sans interruption. Tu construis un truc solide, même quand tu n'en as pas l'impression !",
         ),
 
         CoachRule.PRAYER_STREAK to listOf(
-            "Tes cinq prières, {n} jours de suite. C'est une régularité qui se remarque.",
-            "{n} jours d'affilée avec les cinq prières faites.",
-            "{n} jours complets côté prières. Bien tenu.",
-            "Cinq prières sur cinq depuis {n} jours.",
-            "Ça fait {n} jours que tes cinq prières sont cochées.",
+            "{n} jours d'affilée avec tes cinq prières ! Bravo, c'est une sacrée régularité.",
+            "Tes cinq prières, {n} jours de suite. Chapeau — tiens bon comme ça !",
+            "{n} jours que tu tiens tes cinq prières. C'est une vraie force, continue !",
+            "Cinq prières sur cinq, {n} jours de suite. Franchement, respect.",
+            "{n} jours complets côté prières. Bravo, garde ce rythme !",
         ),
 
         CoachRule.GREEN_DAY to listOf(
-            "Bonne journée aujourd'hui. Qu'est-ce qui l'a rendue comme ça ? Deux mots dans le journal et tu le sauras dans six mois.",
-            "Une journée verte aujourd'hui. Prends-la.",
-            "Bonne journée. Ce sont celles-là qu'on oublie le plus vite : écris-en un bout.",
-            "Ta journée est verte. C'est une info importante aussi, pas seulement les mauvaises.",
-            "Bonne journée aujourd'hui. Rien d'autre à ajouter.",
+            "Bonne journée aujourd'hui ! Qu'est-ce qui l'a rendue comme ça ? Deux mots dans le journal et tu le sauras dans six mois.",
+            "Une journée verte aujourd'hui. Prends-la et savoure-la !",
+            "Bonne journée ! Ce sont celles-là qu'on oublie le plus vite : écris-en un bout.",
+            "Ta journée est verte, et ça compte autant que les mauvaises. Profite !",
+            "Belle journée aujourd'hui. Rien d'autre à ajouter, savoure.",
         ),
 
         CoachRule.JOB_EFFORT to listOf(
-            "{n} candidatures envoyées cette semaine. C'est du travail, même quand ça ne répond pas.",
-            "{n} candidatures sur sept jours. Le résultat ne dépend pas de toi, l'envoi si — et tu l'as fait.",
-            "{n} candidatures cette semaine. Garde ce chiffre en tête les jours où tu as l'impression de ne rien faire.",
-            "Belle semaine côté recherche : {n} candidatures envoyées.",
-            "{n} candidatures envoyées cette semaine. Chacune a coûté quelque chose, et ça se voit dans la courbe.",
+            "{n} candidatures envoyées cette semaine. Bravo, c'est du vrai travail !",
+            "{n} candidatures en sept jours. Le résultat ne dépend pas de toi, l'envoi si — et tu l'as fait, chapeau !",
+            "{n} candidatures cette semaine. Garde ce chiffre en tête les jours où tu as l'impression de ne rien faire !",
+            "Belle semaine de recherche : {n} candidatures envoyées. Continue, ça finit par payer !",
+            "{n} candidatures envoyées cette semaine. Chacune t'a coûté quelque chose : respect.",
         ),
 
         CoachRule.BETTER_WEEK to listOf(
-            "Ta semaine est au-dessus de la précédente. Doucement, mais dans le bon sens.",
-            "Cette semaine remonte par rapport à la dernière.",
-            "Meilleure semaine que celle d'avant. Ça ne se sent pas toujours sur le moment, mais les chiffres le disent.",
-            "Ta semaine est en hausse. Continue comme tu fais.",
-            "La moyenne de ta semaine est meilleure que celle de la précédente.",
+            "Ta semaine passe au-dessus de la précédente. Bravo, ça monte !",
+            "Cette semaine est meilleure que la dernière. Continue comme ça !",
+            "Semaine au-dessus de la précédente. Ça ne se sent pas toujours sur le moment, et pourtant c'est réel — bravo !",
+            "Ta semaine est en hausse. Garde exactement ce rythme !",
+            "Meilleure semaine que la précédente. Chapeau, c'est toi qui l'as construite.",
         ),
 
         CoachRule.PRAYERS_ALL to listOf(
-            "Tes cinq prières sont faites aujourd'hui.",
-            "Cinq prières sur cinq pour aujourd'hui. C'est noté.",
-            "Journée complète côté prières.",
-            "Tes cinq prières y sont pour aujourd'hui.",
+            "Tes cinq prières sont faites aujourd'hui. Bien joué, savoure ça !",
+            "Cinq prières sur cinq aujourd'hui. Belle journée de tenue !",
+            "Journée complète côté prières. Bravo à toi !",
+            "Tes cinq prières y sont pour aujourd'hui. Chapeau !",
         ),
 
         CoachRule.BEST_MONTH to listOf(
-            "Ton meilleur mois de cette dernière année, c'est {mois}.",
-            "Meilleure moyenne mensuelle des douze derniers mois : {mois}.",
-            "Le mois de {mois} passe devant tous les autres de l'année. Va voir ton Bilan, ça se voit bien.",
-            "Aucun mois de cette année n'était monté aussi haut que {mois}.",
-            "Le mois de {mois} tient le haut du classement de tes derniers mois.",
+            "Ton meilleur mois de cette dernière année, c'est {mois}. Bravo !",
+            "Aucun mois des douze derniers n'est monté aussi haut que {mois}. Chapeau !",
+            "Le mois de {mois} passe devant tous les autres. Va voir ton bilan, ça se voit bien — bravo !",
+            "Meilleure moyenne des douze derniers mois : {mois}. Franchement, bravo.",
+            "Le mois de {mois} tient le haut du classement. Respect, garde cette dynamique !",
         ),
 
         // --- Ce qui va avec les bonnes journees --------------------------
@@ -272,11 +301,11 @@ object CoachMessages {
         ),
 
         CoachRule.FACTOR_TODAY to listOf(
-            "Tu l'as fait aujourd'hui, et {constat} tes journées se passent souvent mieux.",
-            "C'est coché aujourd'hui — d'après tes journées, {constat} c'est plutôt bon signe.",
-            "Bien vu : {constat}, la moyenne de tes journées est plus haute que d'habitude.",
-            "Ça revient souvent dans tes bonnes journées, et c'est coché aujourd'hui.",
-            "D'habitude, {constat}, tes journées se passent rarement mal. Et c'est coché aujourd'hui.",
+            "Tu l'as fait aujourd'hui, et {constat} tes journées se passent souvent mieux. Bien vu !",
+            "C'est coché aujourd'hui — d'après tes journées, {constat} c'est plutôt bon signe. Continue !",
+            "Joli : {constat}, la moyenne de tes journées est plus haute que d'habitude.",
+            "Ça revient souvent dans tes bonnes journées, et c'est coché aujourd'hui. Bien joué !",
+            "D'habitude, {constat}, tes journées se passent rarement mal. Et c'est coché aujourd'hui !",
         ),
 
         CoachRule.FACTOR_HEAVY to listOf(
@@ -291,15 +320,15 @@ object CoachMessages {
 
         CoachRule.ALONE_STREAK to listOf(
             "{n} jours sans personne de noté dans tes journées. Un message à quelqu'un, même trois mots, ça compte comme du contact.",
-            "Ça fait {n} jours que tu n'as vu personne d'après tes cartes. Tu as quelqu'un à qui tu pourrais écrire aujourd'hui ?",
-            "{n} jours en solo d'après tes journées. Pas obligé de voir quelqu'un en vrai : un appel de deux minutes, ça suffit parfois.",
+            "Ça fait {n} jours que tu n'as vu personne d'après tes cartes. Tu as quelqu'un à qui écrire aujourd'hui ?",
+            "{n} jours en solo d'après tes journées. Pas besoin de voir quelqu'un en vrai : un appel de deux minutes, ça suffit parfois.",
             "Personne de noté depuis {n} jours. Si l'idée te pèse, laisse tomber ; sinon, pense à ta moitié ou à un pote.",
             "{n} jours seul d'après tes cartes. C'est le genre de truc qui s'installe sans qu'on le décide.",
         ),
 
         CoachRule.STAYED_IN to listOf(
             "{n} jours sans sortir. Même cinq minutes devant la porte, ça compte comme être sorti.",
-            "Ça fait {n} jours que tu restes à la maison. Tu te sens de faire un petit tour dehors, juste au bout de la rue ?",
+            "Ça fait {n} jours que tu restes à la maison. Tu te sens de faire un tour dehors, juste au bout de la rue ?",
             "{n} jours sans sortir de chez toi. L'air du dehors, c'est souvent moins pire que ce qu'on imagine avant d'y aller.",
             "Pas sorti depuis {n} jours. Une course à faire, une poubelle à descendre ? Ça fait le job.",
             "{n} jours sans mettre le nez dehors. Si c'est non aujourd'hui, c'est non.",
@@ -341,11 +370,11 @@ object CoachMessages {
         // --- Argent ---------------------------------------------------------
 
         CoachRule.MONEY_INCOME to listOf(
-            "{montant} de rentré ces derniers jours. Si tu peux en mettre une petite part de côté tout de suite, c'est le meilleur moment.",
-            "Tu as noté {montant} de rentrée. Décider maintenant ce que tu en gardes, c'est plus facile que dans deux semaines.",
-            "{montant} sont rentrés récemment. Rien à faire d'obligatoire — juste, c'est maintenant que le choix est le plus simple.",
+            "{montant} de rentré ces derniers jours ! Si tu peux en mettre une part de côté tout de suite, c'est le meilleur moment.",
+            "Tu as noté {montant} de rentrée. Décider maintenant ce que tu en gardes, c'est bien plus facile que dans deux semaines.",
+            "{montant} sont rentrés récemment. Rien d'obligatoire — juste, c'est maintenant que le choix est le plus simple.",
             "Une rentrée de {montant} est notée. Tu veux en bloquer un bout avant qu'il se dilue ?",
-            "{montant} de rentré. C'est noté, et ça se verra dans ton bilan du mois.",
+            "{montant} de rentré, et c'est noté. Ça se verra dans ton bilan du mois !",
         ),
 
         CoachRule.MONEY_SAVING to listOf(
@@ -377,10 +406,10 @@ object CoachMessages {
         ),
 
         CoachRule.CALM_MONEY to listOf(
-            "Tes dépenses du mois sont plus calmes que celles du mois dernier, à la même date.",
-            "Tu dépenses moins que le mois dernier pour l'instant. Ça se voit dans ton onglet Argent.",
-            "Le mois est plus tranquille que le précédent côté dépenses.",
-            "Moins de dépenses que le mois dernier à ce stade du mois.",
+            "Tes dépenses du mois sont plus calmes que celles du mois dernier à la même date. Bien joué !",
+            "Tu dépenses moins que le mois dernier pour l'instant. Ça se voit dans ton onglet Argent !",
+            "Le mois est plus tranquille que le précédent côté dépenses. Continue comme ça !",
+            "Moins de dépenses que le mois dernier à ce stade du mois. Joli coup !",
         ),
 
         CoachRule.JOB_PAUSE to listOf(
@@ -393,24 +422,24 @@ object CoachMessages {
         // --- Bilan -----------------------------------------------------------
 
         CoachRule.STATS_TOP_FACTOR to listOf(
-            "Le lien le plus net de tes journées : {constat}, elles sont meilleures de {ecart} point en moyenne.",
+            "Le lien le plus net de tout ton suivi : {constat}, tes journées gagnent {ecart} point en moyenne.",
             "Sur toutes tes journées notées, c'est {constat} que l'écart est le plus grand : {ecart} point de mieux.",
-            "Ce qui ressort le plus de tes journées : {constat}, elles montent de {ecart} point en moyenne. Ça ne prouve pas une cause, mais ça se remarque.",
+            "Ce qui ressort le plus de tes journées : {constat}, elles montent de {ecart} point. Ça ne prouve pas une cause, mais ça se remarque.",
             "En moyenne, {constat}, tes journées gagnent {ecart} point. C'est le plus gros écart de tout ton suivi.",
         ),
 
         CoachRule.STATS_HARD_PART to listOf(
             "Sur tes journées notées, c'est le {moment} qui revient le plus souvent en bas. Savoir quel moment est le plus dur aide à s'organiser autour.",
-            "Le {moment} est ton moment le plus difficile en moyenne. Ce n'est pas une fatalité, c'est une info.",
-            "Ton {moment} est systématiquement plus bas que le reste de la journée. Peut-être de quoi prévoir quelque chose de doux à ce moment-là.",
+            "Le {moment} est ton moment le plus difficile en moyenne. Ce n'est pas une fatalité, c'est une info à utiliser.",
+            "Ton {moment} est régulièrement plus bas que le reste de la journée. De quoi prévoir quelque chose de doux à ce moment-là.",
             "D'après tes quatre moments, c'est le {moment} qui pèse le plus. Ça se voit sur l'ensemble, pas sur un jour.",
         ),
 
         CoachRule.STATS_TREND_UP to listOf(
-            "Tes trente derniers jours sont au-dessus des trente précédents de {ecart} point. La pente est bonne.",
-            "Sur les trente derniers jours, ta moyenne a monté de {ecart} point par rapport au mois d'avant.",
-            "Tes trente derniers jours vont mieux que les trente d'avant : {ecart} point de plus. Ça ne se sent pas au jour le jour.",
-            "La tendance de tes trente derniers jours est en hausse de {ecart} point. C'est lent, et c'est comme ça que ça marche.",
+            "Tes trente derniers jours sont au-dessus des trente précédents de {ecart} point. Bravo, la pente est bonne !",
+            "Sur les trente derniers jours, ta moyenne a monté de {ecart} point. Continue, ça paye !",
+            "Tes trente derniers jours vont mieux que les trente d'avant : {ecart} point de plus. Chapeau, ça ne se sent pas au jour le jour !",
+            "La tendance de tes trente derniers jours monte de {ecart} point. C'est lent, et c'est comme ça que ça marche — garde le cap !",
         ),
 
         CoachRule.STATS_TREND_DOWN to listOf(
@@ -423,7 +452,7 @@ object CoachMessages {
         CoachRule.STATS_YOUNG to listOf(
             "Tu as {n} journées notées pour l'instant. À partir d'une trentaine, les comparaisons du bilan commencent vraiment à vouloir dire quelque chose.",
             "Encore {n} journées notées seulement. Le bilan devient intéressant vers trente ou quarante, laisse-lui le temps.",
-            "{n} journées dans ton suivi. C'est un début — les liens entre ce que tu fais et tes journées ont besoin de plus de matière.",
+            "{n} journées dans ton suivi. C'est un bon début — les liens entre ce que tu fais et tes journées ont juste besoin de plus de matière.",
         ),
 
         // --- Remplir l'application ---------------------------------------
@@ -455,11 +484,11 @@ object CoachMessages {
         // --- Petites choses -----------------------------------------------
 
         CoachRule.BIRTHDAY to listOf(
-            "Joyeux anniversaire {prenom}. Une journée à toi.",
-            "C'est ton anniversaire aujourd'hui. Prends soin de toi un peu plus que d'habitude.",
-            "Bon anniversaire {prenom}. Quoi qu'il y ait eu cette année, tu es encore là.",
-            "C'est ton anniversaire. Tu as le droit de te faire plaisir sans te justifier.",
-            "Bon anniversaire. Que la journée soit verte ou pas, elle est à toi.",
+            "Joyeux anniversaire {prenom} ! Bravo pour cette année de plus, elle t'a coûté et tu es là.",
+            "Bon anniversaire {prenom} ! Quoi qu'il y ait eu cette année, tu es encore debout : respect.",
+            "C'est ton anniversaire aujourd'hui ! Savoure la journée, tu l'as bien méritée.",
+            "Joyeux anniversaire ! Aujourd'hui tu ne te justifies devant personne, tu profites.",
+            "Bon anniversaire {prenom} ! Verte ou pas, cette journée est à toi : profite bien.",
         ),
 
         CoachRule.NEW_MONTH to listOf(
@@ -471,23 +500,23 @@ object CoachMessages {
         ),
 
         CoachRule.PHOTO_ADDED to listOf(
-            "Tu as gardé une photo de cette journée. Ton toi de dans un an te remerciera.",
-            "Photo ajoutée à ta journée. C'est le genre de truc qu'on est content de retrouver plus tard.",
+            "Tu as gardé une photo de cette journée. Ton toi de dans un an te remerciera !",
+            "Photo ajoutée à ta journée. C'est le genre de truc qu'on est bien content de retrouver plus tard.",
             "Une image de plus dans l'appli, et elle reste sur ton téléphone, nulle part ailleurs.",
-            "Belle idée d'avoir mis une photo sur cette journée.",
+            "Belle idée d'avoir mis une photo sur cette journée !",
             "Photo ajoutée. Les journées avec une image sont celles qu'on relit le plus.",
         ),
 
         CoachRule.WEIGHT_TRACKED to listOf(
-            "Tu notes ton poids régulièrement ce mois-ci. Ta courbe commence à vouloir dire quelque chose.",
+            "Tu notes ton poids régulièrement ce mois-ci. Ta courbe commence à vouloir dire quelque chose !",
             "Suivi du poids bien tenu ce mois-ci. Regarde la tendance, pas le chiffre du jour.",
-            "Plusieurs pesées notées ce mois-ci. C'est la régularité qui rend la courbe de poids lisible.",
+            "Plusieurs pesées notées ce mois-ci. C'est cette régularité-là qui rend ta courbe de poids lisible.",
             "Tu tiens ton suivi de poids ce mois-ci. Le chiffre bouge d'un jour à l'autre, c'est normal.",
         ),
 
         CoachRule.WEEKEND to listOf(
             "Le week-end arrive. Rien d'obligatoire dedans.",
-            "Fin de semaine. Si tu peux te garder un moment tranquille, c'est le bon timing.",
+            "Fin de semaine ! Si tu peux te garder un moment tranquille, c'est le bon timing.",
             "Bientôt le week-end. Prévois-toi un truc simple qui te fait plaisir.",
             "Le week-end commence. Le repos compte comme une activité.",
             "Week-end en approche. Un truc à toi, même petit, ça change la couleur d'un samedi.",

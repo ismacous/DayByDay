@@ -54,11 +54,21 @@ class CoachStore(context: Context) : CoachMemory {
     private fun countFor(dayKey: String, countKey: String, epochDay: Long): Int =
         if (prefs.getLong(dayKey, NEVER) == epochDay) prefs.getInt(countKey, 0) else 0
 
+    /**
+     * Le quota du jour s'ecrit **tout de suite** (`commit`), pas en differe.
+     *
+     * Un compteur ecrit en differe ne compte rien si le processus s'arrete
+     * avant : c'est exactement ce qui est arrive quand la bulle plantait au
+     * dessin — l'application se fermait avant que « une bulle a ete montree
+     * aujourd'hui » ne soit ecrit, donc elle recommencait a chaque ouverture,
+     * indefiniment. Une ecriture par jour, sur quelques octets : le cout est
+     * nul a cote de la garantie.
+     */
     private fun bump(dayKey: String, countKey: String, epochDay: Long) {
         prefs.edit()
             .putLong(dayKey, epochDay)
             .putInt(countKey, countFor(dayKey, countKey, epochDay) + 1)
-            .apply()
+            .commit()
     }
 
     private fun shownKey(slug: String) = "vu_$slug"

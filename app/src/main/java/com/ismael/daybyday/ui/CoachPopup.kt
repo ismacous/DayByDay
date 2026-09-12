@@ -281,20 +281,20 @@ private fun Presence(
 
                 // Le halo, large et tres transparent : c'est lui qui donne
                 // l'impression que quelque chose est allume derriere.
+                val halo = haloRadius(size.minDimension)
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(palette.glow.copy(alpha = 0.42f), Color.Transparent),
                         center = centre,
-                        radius = size.minDimension * 0.62f,
+                        radius = halo,
                     ),
-                    radius = size.minDimension * 0.62f,
+                    radius = halo,
                     center = centre,
                 )
 
                 // Le disque, qui respire de quelques pour cent seulement. Au-dela
                 // ca devient un battement de coeur, et ce n'est pas le sujet.
-                val grow = 1f + 0.045f * sin(phase)
-                val radius = size.minDimension * 0.31f * grow * pop.value
+                val radius = presenceRadius(size.minDimension, breath.value, pop.value)
                 drawCircle(
                     brush = Brush.linearGradient(
                         colors = palette.gradient,

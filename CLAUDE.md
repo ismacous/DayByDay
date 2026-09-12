@@ -74,6 +74,14 @@ téléphone (Samsung S25, Android 15).
    cinq prières, six jours de suite » oui. Chaque situation déclare donc les
    mots que ses phrases doivent contenir (`CoachRule.subjects`), et un test le
    vérifie — c'est le garde-fou, pas la relecture.
+9. **Une félicitation doit féliciter, pas constater.** « Tes cinq prières, six
+   jours de suite. C'est une régularité qui se remarque. » est un relevé : ça
+   se comprend, et ça ne fait aucun bien. Ismael l'a dit mieux que personne —
+   ça fait « un résumé en attendant notre mort ». Un ami dit que c'est bien et
+   il pousse. Toute phrase de ton `PROUD` ou `CHEER` porte donc un mot d'élan
+   (`CoachMessages.LIFT_WORDS`), vérifié par un test. L'inverse vaut aussi : on
+   ne crie pas « bravo » un jour noir, où le ton `CARE` n'apporte qu'une
+   présence.
 
 ## Architecture
 
@@ -571,6 +579,18 @@ téléphone (Samsung S25, Android 15).
   le blanc passe encore, et finit clair où il disparaît. Il n'y a plus de
   `LocalCardInk` : plus aucun contenu de carte ne repose sur de la couleur —
   seul l'en-tête de la carte d'humeur le fait, et il choisit son encre lui-même.
+- **Un dégradé de rayon nul ferme l'application.** La bulle du coup de pouce
+  arrive en grossissant : à la toute première image, l'échelle vaut zéro, donc
+  le rayon du disque aussi — et `Brush.radialGradient(radius = 0f)` construit
+  un `RadialGradient` Android, qui refuse (« radius must be > 0 ») et fait
+  tomber le processus. L'application se fermait deux secondes après chaque
+  ouverture. Deux leçons : (1) tout rayon calculé à partir d'une valeur animée
+  **ou** d'une taille de boîte a un plancher (`presenceRadius`, `haloRadius`,
+  dans `ui/PresenceShape.kt`, sans rien d'Android pour être testés), et un
+  dessin sur une boîte pas encore mesurée ne se fait pas du tout ; (2) le quota
+  « une bulle par jour » s'écrit en `commit()` et non en `apply()` — écrit en
+  différé, il était perdu à chaque fermeture, donc le plantage se rejouait
+  indéfiniment au lieu de ne toucher qu'une ouverture.
 - **Animations saccadées** : une valeur animée lue **pendant la composition**
   coûte une recomposition — et si elle nourrit une taille (l'épaisseur d'un
   `border`, par exemple), une remesure — à chaque image. L'anneau d'aujourd'hui

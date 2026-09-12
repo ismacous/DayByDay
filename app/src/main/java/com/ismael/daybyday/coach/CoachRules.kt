@@ -277,8 +277,15 @@ object CoachRules {
     private fun habitRules(snapshot: CoachSnapshot): List<NudgeCandidate> {
         val out = mutableListOf<NudgeCandidate>()
 
+        // « Personne » se deduit d'une absence d'etiquette, donc il faut
+        // d'abord savoir que ces etiquettes servent : sans ce garde-fou,
+        // quelqu'un qui ne coche jamais qui il voit se ferait dire tous les
+        // quatre jours qu'il ne voit personne. On ne devine rien.
+        val socialIsTracked = snapshot.countWhere(30) { day ->
+            SOCIAL_SLUGS.any { day.tagSlugs.contains(it) }
+        } >= 2
         val aloneStreak = snapshot.habitStreak { day -> SOCIAL_SLUGS.none { day.tagSlugs.contains(it) } }
-        if (aloneStreak >= 4) {
+        if (socialIsTracked && aloneStreak >= 4) {
             out += NudgeCandidate(
                 rule = CoachRule.ALONE_STREAK,
                 values = mapOf("n" to aloneStreak.toString()),

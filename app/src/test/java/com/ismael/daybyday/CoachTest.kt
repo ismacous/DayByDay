@@ -225,13 +225,29 @@ class CoachTest {
 
     @Test
     fun `le brossage ne se compte que sur les jours passes`() {
-        // Brosse tous les jours sauf les trois derniers : aujourd'hui a zero,
-        // mais c'est hier et avant-hier qui declenchent.
-        val entries = (0..20).map { day(it, DayColor.ORANGE, brushings = if (it <= 2) 0 else 2) }
+        // Brosse tous les jours sauf les quatre derniers. Aujourd'hui ne compte
+        // pas — a huit heures du matin, zero brossage ne veut rien dire — donc
+        // la serie des jours passes en vaut trois.
+        val entries = (0..20).map { day(it, DayColor.ORANGE, brushings = if (it <= 3) 0 else 2) }
         val candidate = CoachRules.candidates(snapshotOf(entries))
             .firstOrNull { it.rule == CoachRule.BRUSHING_LOW }
         assertNotNull(candidate)
         assertEquals("3", candidate!!.values["n"])
+    }
+
+    @Test
+    fun `on ne parle de solitude que si les etiquettes sociales servent`() {
+        // Personne de coche nulle part : c'est peut-etre qu'il ne s'en sert
+        // pas, pas qu'il ne voit personne. On se tait.
+        val never = (0..20).map { day(it, DayColor.ORANGE) }
+        assertFalse(rulesOf(snapshotOf(never)).contains(CoachRule.ALONE_STREAK))
+
+        // La, les etiquettes servent, et il y a un vrai trou depuis six jours.
+        val links = listOf(6, 8, 11).map { link(it, "friends") }
+        val tracked = CoachRules.candidates(snapshotOf(never, links))
+            .firstOrNull { it.rule == CoachRule.ALONE_STREAK }
+        assertNotNull(tracked)
+        assertEquals("6", tracked!!.values["n"])
     }
 
     @Test

@@ -94,6 +94,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ismael.daybyday.data.Badge
 import com.ismael.daybyday.data.DayCard
+import com.ismael.daybyday.coach.NudgeSurface
 import com.ismael.daybyday.data.DayColor
 import com.ismael.daybyday.data.DayEntry
 import com.ismael.daybyday.data.DayPart
@@ -778,6 +779,16 @@ fun DayScreen(
                 MemoryCard(
                     memory = souvenir,
                     onOpen = { epochDay = souvenir.date.toEpochDay() },
+                )
+            }
+
+            // Le mot du coup de pouce, au-dessus des cartes et seulement sur
+            // aujourd'hui : les messages parlent au present, ils n'ont aucun
+            // sens sur une journee qu'on relit.
+            if (date == LocalDate.now()) {
+                CoachSpot(
+                    surface = NudgeSurface.DAY,
+                    modifier = Modifier.padding(top = 14.dp),
                 )
             }
 

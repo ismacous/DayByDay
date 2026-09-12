@@ -203,6 +203,42 @@ class Prefs(context: Context) {
         get() = prefs.getString(KEY_SCHEDULED_BACKUP, null)
         set(value) = prefs.edit().putString(KEY_SCHEDULED_BACKUP, value).apply()
 
+    // --- Coup de pouce ----------------------------------------------------
+
+    /** Les petits messages de soutien, dans l'application. */
+    var coachEnabled: Boolean
+        get() = prefs.getBoolean(KEY_COACH_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_COACH_ENABLED, value).apply()
+
+    /**
+     * Le meme coup de pouce, mais en notification. Coupe par defaut : une
+     * application qui se met a sonner toute seule apres une mise a jour est une
+     * application qu'on desinstalle.
+     */
+    var coachNotificationsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_COACH_NOTIFICATIONS, false)
+        set(value) = prefs.edit().putBoolean(KEY_COACH_NOTIFICATIONS, value).apply()
+
+    var coachHour: Int
+        get() = prefs.getInt(KEY_COACH_HOUR, 18)
+        set(value) = prefs.edit().putInt(KEY_COACH_HOUR, value).apply()
+
+    var coachMinute: Int
+        get() = prefs.getInt(KEY_COACH_MINUTE, 30)
+        set(value) = prefs.edit().putInt(KEY_COACH_MINUTE, value).apply()
+
+    /** Une notification par jour, ou deux au maximum. Jamais plus. */
+    var coachTwoPerDay: Boolean
+        get() = prefs.getBoolean(KEY_COACH_TWO, false)
+        set(value) = prefs.edit().putBoolean(KEY_COACH_TWO, value).apply()
+
+    val coachNotificationsPerDay: Int get() = if (coachTwoPerDay) 2 else 1
+
+    /** Prochain passage du coup de pouce, pour la ligne des Reglages. */
+    var nextCoachAt: Long
+        get() = prefs.getLong(KEY_NEXT_COACH, 0L)
+        set(value) = prefs.edit().putLong(KEY_NEXT_COACH, value).apply()
+
     // --- Bilan de la semaine ----------------------------------------------
 
     /**
@@ -312,6 +348,12 @@ class Prefs(context: Context) {
         const val KEY_LAST_REMINDER = "reminder_last_at"
         const val KEY_NEXT_REMINDER = "reminder_next_at"
         const val KEY_NEXT_WEEKLY = "weekly_review_next_at"
+        const val KEY_COACH_ENABLED = "coach_enabled"
+        const val KEY_COACH_NOTIFICATIONS = "coach_notifications"
+        const val KEY_COACH_HOUR = "coach_hour"
+        const val KEY_COACH_MINUTE = "coach_minute"
+        const val KEY_COACH_TWO = "coach_two_per_day"
+        const val KEY_NEXT_COACH = "coach_next_at"
         const val KEY_WEEKLY_ENABLED = "weekly_review_enabled"
         const val KEY_WEEKLY_HOUR = "weekly_review_hour"
         const val KEY_WEEKLY_MINUTE = "weekly_review_minute"

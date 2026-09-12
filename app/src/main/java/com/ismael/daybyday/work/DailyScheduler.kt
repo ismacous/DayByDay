@@ -32,6 +32,7 @@ object DailyScheduler {
     const val TEST_REMINDER_WORK = "daybyday-rappel-test"
     const val WEEKLY_WORK = "daybyday-bilan-semaine"
     const val TEST_WEEKLY_WORK = "daybyday-bilan-test"
+    const val TEST_COACH_WORK = "daybyday-coup-de-pouce-test"
 
     /**
      * Millisecondes jusqu'a la prochaine occurrence de [hour]:[minute].
@@ -128,9 +129,24 @@ object DailyScheduler {
             .enqueueUniqueWork(TEST_WEEKLY_WORK, ExistingWorkPolicy.REPLACE, request)
     }
 
+    /** Le coup de pouce. Meme mecanique que le rappel du soir : une alarme. */
+    fun scheduleCoach(context: Context, prefs: Prefs) {
+        ReminderAlarm.armCoach(context, prefs)
+    }
+
+    /** Envoie le coup de pouce tout de suite, pour voir ce que ca donne. */
+    fun sendTestCoach(context: Context) {
+        val request = OneTimeWorkRequestBuilder<CoachWorker>()
+            .setInputData(Data.Builder().putBoolean(CoachWorker.KEY_FORCE, true).build())
+            .build()
+        WorkManager.getInstance(context.applicationContext)
+            .enqueueUniqueWork(TEST_COACH_WORK, ExistingWorkPolicy.REPLACE, request)
+    }
+
     fun rescheduleAll(context: Context, prefs: Prefs) {
         scheduleReminder(context, prefs)
         scheduleAutoBackup(context, prefs)
         scheduleWeeklyReview(context, prefs)
+        scheduleCoach(context, prefs)
     }
 }

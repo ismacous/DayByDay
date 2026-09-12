@@ -34,7 +34,12 @@ class ReminderReceiver : BroadcastReceiver() {
         val app = context.applicationContext
         val action = intent.action
 
-        if (action == ReminderAlarm.ACTION_EVENING || action == ReminderAlarm.ACTION_WEEKLY) {
+        val isAlarm = action == ReminderAlarm.ACTION_EVENING ||
+            action == ReminderAlarm.ACTION_WEEKLY ||
+            action == ReminderAlarm.ACTION_COACH ||
+            action == ReminderAlarm.ACTION_COACH_LATE
+
+        if (isAlarm) {
             // `goAsync` demande a Android quelques secondes de plus : le temps
             // de lire la journee en base avant de decider quoi afficher.
             val pending = goAsync()
@@ -42,7 +47,8 @@ class ReminderReceiver : BroadcastReceiver() {
                 try {
                     when (action) {
                         ReminderAlarm.ACTION_EVENING -> Reminders.sendEvening(app, forced = false)
-                        else -> Reminders.sendWeekly(app, forced = false)
+                        ReminderAlarm.ACTION_WEEKLY -> Reminders.sendWeekly(app, forced = false)
+                        else -> Reminders.sendCoach(app, forced = false)
                     }
                 } finally {
                     runCatching { ReminderAlarm.rearmAll(app, app.dayByDayApp.prefs) }

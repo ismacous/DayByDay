@@ -7,10 +7,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
+import com.ismael.daybyday.coach.CoachStore
 import com.ismael.daybyday.data.AppDatabase
 import com.ismael.daybyday.data.DayRepository
 import com.ismael.daybyday.data.Prefs
 import com.ismael.daybyday.data.TagCatalog
+import com.ismael.daybyday.work.CoachWorker
 import com.ismael.daybyday.work.DailyScheduler
 import com.ismael.daybyday.work.ReminderWorker
 import com.ismael.daybyday.work.WeeklyReviewWorker
@@ -24,6 +26,9 @@ class DayByDayApp : Application() {
     val repository: DayRepository by lazy { DayRepository(this) }
     val prefs: Prefs by lazy { Prefs(this) }
     val lock: LockController by lazy { LockController(prefs) }
+
+    /** Ce que le coup de pouce a deja dit, pour ne pas se repeter. */
+    val coach: CoachStore by lazy { CoachStore(this) }
 
     /**
      * Le bonjour du demarrage a-t-il deja ete joue ?
@@ -42,6 +47,7 @@ class DayByDayApp : Application() {
         super.onCreate()
         createReminderChannel()
         createWeeklyChannel()
+        createCoachChannel()
         DailyScheduler.rescheduleAll(this, prefs)
         appScope.launch {
             runCatching { TagCatalog.sync(AppDatabase.get(this@DayByDayApp).dayDao()) }
@@ -69,6 +75,19 @@ class DayByDayApp : Application() {
             .setVibrationEnabled(true)
             .build()
         manager.createNotificationChannel(channel)
+    }
+
+    /**
+     * Le canal du coup de pouce. Importance normale, et canal a part : on doit
+     * pouvoir le couper sans perdre le rappel du soir, qui lui est un bandeau.
+     */
+    private fun createCoachChannel() {
+        val channel = NotificationChannelCompat
+            .Builder(CoachWorker.CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_DEFAULT)
+            .setName("Coup de pouce")
+            .setDescription("Les petits messages de soutien, une ou deux fois par jour au maximum.")
+            .build()
+        NotificationManagerCompat.from(this).createNotificationChannel(channel)
     }
 
     /**

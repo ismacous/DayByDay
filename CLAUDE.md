@@ -57,6 +57,17 @@ téléphone (Samsung S25, Android 15).
    `jobApplications`), et « cuisine maison » ne disait rien de plus que
    « bien mangé ».
 6. **Incrémenter `versionCode` et `versionName`** à chaque version livrée.
+   Et ne **jamais** repartir d'une base plus ancienne que ce qui tourne sur le
+   téléphone : Android refuse d'installer un `versionCode` inférieur, et
+   l'échec ressemble à un APK corrompu (« Application non installée ») alors
+   que c'est une question de numéro. `main` est resté en 1.3 ; la vraie ligne
+   de développement est la branche en cours.
+7. **Le coup de pouce ne lit jamais le journal** et ne touche jamais à la
+   couleur d'une journée. Il ne parle que de ce qui est coché, il ne relance
+   **jamais** sur une habitude que l'utilisateur ne suit pas déjà, et une carte
+   masquée fait taire ses règles — masquer une carte ne doit rien coûter, ici
+   comme dans la note. Les prières et la recherche d'emploi ne déclenchent que
+   du positif. Voir les règles d'écriture en tête de `coach/CoachMessages.kt`.
 
 ## Architecture
 
@@ -67,7 +78,15 @@ téléphone (Samsung S25, Android 15).
 - `health/` — lecture locale des pas (Health Connect) et du temps d'écran
   (statistiques d'usage, calculées à partir des **événements** pour ne pas
   compter deux fois les périodes qui se chevauchent).
-- `work/` — rappel du soir, bilan du lundi matin, sauvegarde automatique.
+- `coach/` — le « coup de pouce » : des messages de soutien choisis par un
+  algorithme, jamais par une IA. `CoachSnapshot` résume ce qui est **coché**
+  dans les cartes (jamais le journal), `CoachFactors` compare chaque facteur à
+  la couleur des journées, `CoachRules` reconnaît les situations,
+  `CoachMessages` tient le catalogue de phrases et `CoachEngine` choisit quoi
+  dire et quand se taire. Tout y est du Kotlin pur, donc testable sans
+  émulateur (`CoachTest`).
+- `work/` — rappel du soir, bilan du lundi matin, coup de pouce, sauvegarde
+  automatique.
 - `ui/` — écrans Compose. La page du journal est une suite de **blocs**
   (`PageBlocks`, `BlockViews`) ; le reste est classique.
   Navigation par onglets : Mois, Année, Bilan, Argent,

@@ -6,15 +6,22 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.ismael.daybyday.R
+import com.ismael.daybyday.coach.CoachEngine
+import com.ismael.daybyday.coach.CoachRule
+import com.ismael.daybyday.coach.CoachSnapshot
+import com.ismael.daybyday.coach.Nudge
+import com.ismael.daybyday.coach.NudgeSurface
+import com.ismael.daybyday.coach.TemporaryCoachMemory
 import com.ismael.daybyday.data.WeekReview
 import com.ismael.daybyday.data.WeekReviewBuilder
 import com.ismael.daybyday.dayByDayApp
 import com.ismael.daybyday.ui.MainActivity
 import java.time.LocalDate
+import java.time.LocalTime
 import java.util.Locale
 
 /**
- * Les deux notifications de l'application, ecrites **une seule fois**.
+ * Les notifications de l'application, ecrites **une seule fois**.
  *
  * Elles partent de deux endroits — l'alarme du soir, et le bouton d'essai des
  * Reglages — et c'est justement pour ca que le texte et la construction vivent
@@ -106,6 +113,75 @@ object Reminders {
         app.prefs.lastWeeklyReviewAt = System.currentTimeMillis()
     }
 
+    /**
+     * Le coup de pouce.
+     *
+     * Il ne sonne que s'il a vraiment quelque chose a dire : la regle de
+     * politesse (« rien de special aujourd'hui ») reste dans l'application et
+     * ne reveille jamais le telephone. Le quota du jour — une notification, ou
+     * deux au maximum — est tenu par la memoire du coup de pouce, pas par le
+     * nombre d'alarmes posees.
+     *
+     * [forced] est le bouton d'essai des Reglages : il ignore le quota et le
+     * delai d'attente, pour montrer ce que ca donne tout de suite.
+     */
+    suspend fun sendCoach(context: Context, forced: Boolean) {
+        val app = context.applicationContext.dayByDayApp
+        val prefs = app.prefs
+        if (!forced && (!prefs.coachEnabled || !prefs.coachNotificationsEnabled)) return
+
+        val today = LocalDate.now()
+        val oldest = today.toEpochDay() - COACH_HISTORY_DAYS
+        val snapshot = CoachSnapshot.build(
+            today = today,
+            hourOfDay = LocalTime.now().hour,
+            firstName = prefs.firstName,
+            birthDate = prefs.birthDate,
+            entries = app.repository.allDays().filter { it.epochDay >= oldest },
+            tags = app.repository.allTags(),
+            links = app.repository.allDayTags(),
+            money = app.repository.allMoney().filter { it.epochDay >= oldest },
+            treatments = app.repository.allTreatments(),
+            doses = app.repository.allDoses().filter { it.epochDay >= oldest },
+            hiddenCards = prefs.hiddenDayCards,
+        )
+
+        val memory = if (forced) TemporaryCoachMemory() else app.coach
+        val nudge = CoachEngine.choose(
+            snapshot = snapshot,
+            memory = memory,
+            surface = NudgeSurface.NOTIFICATION,
+            maxNotifications = if (forced) Int.MAX_VALUE else prefs.coachNotificationsPerDay,
+        ) ?: if (forced) {
+            // Un essai ne doit jamais rester muet : sinon on ne sait pas si la
+            // notification est bloquee ou s'il n'y avait rien a dire.
+            Nudge(CoachRule.HELLO, "C'est un essai : si tu vois ça, le coup de pouce fonctionne.")
+        } else {
+            return
+        }
+
+        val notification = NotificationCompat
+            .Builder(context.applicationContext, CoachWorker.CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(nudge.title)
+            .setContentText(nudge.text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(nudge.text))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .setContentIntent(openApp(context, null, REQUEST_COACH))
+            .build()
+
+        val posted = runCatching {
+            NotificationManagerCompat.from(context.applicationContext)
+                .notify(CoachWorker.NOTIFICATION_ID, notification)
+        }.isSuccess
+
+        // Le quota n'est consomme que si la notification est reellement partie.
+        if (posted && !forced) {
+            CoachEngine.markShown(app.coach, nudge, NudgeSurface.NOTIFICATION, today.toEpochDay())
+        }
+    }
+
     private fun openApp(context: Context, destination: String?, request: Int): PendingIntent {
         val intent = Intent(context.applicationContext, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -134,4 +210,8 @@ object Reminders {
 
     private const val REQUEST_EVENING = 1
     private const val REQUEST_WEEKLY = 2
+    private const val REQUEST_COACH = 3
+
+    /** Fenetre d'historique lue par le coup de pouce : un peu plus d'un an. */
+    private const val COACH_HISTORY_DAYS = 400L
 }

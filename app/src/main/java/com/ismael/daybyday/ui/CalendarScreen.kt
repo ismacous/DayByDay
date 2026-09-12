@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ismael.daybyday.data.DayCard
+import com.ismael.daybyday.coach.NudgeSurface
 import com.ismael.daybyday.data.DayColor
 import com.ismael.daybyday.data.DayEntry
 import com.ismael.daybyday.data.Stats
@@ -137,9 +138,16 @@ fun CalendarScreen(
             )
             }
 
+            Appear(index = 1) {
+                CoachSpot(
+                    surface = NudgeSurface.HOME,
+                    modifier = Modifier.padding(top = 14.dp),
+                )
+            }
+
             Spacer(Modifier.height(18.dp))
 
-            Appear(index = 1) {
+            Appear(index = 2) {
             SoftCard(padding = 14.dp) {
             MonthHeader(
                 month = month,
@@ -166,7 +174,7 @@ fun CalendarScreen(
 
             Spacer(Modifier.height(18.dp))
 
-            Appear(index = 2) {
+            Appear(index = 3) {
                 SummaryCard(title = "Bilan du mois", summary = monthSummary)
             }
 

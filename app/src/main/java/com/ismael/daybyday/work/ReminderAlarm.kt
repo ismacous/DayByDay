@@ -42,14 +42,56 @@ object ReminderAlarm {
 
     const val ACTION_EVENING = "com.ismael.daybyday.RAPPEL_DU_SOIR"
     const val ACTION_WEEKLY = "com.ismael.daybyday.BILAN_DE_LA_SEMAINE"
+    const val ACTION_COACH = "com.ismael.daybyday.COUP_DE_POUCE"
+    const val ACTION_COACH_LATE = "com.ismael.daybyday.COUP_DE_POUCE_SOIR"
 
     private const val REQUEST_EVENING = 2101
     private const val REQUEST_WEEKLY = 2102
+    private const val REQUEST_COACH = 2103
+    private const val REQUEST_COACH_LATE = 2104
+
+    /** Ecart entre les deux passages du coup de pouce, en heures. */
+    const val COACH_SECOND_PASS_HOURS = 4
+
+    /** Au-dela, le second passage tomberait en pleine nuit : on n'en pose pas. */
+    private const val COACH_LATEST_HOUR = 22
 
     /** Arme les deux rendez-vous d'apres les preferences. Sans effet de bord. */
     fun rearmAll(context: Context, prefs: Prefs) {
         armEvening(context, prefs)
         armWeekly(context, prefs)
+        armCoach(context, prefs)
+    }
+
+    /**
+     * Le coup de pouce, qui passe **deux fois** dans la journee.
+     *
+     * Ce n'est pas deux notifications : c'est deux occasions d'en envoyer une.
+     * La plupart des jours, le premier passage n'a rien a dire et se tait ; le
+     * second rattrape. C'est le quota du jour, tenu dans la memoire du coup de
+     * pouce, qui limite le nombre reellement envoye — jamais plus de deux.
+     */
+    fun armCoach(context: Context, prefs: Prefs) {
+        val manager = alarms(context) ?: return
+        val pending = pendingIntent(context, ACTION_COACH, REQUEST_COACH)
+        val latePending = pendingIntent(context, ACTION_COACH_LATE, REQUEST_COACH_LATE)
+        if (!prefs.coachEnabled || !prefs.coachNotificationsEnabled) {
+            manager.cancel(pending)
+            manager.cancel(latePending)
+            prefs.nextCoachAt = 0L
+            return
+        }
+
+        val at = nextDaily(prefs.coachHour, prefs.coachMinute)
+        setExact(manager, at, pending)
+        prefs.nextCoachAt = at
+
+        val lateHour = prefs.coachHour + COACH_SECOND_PASS_HOURS
+        if (lateHour <= COACH_LATEST_HOUR) {
+            setExact(manager, nextDaily(lateHour, prefs.coachMinute), latePending)
+        } else {
+            manager.cancel(latePending)
+        }
     }
 
     fun armEvening(context: Context, prefs: Prefs) {

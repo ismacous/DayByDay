@@ -67,6 +67,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.ismael.daybyday.BuildConfig
+import com.ismael.daybyday.coach.CoachEngine
+import com.ismael.daybyday.coach.Nudge
 import com.ismael.daybyday.data.Backup
 import com.ismael.daybyday.data.DATABASE_VERSION
 import com.ismael.daybyday.data.DatabaseContents
@@ -104,6 +106,14 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
 
     var lastReminder by remember { mutableLongStateOf(prefs.lastReminderAt) }
     var nextReminder by remember { mutableLongStateOf(prefs.nextReminderAt) }
+
+    var coachEnabled by remember { mutableStateOf(prefs.coachEnabled) }
+    var coachNotifications by remember { mutableStateOf(prefs.coachNotificationsEnabled) }
+    var coachHour by remember { mutableIntStateOf(prefs.coachHour) }
+    var coachMinute by remember { mutableIntStateOf(prefs.coachMinute) }
+    var coachTwoPerDay by remember { mutableStateOf(prefs.coachTwoPerDay) }
+    var coachPreview by remember { mutableStateOf<Nudge?>(null) }
+    var coachPreviewAsked by remember { mutableStateOf(false) }
 
     var weeklyEnabled by remember { mutableStateOf(prefs.weeklyReviewEnabled) }
     var weeklyHour by remember { mutableIntStateOf(prefs.weeklyReviewHour) }
@@ -576,6 +586,125 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("Envoyer le bilan maintenant")
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // --- Coup de pouce --------------------------------------------
+            SectionCard(title = "Ton coup de pouce", index = 5) {
+                Text(
+                    "De petits messages calculés à partir de ce que tu coches dans " +
+                        "les cartes : du soutien les jours durs, et parfois une idée " +
+                        "pour la journée. Aucune intelligence artificielle, rien qui " +
+                        "sorte du téléphone, et le journal n'est jamais lu. Une carte " +
+                        "masquée ne dit plus rien.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(10.dp))
+                SettingSwitchRow(
+                    title = "Afficher les messages dans l'application",
+                    subtitle = "Un seul à la fois, sur le mois et dans ta journée.",
+                    checked = coachEnabled,
+                    onCheckedChange = { enabled ->
+                        coachEnabled = enabled
+                        prefs.coachEnabled = enabled
+                        DailyScheduler.scheduleCoach(context, prefs)
+                    },
+                )
+                SettingSwitchRow(
+                    title = "M'envoyer aussi des notifications",
+                    subtitle = "Seulement s'il a vraiment quelque chose à dire.",
+                    checked = coachNotifications,
+                    enabled = coachEnabled,
+                    onCheckedChange = { enabled ->
+                        coachNotifications = enabled
+                        prefs.coachNotificationsEnabled = enabled
+                        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                        DailyScheduler.scheduleCoach(context, prefs)
+                    },
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Heure du coup de pouce",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        onClick = {
+                            showTimePicker(context, coachHour, coachMinute) { hour, minute ->
+                                coachHour = hour
+                                coachMinute = minute
+                                prefs.coachHour = hour
+                                prefs.coachMinute = minute
+                                DailyScheduler.scheduleCoach(context, prefs)
+                            }
+                        },
+                        enabled = coachEnabled && coachNotifications,
+                    ) {
+                        Text(formatTime(coachHour, coachMinute))
+                    }
+                }
+                SettingSwitchRow(
+                    title = "Jusqu'à deux par jour",
+                    subtitle = "Sinon une seule, au maximum.",
+                    checked = coachTwoPerDay,
+                    enabled = coachEnabled && coachNotifications,
+                    onCheckedChange = { enabled ->
+                        coachTwoPerDay = enabled
+                        prefs.coachTwoPerDay = enabled
+                    },
+                )
+
+                val coachSnapshot = rememberCoachSnapshot()
+                if (coachPreviewAsked) {
+                    Spacer(Modifier.height(6.dp))
+                    val preview = coachPreview
+                    if (preview != null) {
+                        CoachPreviewBubble(preview)
+                    } else {
+                        Text(
+                            "Rien à te dire là tout de suite. C'est plutôt bon signe.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        coachPreview = coachSnapshot?.let { CoachEngine.preview(it) }
+                        coachPreviewAsked = true
+                    },
+                    enabled = coachSnapshot != null,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Voir ce qu'il me dirait")
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        DailyScheduler.sendTestCoach(context)
+                        scope.launch { snackbar.showSnackbar("Coup de pouce d'essai envoyé.") }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("M'en envoyer un maintenant")
+                }
+                Spacer(Modifier.height(8.dp))
+                TextButton(
+                    onClick = {
+                        app.coach.forgetEverything()
+                        coachPreview = null
+                        coachPreviewAsked = false
+                        scope.launch { snackbar.showSnackbar("Le coup de pouce a tout oublié.") }
+                    },
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                ) {
+                    Text("Tout oublier")
                 }
             }
 

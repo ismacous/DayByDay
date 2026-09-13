@@ -83,6 +83,17 @@ téléphone (Samsung S25, Android 15).
    ne crie pas « bravo » un jour noir, où le ton `CARE` n'apporte qu'une
    présence.
 
+10. **Les trois rendez-vous n'ont ni interrupteur ni heure.** Le rappel du
+   soir (21 h), le bilan du lundi (9 h) et le coup de pouce (18 h 30) sont
+   toujours actifs, à heure fixe (`Prefs`, des `val`). Ismael a fait retirer
+   les réglages, et la raison tient : la seule vraie question — « est-ce que je
+   veux que cette application me parle ? » — a déjà sa réponse dans les
+   notifications d'Android, à l'endroit où tout le monde sait couper. Un
+   deuxième jeu de boutons qui dit la même chose à moitié ne fait qu'obliger à
+   décider avant d'avoir essayé. Ce qui reste dans les Réglages, ce sont les
+   **autorisations** (notifications, mise en veille par Android), parce que
+   celles-là expliquent pourquoi une notification n'arrive pas.
+
 ## Architecture
 
 - Kotlin + Jetpack Compose (Material 3), base Room, WorkManager pour les tâches
@@ -579,6 +590,34 @@ téléphone (Samsung S25, Android 15).
   le blanc passe encore, et finit clair où il disparaît. Il n'y a plus de
   `LocalCardInk` : plus aucun contenu de carte ne repose sur de la couleur —
   seul l'en-tête de la carte d'humeur le fait, et il choisit son encre lui-même.
+- **L'en-tête ne revient qu'en haut de la page.** Il s'efface quand on
+  descend, et la première version le ramenait dès qu'on remontait de trois
+  lignes — au milieu d'un mois, en bas de l'argent, n'importe où : un titre qui
+  se pose en travers de ce qu'on est en train de lire. La cause était dans ce
+  qui était retenu : la **position de l'en-tête**, à laquelle on ajoutait
+  chaque petit mouvement. Ce qui est retenu maintenant est la **distance
+  parcourue depuis le haut de la page** (`scrollDepths`), et l'en-tête n'est
+  dégagé que sur ses premiers points — donc il ne réapparaît que là où il a sa
+  place. Deux détails qui comptent : la mesure se prend dans `onPostScroll`
+  (ce que la page a *réellement* parcouru — en butée, le doigt continue alors
+  que rien ne bouge, et compter ces millimètres décalerait la profondeur pour
+  toujours), et la valeur est lue **dans le `graphicsLayer`** de l'en-tête, pas
+  pendant la composition.
+- **L'application ne sait pas à qui elle parle tant qu'on ne lui a pas dit.**
+  `Prefs.firstName` valait « Ismael » par défaut et l'accueil disait « Bonjour
+  Ismael » : juste sur un seul téléphone, absurde partout ailleurs. Le nom est
+  maintenant vide par défaut et se demande dans `ui/WelcomeScreen.kt` — trois
+  pages, rien de plus : ce que fait l'application, comment on t'appelle, et
+  l'autorisation de notification (demandée là, une fois, puisqu'il n'y a plus
+  d'interrupteur). Le piège à ne pas rouvrir : une mise à jour ne doit pas
+  demander son prénom à quelqu'un qui note ses journées depuis un an, d'où
+  `Prefs.adoptExistingInstall()`, appelé au démarrage quand la base **n'est pas
+  vide** — elle garde alors son nom et saute la présentation. L'accueil passe
+  **avant** la reprise de sauvegarde (« as-tu une sauvegarde ? » est la phrase
+  la plus froide qu'on puisse adresser à quelqu'un qui ouvre l'application pour
+  la première fois), et la reprise reste à un bouton de là. Corollaire pour les
+  tests d'interface : c'est un **troisième** écran à écarter dans le
+  `@BeforeClass` de `CalendarUiTest`.
 - **Un dégradé de rayon nul ferme l'application.** La bulle du coup de pouce
   arrive en grossissant : à la toute première image, l'échelle vaut zéro, donc
   le rayon du disque aussi — et `Brush.radialGradient(radius = 0f)` construit

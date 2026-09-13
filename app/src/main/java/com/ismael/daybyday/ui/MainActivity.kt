@@ -49,10 +49,19 @@ class MainActivity : FragmentActivity() {
                 val app = dayByDayApp
                 // null tant qu'on ne sait pas encore si la base est vide.
                 var offerRestore by remember { mutableStateOf<Boolean?>(null) }
+                var welcomeDone by remember { mutableStateOf(app.prefs.onboardingDone) }
                 var helloDone by remember { mutableStateOf(app.helloPlayed) }
                 LaunchedEffect(Unit) {
-                    offerRestore = !app.prefs.firstRunRestoreChecked &&
-                        app.repository.allDays().isEmpty()
+                    val empty = app.repository.allDays().isEmpty()
+                    // Une installation qui a deja des journees n'est pas une
+                    // nouvelle installation : elle vient d'avant l'ecran
+                    // d'accueil, et on ne demande pas son prenom a quelqu'un
+                    // qui note ses journees depuis un an.
+                    if (!empty) {
+                        app.prefs.adoptExistingInstall()
+                        welcomeDone = true
+                    }
+                    offerRestore = !app.prefs.firstRunRestoreChecked && empty
                     // Met a jour les pas et le temps d'ecran des jours deja notes.
                     runCatching {
                         HealthSync.syncRecentDays(this@MainActivity, app.repository)
@@ -70,6 +79,23 @@ class MainActivity : FragmentActivity() {
                         )
 
                         offerRestore == null -> Box(Modifier.fillMaxSize())
+
+                        // L'accueil passe **avant** la reprise de sauvegarde :
+                        // « as-tu une sauvegarde ? » est la premiere phrase la
+                        // plus froide qu'on puisse adresser a quelqu'un qui
+                        // ouvre l'application pour la premiere fois. La reprise
+                        // reste a un bouton de la, sur la premiere page.
+                        !welcomeDone -> WelcomeScreen(
+                            onRestore = {
+                                welcomeDone = true
+                                app.prefs.onboardingDone = true
+                                offerRestore = true
+                            },
+                            onDone = {
+                                welcomeDone = true
+                                offerRestore = false
+                            },
+                        )
 
                         offerRestore == true -> WelcomeRestoreScreen(
                             onFinished = { offerRestore = false },

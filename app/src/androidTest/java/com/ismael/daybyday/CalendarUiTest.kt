@@ -26,7 +26,7 @@ class CalendarUiTest {
 
     companion object {
         /**
-         * Deux ecrans passent **devant** le calendrier au lancement, et les deux
+         * Trois ecrans passent **devant** le calendrier au lancement, et tous
          * doivent etre ecartes avant que la regle ne demarre l'activite.
          *
          * 1. L'ecran de reprise de sauvegarde, qui s'affiche quand la base est
@@ -43,7 +43,10 @@ class CalendarUiTest {
         @BeforeClass
         fun ecarterLesEcransDAccueil() {
             val context = InstrumentationRegistry.getInstrumentation().targetContext
-            Prefs(context).firstRunRestoreChecked = true
+            val prefs = Prefs(context)
+            prefs.firstRunRestoreChecked = true
+            // Et depuis la 5.17, un troisieme : la presentation d'arrivee.
+            prefs.onboardingDone = true
             (context.applicationContext as DayByDayApp).helloPlayed = true
         }
     }

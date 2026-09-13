@@ -120,23 +120,48 @@ fun AppNavigation(
         // l'en-tete, lui, etait remis en haut a chaque changement d'onglet. On
         // revenait donc au milieu du mois avec le titre pose en travers des
         // cartes. Une position par onglet, et les deux repartent ensemble.
-        val headerOffsets = remember { mutableStateMapOf<String, Float>() }
+        // Ce qui est retenu est la **distance parcourue depuis le haut de la
+        // page**, pas l'etat de l'en-tete.
+        //
+        // C'est toute la difference, et c'etait le defaut : en ajoutant
+        // simplement chaque petit mouvement a la position de l'en-tete, le
+        // moindre geste vers le haut le ramenait — au milieu de la page, tout
+        // en bas, n'importe ou. Un titre qui reapparait par-dessus ce qu'on
+        // lit des qu'on remonte de trois lignes est pire que pas de titre du
+        // tout. Ici il ne revient que **la ou il a sa place** : en haut. La
+        // profondeur monte quand on descend, redescend quand on remonte, et
+        // l'en-tete n'est degage que sur les premiers points du parcours.
+        val scrollDepths = remember { mutableStateMapOf<String, Float>() }
         val routeKey = currentRoute.orEmpty()
-        val headerOffset = headerOffsets[routeKey] ?: 0f
+        // La profondeur est lue **dans la couche graphique** de l'en-tete, pas
+        // ici : lue pendant la composition, elle recomposerait toute la
+        // navigation a chaque image du defilement.
+        val headerOffset = {
+            -((scrollDepths[routeKey] ?: 0f).coerceIn(0f, headerHeightPx))
+        }
         // La route est lue **au moment du geste** : le detecteur, lui, est
         // fabrique une seule fois, sinon chaque changement d'onglet en
         // recreerait un et couperait le defilement en cours.
         val scrolledRoute = rememberUpdatedState(routeKey)
-        val hideOnScroll = remember(headerHeightPx) {
+        val hideOnScroll = remember {
             object : NestedScrollConnection {
-                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // `onPostScroll` et non `onPreScroll` : ce qui nous interesse
+                // est ce que la page a **reellement** parcouru, pas ce que le
+                // doigt proposait. En butee de haut ou de bas, le geste
+                // continue alors que la page ne bouge plus — compter ces
+                // millimetres-la decalerait la profondeur pour toujours.
+                override fun onPostScroll(
+                    consumed: Offset,
+                    available: Offset,
+                    source: NestedScrollSource,
+                ): Offset {
                     // Seuls les onglets portent un en-tete : retenir la
                     // place sur une journee ou une recherche remplirait la
                     // table de cles qui ne servent a rien.
                     val key = scrolledRoute.value
                     if (tabs.none { it.route == key }) return Offset.Zero
-                    val current = headerOffsets[key] ?: 0f
-                    headerOffsets[key] = (current + available.y).coerceIn(-headerHeightPx, 0f)
+                    val depth = (scrollDepths[key] ?: 0f) - consumed.y
+                    scrollDepths[key] = depth.coerceAtLeast(0f)
                     // On ne consomme rien : l'ecran defile normalement, on ne
                     // fait qu'ecouter.
                     return Offset.Zero
@@ -216,7 +241,7 @@ fun AppNavigation(
                     }
 
                     composable("settings") {
-                        SettingsScreen(onOpenWeek = { navController.navigate("week") })
+                        SettingsScreen()
                     }
 
                     composable("week") {
@@ -301,10 +326,11 @@ fun AppNavigation(
                     modifier = Modifier
                         .height(TAB_HEADER_HEIGHT)
                         .graphicsLayer {
-                            translationY = headerOffset
+                            val offset = headerOffset()
+                            translationY = offset
                             // Il s'efface en partant : un titre a moitie sorti
                             // de l'ecran se lit mal et attire l'oeil pour rien.
-                            alpha = 1f + headerOffset / headerHeightPx
+                            alpha = 1f + offset / headerHeightPx
                         }
                         .padding(start = 16.dp, end = 16.dp, top = 12.dp),
                 )

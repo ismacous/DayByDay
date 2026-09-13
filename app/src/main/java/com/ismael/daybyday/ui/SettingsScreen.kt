@@ -1,6 +1,5 @@
 package com.ismael.daybyday.ui
 
-import android.Manifest
 import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
@@ -67,8 +66,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.ismael.daybyday.BuildConfig
-import com.ismael.daybyday.coach.CoachEngine
-import com.ismael.daybyday.coach.Nudge
 import com.ismael.daybyday.data.Backup
 import com.ismael.daybyday.data.DATABASE_VERSION
 import com.ismael.daybyday.data.DatabaseContents
@@ -88,7 +85,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
+fun SettingsScreen() {
     val context = LocalContext.current
     val app = context.dayByDayApp
     val prefs = app.prefs
@@ -99,24 +96,6 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
     var firstName by remember { mutableStateOf(prefs.firstName) }
     var heightText by remember { mutableStateOf(prefs.heightCm.toString()) }
     var birthDate by remember { mutableStateOf(prefs.birthDate) }
-
-    var reminderEnabled by remember { mutableStateOf(prefs.reminderEnabled) }
-    var reminderHour by remember { mutableIntStateOf(prefs.reminderHour) }
-    var reminderMinute by remember { mutableIntStateOf(prefs.reminderMinute) }
-
-    var lastReminder by remember { mutableLongStateOf(prefs.lastReminderAt) }
-    var nextReminder by remember { mutableLongStateOf(prefs.nextReminderAt) }
-
-    var coachEnabled by remember { mutableStateOf(prefs.coachEnabled) }
-    var coachNotifications by remember { mutableStateOf(prefs.coachNotificationsEnabled) }
-    var coachHour by remember { mutableIntStateOf(prefs.coachHour) }
-    var coachMinute by remember { mutableIntStateOf(prefs.coachMinute) }
-    var coachTwoPerDay by remember { mutableStateOf(prefs.coachTwoPerDay) }
-    var coachPreview by remember { mutableStateOf<Nudge?>(null) }
-
-    var weeklyEnabled by remember { mutableStateOf(prefs.weeklyReviewEnabled) }
-    var weeklyHour by remember { mutableIntStateOf(prefs.weeklyReviewHour) }
-    var weeklyMinute by remember { mutableIntStateOf(prefs.weeklyReviewMinute) }
 
     var autoBackupEnabled by remember { mutableStateOf(prefs.autoBackupEnabled) }
     var autoBackupHour by remember { mutableIntStateOf(prefs.autoBackupHour) }
@@ -159,8 +138,6 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
         screenGranted = ScreenTimeSource.hasPermission(context)
         notificationsGranted = notificationsAllowed(context)
         batteryUnrestricted = isBatteryUnrestricted(context)
-        lastReminder = prefs.lastReminderAt
-        nextReminder = prefs.nextReminderAt
     }
 
     // Les autorisations se changent dans les reglages d'Android, hors de
@@ -178,18 +155,6 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
     ) { granted ->
         stepsGranted = granted.containsAll(HealthConnectSource.permissions)
         permissionsChecked += 1
-    }
-
-    val notificationPermission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (!granted) {
-            scope.launch {
-                snackbar.showSnackbar(
-                    "Sans l'autorisation de notification, le rappel ne pourra pas s'afficher."
-                )
-            }
-        }
     }
 
     val pickBackupFolder = rememberLauncherForActivityResult(
@@ -427,93 +392,14 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
                     granted = notificationsGranted,
                     onClick = { openSystemScreen(context, notificationSettingsIntent(context)) },
                 )
-            }
 
-            Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(8.dp))
 
-            // --- Rappel ---------------------------------------------------
-            SectionCard(title = "Rappel quotidien", index = 3) {
-                SettingSwitchRow(
-                    title = "Me rappeler de noter ma journée",
-                    subtitle = "Une notification, seulement si la journée n'est pas encore notée.",
-                    checked = reminderEnabled,
-                    onCheckedChange = { enabled ->
-                        reminderEnabled = enabled
-                        prefs.reminderEnabled = enabled
-                        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                        DailyScheduler.scheduleReminder(context, prefs)
-                        nextReminder = prefs.nextReminderAt
-                    },
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "Heure du rappel",
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = {
-                        showTimePicker(context, reminderHour, reminderMinute) { hour, minute ->
-                            reminderHour = hour
-                            reminderMinute = minute
-                            prefs.reminderHour = hour
-                            prefs.reminderMinute = minute
-                            DailyScheduler.scheduleReminder(context, prefs)
-                            nextReminder = prefs.nextReminderAt
-                        }
-                    }) {
-                        Text(formatTime(reminderHour, reminderMinute))
-                    }
-                }
-
-                Spacer(Modifier.height(4.dp))
-                // Les deux lignes ensemble disent tout. « Prochain » vient de
-                // l'alarme reellement posee : s'il est vide, rien n'est
-                // programme. S'il est rempli mais que « dernier » date d'hier,
-                // c'est le telephone qui a etouffe la notification — et c'est
-                // la ligne « Mise en veille par Android » plus bas qu'il faut
-                // regarder.
-                Text(
-                    text = if (nextReminder == 0L) {
-                        "Aucun rappel programmé."
-                    } else {
-                        "Prochain rappel : ${formatDateTime(nextReminder)}"
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = if (lastReminder == 0L) {
-                        "Aucun rappel envoyé pour l'instant."
-                    } else {
-                        "Dernier rappel : ${formatDateTime(lastReminder)}"
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-                Spacer(Modifier.height(10.dp))
-                OutlinedButton(
-                    onClick = {
-                        DailyScheduler.sendTestReminder(context)
-                        scope.launch {
-                            snackbar.showSnackbar(
-                                "Rappel d'essai envoyé. S'il n'arrive pas, c'est le " +
-                                    "téléphone qui le bloque."
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Envoyer un rappel d'essai")
-                }
-
-                Spacer(Modifier.height(10.dp))
                 // Samsung met les applications en veille au bout de quelques
-                // jours sans usage, et une tache de fond endormie ne sonne
+                // jours sans usage, et une application endormie ne sonne
                 // jamais. C'est la premiere chose a verifier quand le rappel
-                // n'arrive pas, et ca ne se regle que dans Android.
+                // du soir n'arrive pas, et ca ne se regle que dans Android —
+                // d'ou sa place ici, avec les autres autorisations.
                 PermissionRow(
                     emoji = "🔋",
                     title = "Mise en veille par Android",
@@ -529,181 +415,8 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
 
             Spacer(Modifier.height(16.dp))
 
-            // --- Bilan de la semaine --------------------------------------
-            SectionCard(title = "Bilan de la semaine", index = 4) {
-                Text(
-                    "Le lundi matin, un récapitulatif de la semaine écoulée : " +
-                        "ses sept couleurs, ce que tu as fait, et la comparaison avec " +
-                        "la semaine d'avant. Rien n'est envoyé si la semaine est vide.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(10.dp))
-                SettingSwitchRow(
-                    title = "M'envoyer le bilan du lundi",
-                    subtitle = "Une notification par semaine, à lire quand tu veux.",
-                    checked = weeklyEnabled,
-                    onCheckedChange = { enabled ->
-                        weeklyEnabled = enabled
-                        prefs.weeklyReviewEnabled = enabled
-                        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                        DailyScheduler.scheduleWeeklyReview(context, prefs)
-                    },
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "Heure du lundi",
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = {
-                        showTimePicker(context, weeklyHour, weeklyMinute) { hour, minute ->
-                            weeklyHour = hour
-                            weeklyMinute = minute
-                            prefs.weeklyReviewHour = hour
-                            prefs.weeklyReviewMinute = minute
-                            DailyScheduler.scheduleWeeklyReview(context, prefs)
-                        }
-                    }) {
-                        Text(formatTime(weeklyHour, weeklyMinute))
-                    }
-                }
-                Spacer(Modifier.height(6.dp))
-                Button(onClick = onOpenWeek, modifier = Modifier.fillMaxWidth()) {
-                    Text("Voir le bilan de la semaine")
-                }
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = {
-                        DailyScheduler.sendTestWeeklyReview(context)
-                        scope.launch {
-                            snackbar.showSnackbar("Bilan d'essai envoyé.")
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Envoyer le bilan maintenant")
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // --- Coup de pouce --------------------------------------------
-            SectionCard(title = "Ton coup de pouce", index = 5) {
-                Text(
-                    "De petits messages calculés à partir de ce que tu coches dans " +
-                        "les cartes : du soutien les jours durs, et parfois une idée " +
-                        "pour la journée. Aucune intelligence artificielle, rien qui " +
-                        "sorte du téléphone, et le journal n'est jamais lu. Une carte " +
-                        "masquée ne dit plus rien.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(10.dp))
-                SettingSwitchRow(
-                    title = "Afficher les messages dans l'application",
-                    subtitle = "Un seul à la fois, sur le mois et dans ta journée.",
-                    checked = coachEnabled,
-                    onCheckedChange = { enabled ->
-                        coachEnabled = enabled
-                        prefs.coachEnabled = enabled
-                        DailyScheduler.scheduleCoach(context, prefs)
-                    },
-                )
-                SettingSwitchRow(
-                    title = "M'envoyer aussi des notifications",
-                    subtitle = "Seulement s'il a vraiment quelque chose à dire.",
-                    checked = coachNotifications,
-                    enabled = coachEnabled,
-                    onCheckedChange = { enabled ->
-                        coachNotifications = enabled
-                        prefs.coachNotificationsEnabled = enabled
-                        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                        DailyScheduler.scheduleCoach(context, prefs)
-                    },
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "Heure du coup de pouce",
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(
-                        onClick = {
-                            showTimePicker(context, coachHour, coachMinute) { hour, minute ->
-                                coachHour = hour
-                                coachMinute = minute
-                                prefs.coachHour = hour
-                                prefs.coachMinute = minute
-                                DailyScheduler.scheduleCoach(context, prefs)
-                            }
-                        },
-                        enabled = coachEnabled && coachNotifications,
-                    ) {
-                        Text(formatTime(coachHour, coachMinute))
-                    }
-                }
-                SettingSwitchRow(
-                    title = "Jusqu'à deux par jour",
-                    subtitle = "Sinon une seule, au maximum.",
-                    checked = coachTwoPerDay,
-                    enabled = coachEnabled && coachNotifications,
-                    onCheckedChange = { enabled ->
-                        coachTwoPerDay = enabled
-                        prefs.coachTwoPerDay = enabled
-                    },
-                )
-
-                val coachSnapshot = rememberCoachSnapshot()
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = {
-                        // L'essai montre la **vraie** bulle, pas un apercu :
-                        // c'est le seul moyen de juger de ce qu'on verra.
-                        val nudge = coachSnapshot?.let { CoachEngine.preview(it) }
-                        if (nudge == null) {
-                            scope.launch {
-                                snackbar.showSnackbar("Rien à te dire là tout de suite.")
-                            }
-                        }
-                        coachPreview = nudge
-                    },
-                    enabled = coachSnapshot != null,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Voir ce qu'il me dirait")
-                }
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = {
-                        DailyScheduler.sendTestCoach(context)
-                        scope.launch { snackbar.showSnackbar("Coup de pouce d'essai envoyé.") }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("M'en envoyer un maintenant")
-                }
-                Spacer(Modifier.height(8.dp))
-                TextButton(
-                    onClick = {
-                        app.coach.forgetEverything()
-                        coachPreview = null
-                        scope.launch { snackbar.showSnackbar("Le coup de pouce a tout oublié.") }
-                    },
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                ) {
-                    Text("Tout oublier")
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
             // --- Sauvegarde automatique -----------------------------------
-            SectionCard(title = "Sauvegarde automatique", index = 5) {
+            SectionCard(title = "Sauvegarde automatique", index = 3) {
                 Text(
                     "Une sauvegarde par jour dans le dossier de ton choix. Le fichier " +
                         "précédent est remplacé, donc ça ne prend pas de place en plus.",
@@ -794,7 +507,7 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
             Spacer(Modifier.height(16.dp))
 
             // --- Sauvegarde manuelle --------------------------------------
-            SectionCard(title = "Sauvegarde manuelle", index = 6) {
+            SectionCard(title = "Sauvegarde manuelle", index = 4) {
                 Button(
                     onClick = { exportBackup.launch("DayByDay-${LocalDate.now()}.zip") },
                     enabled = !busy,
@@ -827,7 +540,7 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
             Spacer(Modifier.height(16.dp))
 
             // --- Resume annuel --------------------------------------------
-            SectionCard(title = "Résumé annuel", index = 7) {
+            SectionCard(title = "Résumé annuel", index = 5) {
                 Text(
                     "Exporte une année entière en texte (titres, notes, détails, " +
                         "statistiques) pour préparer ta vidéo de fin d'année.",
@@ -852,7 +565,7 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
             Spacer(Modifier.height(16.dp))
 
             // --- Confidentialite ------------------------------------------
-            SectionCard(title = "Confidentialité", index = 8) {
+            SectionCard(title = "Confidentialité", index = 6) {
                 SettingSwitchRow(
                     title = "Verrouiller l'application",
                     subtitle = if (hasPin) {
@@ -923,7 +636,7 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
             Spacer(Modifier.height(16.dp))
 
             // --- A propos -------------------------------------------------
-            SectionCard(title = "À propos", index = 9) {
+            SectionCard(title = "À propos", index = 7) {
                 InfoRow("Version", "${appVersion.name} (build ${appVersion.code})")
                 InfoRow("Terminée le", formatDateTime(BuildConfig.BUILD_TIME))
                 InfoRow("Identifiant", appVersion.packageName)
@@ -952,7 +665,7 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
             Spacer(Modifier.height(16.dp))
 
             // --- Effacer --------------------------------------------------
-            SectionCard(title = "Effacer mes données", index = 10) {
+            SectionCard(title = "Effacer mes données", index = 8) {
                 Text(
                     "Supprime définitivement toutes les journées, notes, photos, " +
                         "vidéos et mouvements d'argent. C'est irréversible : fais " +
@@ -990,11 +703,6 @@ fun SettingsScreen(onOpenWeek: () -> Unit = {}) {
             }
         },
     )
-
-    // L'essai du coup de pouce : la vraie bulle, par-dessus les reglages.
-    coachPreview?.let { nudge ->
-        CoachPopup(nudge = nudge, onDismiss = { coachPreview = null })
-    }
 
     if (showPinDialog) {
         PinDialog(

@@ -19,8 +19,16 @@ class Prefs(context: Context) {
 
     // --- Profil -----------------------------------------------------------
 
+    /**
+     * Le prenom, vide tant qu'on ne l'a pas donne.
+     *
+     * Il valait « Ismael » par defaut, et c'etait le defaut de trop : sur le
+     * telephone de quelqu'un d'autre, l'application disait bonjour a un
+     * inconnu. Le nom se demande maintenant a l'arrivee — et l'installation
+     * d'Ismael, elle, garde le sien par [adoptExistingInstall].
+     */
     var firstName: String
-        get() = prefs.getString(KEY_FIRST_NAME, "Ismael").orEmpty()
+        get() = prefs.getString(KEY_FIRST_NAME, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_FIRST_NAME, value.trim()).apply()
 
     var heightCm: Int
@@ -176,17 +184,27 @@ class Prefs(context: Context) {
 
     // --- Rappel quotidien -------------------------------------------------
 
-    var reminderEnabled: Boolean
-        get() = prefs.getBoolean(KEY_REMINDER_ENABLED, false)
-        set(value) = prefs.edit().putBoolean(KEY_REMINDER_ENABLED, value).apply()
+    /**
+     * Les trois rendez-vous de l'application — le rappel du soir, le bilan du
+     * lundi, le coup de pouce — n'ont plus ni interrupteur ni heure a choisir.
+     *
+     * C'est une decision d'Ismael, et elle se defend : un ecran de reglages
+     * plein d'interrupteurs demande de decider avant d'avoir essaye, alors que
+     * la seule question honnete (« est-ce que je veux que cette application me
+     * parle ? ») a deja une reponse ailleurs, dans les notifications
+     * d'Android. Couper la ou tout le monde sait couper vaut mieux qu'un
+     * deuxieme jeu de boutons qui dit la meme chose a moitie.
+     *
+     * Les heures sont donc fixes, et choisies pour ce qu'elles racontent : le
+     * soir quand la journee est finie, le lundi matin quand la semaine
+     * precedente est close, et en fin d'apres-midi pour le coup de pouce —
+     * assez tot pour qu'une idee serve encore a quelque chose.
+     */
+    val reminderEnabled: Boolean get() = true
 
-    var reminderHour: Int
-        get() = prefs.getInt(KEY_REMINDER_HOUR, 21)
-        set(value) = prefs.edit().putInt(KEY_REMINDER_HOUR, value).apply()
+    val reminderHour: Int get() = 21
 
-    var reminderMinute: Int
-        get() = prefs.getInt(KEY_REMINDER_MINUTE, 0)
-        set(value) = prefs.edit().putInt(KEY_REMINDER_MINUTE, value).apply()
+    val reminderMinute: Int get() = 0
 
     /**
      * L'heure pour laquelle le rappel est **deja** programme, ou `null` s'il ne
@@ -205,34 +223,24 @@ class Prefs(context: Context) {
 
     // --- Coup de pouce ----------------------------------------------------
 
-    /** Les petits messages de soutien, dans l'application. */
-    var coachEnabled: Boolean
-        get() = prefs.getBoolean(KEY_COACH_ENABLED, true)
-        set(value) = prefs.edit().putBoolean(KEY_COACH_ENABLED, value).apply()
+    /** Les petits messages de soutien, dans l'application et en notification. */
+    val coachEnabled: Boolean get() = true
+
+    val coachNotificationsEnabled: Boolean get() = true
+
+    val coachHour: Int get() = 18
+
+    val coachMinute: Int get() = 30
 
     /**
-     * Le meme coup de pouce, mais en notification. Coupe par defaut : une
-     * application qui se met a sonner toute seule apres une mise a jour est une
-     * application qu'on desinstalle.
+     * **Une** notification par jour, jamais deux.
+     *
+     * Le choix existait ; il n'aurait jamais du. Une application qui peut
+     * parler deux fois par jour parle deux fois par jour, et la deuxieme fois
+     * elle n'a rien a dire — c'est comme ca qu'on apprend a ne plus lire la
+     * premiere.
      */
-    var coachNotificationsEnabled: Boolean
-        get() = prefs.getBoolean(KEY_COACH_NOTIFICATIONS, false)
-        set(value) = prefs.edit().putBoolean(KEY_COACH_NOTIFICATIONS, value).apply()
-
-    var coachHour: Int
-        get() = prefs.getInt(KEY_COACH_HOUR, 18)
-        set(value) = prefs.edit().putInt(KEY_COACH_HOUR, value).apply()
-
-    var coachMinute: Int
-        get() = prefs.getInt(KEY_COACH_MINUTE, 30)
-        set(value) = prefs.edit().putInt(KEY_COACH_MINUTE, value).apply()
-
-    /** Une notification par jour, ou deux au maximum. Jamais plus. */
-    var coachTwoPerDay: Boolean
-        get() = prefs.getBoolean(KEY_COACH_TWO, false)
-        set(value) = prefs.edit().putBoolean(KEY_COACH_TWO, value).apply()
-
-    val coachNotificationsPerDay: Int get() = if (coachTwoPerDay) 2 else 1
+    val coachNotificationsPerDay: Int get() = 1
 
     /** Prochain passage du coup de pouce, pour la ligne des Reglages. */
     var nextCoachAt: Long
@@ -241,22 +249,12 @@ class Prefs(context: Context) {
 
     // --- Bilan de la semaine ----------------------------------------------
 
-    /**
-     * Le rendez-vous du lundi matin. Actif par defaut : c'est le seul moment ou
-     * l'application parle d'elle-meme, et elle ne sert pas a grand-chose si
-     * elle attend qu'on vienne la consulter.
-     */
-    var weeklyReviewEnabled: Boolean
-        get() = prefs.getBoolean(KEY_WEEKLY_ENABLED, true)
-        set(value) = prefs.edit().putBoolean(KEY_WEEKLY_ENABLED, value).apply()
+    /** Le rendez-vous du lundi matin, une fois la semaine precedente close. */
+    val weeklyReviewEnabled: Boolean get() = true
 
-    var weeklyReviewHour: Int
-        get() = prefs.getInt(KEY_WEEKLY_HOUR, 9)
-        set(value) = prefs.edit().putInt(KEY_WEEKLY_HOUR, value).apply()
+    val weeklyReviewHour: Int get() = 9
 
-    var weeklyReviewMinute: Int
-        get() = prefs.getInt(KEY_WEEKLY_MINUTE, 0)
-        set(value) = prefs.edit().putInt(KEY_WEEKLY_MINUTE, value).apply()
+    val weeklyReviewMinute: Int get() = 0
 
     var scheduledWeeklyReview: String?
         get() = prefs.getString(KEY_SCHEDULED_WEEKLY, null)
@@ -308,6 +306,30 @@ class Prefs(context: Context) {
         get() = prefs.getLong(KEY_AUTO_BACKUP_LAST, 0L)
         set(value) = prefs.edit().putLong(KEY_AUTO_BACKUP_LAST, value).apply()
 
+    /**
+     * Passe a true une fois que l'ecran d'accueil a ete vu (ou saute).
+     *
+     * Une installation qui a **deja** des journees n'est pas une nouvelle
+     * installation, quoi qu'en dise ce drapeau : c'est la version d'avant cet
+     * ecran. [adoptExistingInstall] s'en charge au demarrage, sinon la mise a
+     * jour demanderait son prenom a quelqu'un qui utilise l'application depuis
+     * un an.
+     */
+    var onboardingDone: Boolean
+        get() = prefs.getBoolean(KEY_ONBOARDING_DONE, false)
+        set(value) = prefs.edit().putBoolean(KEY_ONBOARDING_DONE, value).apply()
+
+    /**
+     * Reprend une installation d'avant l'ecran d'accueil : rien a presenter a
+     * quelqu'un qui est deja la, et le prenom que l'application affichait
+     * jusqu'ici ne doit pas disparaitre dans la mise a jour.
+     */
+    fun adoptExistingInstall() {
+        if (onboardingDone) return
+        if (firstName.isEmpty()) firstName = LEGACY_NAME
+        onboardingDone = true
+    }
+
     /** Passe a true des qu'on a propose (ou fait) une reprise de sauvegarde. */
     var firstRunRestoreChecked: Boolean
         get() = prefs.getBoolean(KEY_FIRST_RUN_RESTORE, false)
@@ -333,6 +355,10 @@ class Prefs(context: Context) {
 
     private companion object {
         const val KEY_FIRST_NAME = "first_name"
+        const val KEY_ONBOARDING_DONE = "onboarding_done"
+
+        /** Le prenom que l'application affichait avant d'apprendre a le demander. */
+        const val LEGACY_NAME = "Ismael"
         const val KEY_HEIGHT_CM = "height_cm"
         const val KEY_BIRTH_DATE = "birth_date"
         const val KEY_LOCK_ENABLED = "lock_enabled"
@@ -340,23 +366,12 @@ class Prefs(context: Context) {
         const val KEY_SECURE_SCREEN = "secure_screen"
         const val KEY_PIN_HASH = "pin_hash"
         const val KEY_PIN_SALT = "pin_salt"
-        const val KEY_REMINDER_ENABLED = "reminder_enabled"
-        const val KEY_REMINDER_HOUR = "reminder_hour"
-        const val KEY_REMINDER_MINUTE = "reminder_minute"
         const val KEY_SCHEDULED_REMINDER = "reminder_scheduled_for"
         const val KEY_SCHEDULED_BACKUP = "backup_scheduled_for"
         const val KEY_LAST_REMINDER = "reminder_last_at"
         const val KEY_NEXT_REMINDER = "reminder_next_at"
         const val KEY_NEXT_WEEKLY = "weekly_review_next_at"
-        const val KEY_COACH_ENABLED = "coach_enabled"
-        const val KEY_COACH_NOTIFICATIONS = "coach_notifications"
-        const val KEY_COACH_HOUR = "coach_hour"
-        const val KEY_COACH_MINUTE = "coach_minute"
-        const val KEY_COACH_TWO = "coach_two_per_day"
         const val KEY_NEXT_COACH = "coach_next_at"
-        const val KEY_WEEKLY_ENABLED = "weekly_review_enabled"
-        const val KEY_WEEKLY_HOUR = "weekly_review_hour"
-        const val KEY_WEEKLY_MINUTE = "weekly_review_minute"
         const val KEY_SCHEDULED_WEEKLY = "weekly_review_scheduled_for"
         const val KEY_LAST_WEEKLY = "weekly_review_last_at"
         const val KEY_AUTO_BACKUP = "auto_backup_enabled"

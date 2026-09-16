@@ -6,13 +6,16 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Settings
@@ -217,6 +220,12 @@ fun AppNavigation(
                         )
                     }
 
+                    // Respirer. Un ecran a part, sans onglet : il ne se visite
+                    // pas, on y va pour une raison precise et on en ressort.
+                    composable("breathe") {
+                        BreatheScreen(onBack = { navController.popBackStack() })
+                    }
+
                     composable("year") {
                         YearScreen(
                             year = yearShown,
@@ -323,6 +332,7 @@ fun AppNavigation(
                     route = currentRoute,
                     firstName = LocalContext.current.dayByDayApp.prefs.firstName.trim(),
                     onOpenSearch = { navController.navigate("search") },
+                    onBreathe = { navController.navigate("breathe") },
                     modifier = Modifier
                         .height(TAB_HEADER_HEIGHT)
                         .graphicsLayer {
@@ -393,6 +403,7 @@ private fun TabHeader(
     route: String?,
     firstName: String,
     onOpenSearch: () -> Unit,
+    onBreathe: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val today = LocalDate.now()
@@ -410,11 +421,23 @@ private fun TabHeader(
         subtitle = if (route == "calendar") Dates.dayLong(today) else null,
         trailing = if (route == "calendar") {
             {
-                RoundIconButton(
-                    icon = Icons.Default.Search,
-                    label = "Rechercher",
-                    onClick = onOpenSearch,
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Respirer est **a cote de la recherche**, sur l'ecran
+                    // d'accueil, et nulle part ailleurs. Range dans les
+                    // reglages, on ne le trouverait que le jour ou l'on va
+                    // bien ; ici il est sous le pouce le jour ou l'on en a
+                    // besoin, sans rien reclamer le reste du temps.
+                    RoundIconButton(
+                        icon = Icons.Default.FavoriteBorder,
+                        label = "Respirer",
+                        onClick = onBreathe,
+                    )
+                    RoundIconButton(
+                        icon = Icons.Default.Search,
+                        label = "Rechercher",
+                        onClick = onOpenSearch,
+                    )
+                }
             }
         } else {
             null

@@ -13,8 +13,8 @@ android {
         applicationId = "com.ismael.daybyday"
         minSdk = 26
         targetSdk = 35
-        versionCode = 57
-        versionName = "5.17"
+        versionCode = 58
+        versionName = "5.18"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         resourceConfigurations += listOf("fr")
 

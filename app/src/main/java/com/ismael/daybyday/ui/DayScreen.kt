@@ -866,6 +866,19 @@ fun DayScreen(
                         color = Verified,
                     )
                 }
+                // Le mode d'emploi, et seulement au debut. Une carte validee ne
+                // repond plus au doigt : sans un mot, on croit a une panne. Deux
+                // cartes suffisent a comprendre, donc la ligne s'efface ensuite
+                // plutot que de rester en decor au-dessus de chaque journee.
+                if (checkedCount <= 2) {
+                    Text(
+                        text = "Une carte validée ne se modifie plus. Reglisse-la pour la rouvrir.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                    )
+                }
             }
 
             if (isBirthday) {

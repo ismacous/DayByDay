@@ -4,7 +4,10 @@ import android.app.TimePickerDialog
 import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -21,6 +24,7 @@ import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -37,8 +41,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +52,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -60,8 +65,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.pointer.pointerInput
@@ -188,8 +194,55 @@ fun DayCardShell(
     val checkEdge by animateFloatAsState(
         targetValue = if (checked) 1f else 0f,
         animationSpec = tween(Motion.NORMAL),
-        label = "verifiee",
+        label = "verrouillee",
     )
+
+    // Le liseré de lumiere, et le sceau qui le pose.
+    //
+    // Ce que remplacent ces deux-la : un trait vert plaque a gauche et une
+    // petite coche dans le coin. Les deux disaient la chose — la carte est
+    // validee — et aucun des deux ne la **faisait**. Verrouiller est un geste ;
+    // il lui fallait un moment, pas deux marques posees sans transition.
+    //
+    // Le liseré court tout le tour de la carte et s'efface vers l'interieur :
+    // il cerne sans envahir, et le contenu se lit au travers. Il monte d'un
+    // coup au moment du geste, puis redescend a une valeur de repos ou il ne
+    // fait plus que tenir le contour.
+    val rim = remember { Animatable(if (checked) RIM_REST else 0f) }
+
+    // Le sceau : l'avancee de l'animation (0 → 1) et le sens. `null` = rien a
+    // l'ecran, et c'est **l'etat normal d'une carte verrouillee**. Une icone
+    // posee au milieu en permanence rendrait la carte illisible, ce qui est
+    // exactement ce qu'on ne veut pas : verrouillee, elle doit encore se lire.
+    val sealStep = remember { Animatable(0f) }
+    var sealing by remember { mutableStateOf<Boolean?>(null) }
+
+    // La premiere composition ne joue rien : ouvrir une journee deja verrouillee
+    // ne doit pas rejouer le sceau. Meme regle que les medailles — au passage,
+    // jamais a l'affichage.
+    var firstPass by remember { mutableStateOf(true) }
+    LaunchedEffect(checked) {
+        if (firstPass) {
+            firstPass = false
+            rim.snapTo(if (checked) RIM_REST else 0f)
+            return@LaunchedEffect
+        }
+        sealing = checked
+        launch {
+            sealStep.snapTo(0f)
+            sealStep.animateTo(1f, tween(SEAL_MS, easing = LinearEasing))
+            sealing = null
+        }
+        if (checked) {
+            // Le liseré s'allume vite et fort, puis se retire jusqu'au repos :
+            // c'est ce retrait qui donne l'impression d'un sceau qui prend.
+            rim.animateTo(1f, tween(170, easing = FastOutSlowInEasing))
+            rim.animateTo(RIM_REST, tween(430, easing = FastOutSlowInEasing))
+        } else {
+            rim.animateTo(0.75f, tween(120, easing = LinearEasing))
+            rim.animateTo(0f, tween(360, easing = FastOutSlowInEasing))
+        }
+    }
     // Le decalage du doigt, en pixels. Une simple valeur et non une animation :
     // pendant le geste, la carte suit le doigt, il n'y a rien a animer. C'est
     // seulement au relachement qu'elle revient toute seule.
@@ -238,7 +291,7 @@ fun DayCardShell(
         },
     )
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .then(slideGesture)
@@ -249,23 +302,55 @@ fun DayCardShell(
             .clip(shape)
             .background(surface)
             .then(if (moodBrush != null) Modifier.background(moodBrush) else Modifier.cardGlow(style))
-            // Le bord vert est **dessine**, pas ajoute comme une colonne : il ne
-            // pousse rien et la carte garde exactement la meme place, verifiee
-            // ou non. Sinon toute la page bougerait a chaque geste.
-            .drawBehind {
-                if (checkEdge <= 0f) return@drawBehind
+            // Le liseré. Quatre degrades, un par bord, qui partent pleins au
+            // bord et s'eteignent vers le centre : la carte est **cernee**, pas
+            // recouverte, et on lit au travers. Les coins, ou deux degrades se
+            // croisent, sont un peu plus lumineux — c'est ce qu'on veut, un
+            // contour se tient par ses coins.
+            //
+            // Dessine apres le contenu et dans le meme decoupage : il suit les
+            // coins arrondis de la carte sans qu'on ait rien a calculer.
+            .drawWithContent {
+                drawContent()
+                val strength = rim.value
+                if (strength <= 0f) return@drawWithContent
+                val depth = RIM_DEPTH.toPx().coerceAtMost(size.minDimension / 2f)
+                val edge = Verified.copy(alpha = RIM_ALPHA * strength)
+                val fade = Verified.copy(alpha = 0f)
+
                 drawRect(
-                    color = Verified.copy(alpha = checkEdge),
-                    size = Size(CHECK_EDGE.toPx(), size.height),
+                    brush = Brush.verticalGradient(listOf(edge, fade), 0f, depth),
+                    size = Size(size.width, depth),
+                )
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        listOf(fade, edge), size.height - depth, size.height,
+                    ),
+                    topLeft = Offset(0f, size.height - depth),
+                    size = Size(size.width, depth),
+                )
+                drawRect(
+                    brush = Brush.horizontalGradient(listOf(edge, fade), 0f, depth),
+                    size = Size(depth, size.height),
+                )
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        listOf(fade, edge), size.width - depth, size.width,
+                    ),
+                    topLeft = Offset(size.width - depth, 0f),
+                    size = Size(depth, size.height),
                 )
             }
-            // Le fond d'une carte validee s'eteint un peu. Le gris est sur la
-            // **carte entiere** plutot que sur son contenu seul : c'est ce qui
-            // se voit en descendant la page sans rien lire. L'en-tete, lui,
-            // reprend son encre juste en dessous — la coche verte doit rester
-            // nette, c'est le bouton qui rouvre.
-            .graphicsLayer { alpha = 1f - 0.10f * checkEdge },
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                // Le fond d'une carte verrouillee s'eteint, mais a peine : le
+                // gris n'est plus ce qui porte le message, c'est le liseré. Un
+                // gris franc etait terne, et Ismael avait raison de ne pas
+                // l'aimer — il eteignait la carte au lieu de la fermer.
+                .graphicsLayer { alpha = 1f - 0.06f * checkEdge },
+        ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -333,10 +418,15 @@ fun DayCardShell(
                     }
                 }
             }
-            // La coche est aussi un **bouton**. Le geste lateral ne se devine
-            // pas, et un geste qu'on ne devine pas ne doit jamais etre le seul
-            // chemin : une fois la carte verifiee, la coche est la, et elle
+            // Le cadenas est aussi un **bouton**. Le geste lateral ne se
+            // devine pas, et un geste qu'on ne devine pas ne doit jamais etre
+            // le seul chemin : une fois la carte verrouillee, il est la, et il
             // s'appuie pour revenir en arriere.
+            //
+            // Un cadenas et plus une coche : une coche dit « c'est fait », un
+            // cadenas dit « c'est ferme ». C'est la deuxieme qui est vraie
+            // depuis qu'une carte validee ne se modifie plus, et le signe doit
+            // dire ce que le bouton fait.
             if (checked) {
                 Spacer(Modifier.width(8.dp))
                 Box(
@@ -350,10 +440,10 @@ fun DayCardShell(
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = "Carte validée",
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = "Carte verrouillée",
                         tint = Verified,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(15.dp),
                     )
                 }
             }
@@ -387,57 +477,127 @@ fun DayCardShell(
             }
         }
 
-        if (!collapsed) {
-            Box {
-                Column(
-                    modifier = Modifier
-                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
-                        // Le contenu d'une carte validee est nettement grise :
-                        // un voile transparent ne se voyait pas, et une carte
-                        // qui ne repond plus au doigt sans en avoir l'air se
-                        // lit comme une panne. Il reste lisible — c'est une
-                        // page tournee, pas une page effacee.
-                        .graphicsLayer { alpha = 1f - 0.45f * checkEdge },
-                ) {
-                    content()
-                }
-
-                // Le voile d'une carte validee.
-                //
-                // Il ne cache rien — il est transparent, tout se lit au
-                // travers. Il **prend la place du contenu sous le doigt**, et
-                // c'est tout ce qu'on lui demande : plus une pastille qui
-                // bascule, plus un champ qui ouvre le clavier, plus un bouton
-                // qui repond. Valider veut dire « j'ai relu, c'est en ordre » ;
-                // pouvoir modifier juste apres enlevait tout son sens a la
-                // marque.
-                //
-                // Il ne **consomme** rien, et c'est le point delicat. Compose
-                // ne retient qu'un seul chemin sous le doigt : etre le dernier
-                // enfant de la boite suffit a ce que le contenu ne soit meme
-                // pas atteint. Consommer en plus ferait une carte validee sur
-                // laquelle la page ne defile plus — le doigt tomberait dans un
-                // trou noir des qu'il passe dessus.
-                //
-                // Ce qui traverse donc encore : le glissement lateral ci-dessous
-                // (qui, lui, rouvre la carte) et le defilement vertical de la
-                // page, qui vit plus haut.
-                if (checked) {
-                    Box(
+            if (!collapsed) {
+                Box {
+                    Column(
                         modifier = Modifier
-                            .matchParentSize()
-                            .pointerInput(Unit) {
-                                awaitPointerEventScope {
-                                    while (true) awaitPointerEvent()
+                            .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+                            // Le contenu d'une carte verrouillee se retire un
+                            // peu, sans plus. Il etait franchement grise quand
+                            // le gris etait le seul signe ; maintenant que le
+                            // liseré tient le contour et que le sceau a montre
+                            // le geste, l'eteindre davantage ne dirait rien de
+                            // plus et rendrait la carte terne pour rien.
+                            .graphicsLayer { alpha = 1f - 0.26f * checkEdge },
+                    ) {
+                        content()
+                    }
+
+                    // Le voile d'une carte verrouillee.
+                    //
+                    // Il ne cache rien — il est transparent, tout se lit au
+                    // travers. Il **prend la place du contenu sous le doigt**, et
+                    // c'est tout ce qu'on lui demande : plus une pastille qui
+                    // bascule, plus un champ qui ouvre le clavier, plus un bouton
+                    // qui repond. Valider veut dire « j'ai relu, c'est en ordre » ;
+                    // pouvoir modifier juste apres enlevait tout son sens a la
+                    // marque.
+                    //
+                    // Il ne **consomme** rien, et c'est le point delicat. Compose
+                    // ne retient qu'un seul chemin sous le doigt : etre le dernier
+                    // enfant de la boite suffit a ce que le contenu ne soit meme
+                    // pas atteint. Consommer en plus ferait une carte validee sur
+                    // laquelle la page ne defile plus — le doigt tomberait dans un
+                    // trou noir des qu'il passe dessus.
+                    //
+                    // Ce qui traverse donc encore : le glissement lateral ci-dessous
+                    // (qui, lui, rouvre la carte) et le defilement vertical de la
+                    // page, qui vit plus haut.
+                    if (checked) {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .pointerInput(Unit) {
+                                    awaitPointerEventScope {
+                                        while (true) awaitPointerEvent()
+                                    }
                                 }
-                            }
-                            .then(slideGesture)
-                    )
+                                .then(slideGesture)
+                        )
+                    }
                 }
+            } else {
+                Spacer(Modifier.height(4.dp))
             }
-        } else {
-            Spacer(Modifier.height(4.dp))
         }
+
+        // Le sceau : il arrive, il tourne, il s'en va. Il n'est **jamais** la
+        // au repos — une icone posee au milieu d'une carte verrouillee la
+        // rendrait illisible, et une carte verrouillee doit encore se lire.
+        sealing?.let { locking -> SealMark(locking = locking, step = sealStep.value) }
+    }
+}
+
+/**
+ * Le cadenas qui se pose, ou qui saute.
+ *
+ * Deux mouvements pour une seule image, et c'est ce qui les oppose :
+ *
+ * - **Verrouiller** : il arrive grand et se **resserre** jusqu'a sa taille, en
+ *   se redressant d'un demi-tour. Un sceau qu'on presse.
+ * - **Deverrouiller** : il part de sa taille et **s'ouvre** en grandissant,
+ *   en partant dans l'autre sens. Un sceau qui saute.
+ *
+ * Moins de sept dixiemes de seconde en tout : passe ce delai, ce n'est plus un
+ * retour de geste, c'est une animation qu'on attend.
+ *
+ * Aucune ecoute de doigt : ce n'est qu'un dessin. Le voile qui bloque
+ * reellement la carte est ailleurs, et il ne depend pas de cette animation —
+ * une carte doit etre fermee avant la fin de son animation, pas apres.
+ */
+@Composable
+private fun BoxScope.SealMark(locking: Boolean, step: Float) {
+    // Une entree franche, une longue tenue, une sortie douce. Sans la tenue,
+    // l'oeil n'a pas le temps de reconnaitre le signe.
+    val fade = when {
+        step < 0.16f -> step / 0.16f
+        step < 0.55f -> 1f
+        else -> 1f - (step - 0.55f) / 0.45f
+    }.coerceIn(0f, 1f)
+
+    // Le resserrement se joue en premier et s'arrete a mi-course ; la sortie,
+    // elle, s'etale sur toute la duree. Verrouiller se termine sur une image
+    // nette, deverrouiller se termine sur une image qui s'echappe.
+    val settle = (step / 0.45f).coerceIn(0f, 1f)
+    val eased = FastOutSlowInEasing.transform(settle)
+    val scale = if (locking) 2.1f - 1.1f * eased else 1f + 1.3f * FastOutSlowInEasing.transform(step)
+    val turn = if (locking) -150f * (1f - eased) else 150f * FastOutSlowInEasing.transform(step)
+    val ink = if (locking) Verified else MaterialTheme.colorScheme.onSurfaceVariant
+
+    Box(
+        modifier = Modifier
+            .align(Alignment.Center)
+            .size(76.dp)
+            .graphicsLayer {
+                alpha = fade
+                scaleX = scale
+                scaleY = scale
+                rotationZ = turn
+            }
+            .clip(CircleShape)
+            // Un disque derriere, sinon le signe se perd sur un contenu
+            // charge. Un aplat et pas un degrade radial : un rayon calcule a
+            // partir d'une valeur animee passe par zero, et Android refuse un
+            // degrade de rayon nul.
+            .background(ink.copy(alpha = 0.16f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Default.Lock,
+            contentDescription = null,
+            tint = ink,
+            modifier = Modifier.size(34.dp),
+        )
     }
 }
 
@@ -880,8 +1040,29 @@ private fun sleepComment(minutes: Int): String = when {
  */
 val Verified = Color(0xFF15C48E)
 
-/** La largeur du bord vert d'une carte verifiee. */
-private val CHECK_EDGE = 5.dp
+/**
+ * Jusqu'ou le liseré d'une carte verrouillee descend vers l'interieur.
+ *
+ * Assez pour qu'il se voie, assez peu pour qu'il ne mange pas le texte : la
+ * marge des cartes fait seize points, donc l'essentiel de la lumiere tombe
+ * dans le vide autour du contenu.
+ */
+private val RIM_DEPTH = 26.dp
+
+/** L'intensite du liseré a plein. */
+private const val RIM_ALPHA = 0.40f
+
+/**
+ * La valeur ou le liseré se stabilise une fois la carte verrouillee.
+ *
+ * Il ne s'eteint pas : c'est lui qui remplace le trait vert plaque a gauche, et
+ * c'est le seul repere permanent d'une carte fermee, avec le cadenas de
+ * l'en-tete.
+ */
+private const val RIM_REST = 0.42f
+
+/** La duree du sceau, du depart a la disparition. */
+private const val SEAL_MS = 660
 
 /**
  * De combien il faut pousser une carte pour la faire basculer.

@@ -380,27 +380,30 @@ fun DayCardShell(
                 // Le voile d'une carte validee.
                 //
                 // Il ne cache rien — il est transparent, tout se lit au
-                // travers. Il **avale les gestes**, et c'est tout ce qu'on lui
-                // demande : plus une pastille qui bascule, plus un champ qui
-                // ouvre le clavier, plus un bouton qui repond. Valider veut dire
-                // « j'ai relu, c'est en ordre » ; pouvoir modifier juste apres
-                // enlevait tout son sens a la marque.
+                // travers. Il **prend la place du contenu sous le doigt**, et
+                // c'est tout ce qu'on lui demande : plus une pastille qui
+                // bascule, plus un champ qui ouvre le clavier, plus un bouton
+                // qui repond. Valider veut dire « j'ai relu, c'est en ordre » ;
+                // pouvoir modifier juste apres enlevait tout son sens a la
+                // marque.
                 //
-                // L'ordre des deux ecoutes compte, et il n'est pas
-                // interchangeable. Le geste lateral est declare **apres**, donc
-                // plus a l'interieur : Compose distribue les evenements de
-                // l'interieur vers l'exterieur, et le glissement les voit donc
-                // avant qu'ils ne soient avales. Dans l'autre sens, une carte
-                // validee ne pourrait plus etre rouverte d'un geste.
+                // Il ne **consomme** rien, et c'est le point delicat. Compose
+                // ne retient qu'un seul chemin sous le doigt : etre le dernier
+                // enfant de la boite suffit a ce que le contenu ne soit meme
+                // pas atteint. Consommer en plus ferait une carte validee sur
+                // laquelle la page ne defile plus — le doigt tomberait dans un
+                // trou noir des qu'il passe dessus.
+                //
+                // Ce qui traverse donc encore : le glissement lateral ci-dessous
+                // (qui, lui, rouvre la carte) et le defilement vertical de la
+                // page, qui vit plus haut.
                 if (checked) {
                     Box(
                         modifier = Modifier
                             .matchParentSize()
                             .pointerInput(Unit) {
                                 awaitPointerEventScope {
-                                    while (true) {
-                                        awaitPointerEvent().changes.forEach { it.consume() }
-                                    }
+                                    while (true) awaitPointerEvent()
                                 }
                             }
                             .then(slideGesture)

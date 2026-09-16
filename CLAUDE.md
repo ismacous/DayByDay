@@ -870,10 +870,11 @@ téléphone (Samsung S25, Android 15).
   doivent pas toucher la même journée avec la même couleur (un second appui
   l'enlève).
 - **Cartes validées** : le geste latéral valide une carte, et une carte validée
-  ne répond plus au doigt. Le voile qui l'en empêche (`DayCardShell`) déclare
-  l'écoute qui avale les gestes **avant** le glissement latéral : Compose
-  distribue de l'intérieur vers l'extérieur, donc dans l'autre ordre la carte
-  ne pourrait plus être rouverte d'un geste.
+  ne répond plus au doigt. Le voile qui l'en empêche (`DayCardShell`) ne
+  **consomme** rien : être le dernier enfant de la boîte suffit à ce que le
+  contenu ne soit pas atteint, Compose ne retenant qu'un seul chemin sous le
+  doigt. S'il consommait, la page ne défilerait plus dès que le doigt passe sur
+  une carte validée.
 - Le job émulateur des serveurs GitHub ne démarre pas de façon fiable : il ne
   tourne qu'à la demande (`workflow_dispatch`) et ne bloque jamais l'APK.
   `android-actions/setup-android` doit recevoir `packages: ""`, sinon il

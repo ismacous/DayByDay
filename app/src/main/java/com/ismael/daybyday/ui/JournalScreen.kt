@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -329,15 +328,17 @@ fun JournalScreen(
         selectPhoto(storedMedia.last { !it.isPlaced }.id)
     }
 
-    val pickMedia = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickMultipleVisualMedia(30)
-    ) { uris ->
-        if (uris.isNotEmpty()) {
+    val addPhoto = rememberAddPhoto(
+        dayOf = { date },
+        onPicked = { uris ->
             app.appScope.launch {
                 uris.forEach { uri -> repository.addMedia(date, uri, DayCard.JOURNAL) }
             }
-        }
-    }
+        },
+        onCaptured = { path ->
+            app.appScope.launch { repository.adoptPhoto(date, path, DayCard.JOURNAL) }
+        },
+    )
 
     // --- Modifier la page -------------------------------------------------
 
@@ -1410,12 +1411,10 @@ fun JournalScreen(
                         insertHashtag()
                     },
                     onAddPhoto = {
-                        // On referme le panneau sans rendre le focus : le
-                        // selecteur de photos passe devant.
+                        // On referme le panneau sans rendre le focus : le choix
+                        // « appareil photo ou galerie » passe devant.
                         openPanel = null
-                        pickMedia.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
-                        )
+                        addPhoto.ask()
                     },
                     photos = journalMedia,
                     photoFile = { repository.media.file(it.relativePath) },

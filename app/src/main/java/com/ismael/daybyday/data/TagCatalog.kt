@@ -96,16 +96,20 @@ object TagCatalog {
         Builtin("overwhelmed", "🌊", "Débordé", TagCategory.EMOTION),
         Builtin("empty", "🌫️", "Vide", TagCategory.EMOTION),
 
-        // Ces deux-la ne sont pas des ressentis mais des **faits**, et elles
-        // gardent leur forme : des lignes a cocher, et **sans emoji**. Un petit
-        // visage qui pleure a cote de « J'ai pleuré » transforme un fait en
-        // mise en scene. L'emoji reste vide ici, ce qui fait que `display` vaut
-        // le nom seul partout ailleurs aussi — dans la recherche, par exemple.
+        // Ces deux-la etaient a part : deux lignes a cocher, sans emoji, au
+        // motif qu'un fait n'est pas une humeur. Elles sont revenues dans le
+        // rang — mises a l'ecart au bas d'une carte de ressentis, elles
+        // ressortaient comme deux cas graves qu'on met de cote, et c'est
+        // exactement l'inverse de ce qu'on veut dire. Un mot, un signe, la
+        // meme forme que la tristesse et la colere.
         //
         // Les slugs ne changent pas : ce sont eux qui relient les journees deja
-        // marquees. Seule leur famille change, et c'est sans risque.
-        Builtin("cried", "", "J'ai pleuré", TagCategory.EMOTION),
-        Builtin("anxiety", "", "Crise d'angoisse", TagCategory.EMOTION, listOf("Grosse angoisse")),
+        // marquees. Le nom et le signe, eux, sont libres.
+        Builtin("cried", "😢", "Pleuré", TagCategory.EMOTION, listOf("J'ai pleuré")),
+        Builtin(
+            "anxiety", "😰", "Angoisse", TagCategory.EMOTION,
+            listOf("Crise d'angoisse", "Grosse angoisse"),
+        ),
 
         // Sante, au sens du corps : ce qu'il a dit de la journee. C'est la
         // moitie qui manquait a la carte — elle ne portait qu'un poids, donc

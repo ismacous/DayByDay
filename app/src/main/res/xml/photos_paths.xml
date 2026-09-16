@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Le seul dossier que l'application accepte de partager, et uniquement pour
+    y faire ecrire : celui de ses propres photos.
+
+    Il sert a une chose et une seule — donner a l'appareil photo du telephone
+    une adresse ou deposer le cliche qu'on vient de prendre. Sans ca, il
+    faudrait passer par la galerie, donc laisser la photo en clair sur le
+    telephone avant de la recopier. Aucun autre dossier n'est expose, et
+    l'autorisation d'ecrire ne dure que le temps de la prise de vue.
+-->
+<paths>
+    <files-path name="photos" path="media/" />
+</paths>

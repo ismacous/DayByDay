@@ -3,6 +3,7 @@ package com.ismael.daybyday.data
 import android.content.Context
 import android.net.Uri
 import android.webkit.MimeTypeMap
+import androidx.core.content.FileProvider
 import java.io.File
 import java.io.InputStream
 import java.time.LocalDate
@@ -45,6 +46,56 @@ class MediaFiles(private val context: Context) {
             epochDay = epochDay,
             relativePath = relativePath,
             kindKey = if (kind == MediaKind.VIDEO) 1 else 0,
+        )
+    }
+
+    /**
+     * Prepare la place d'une photo que l'appareil photo va prendre, et rend son
+     * chemin relatif.
+     *
+     * Le cliche est ecrit **directement** au bon endroit, pas dans un fichier
+     * temporaire recopie ensuite. C'est la meme raison que pour les vocaux, et
+     * une de plus qui compte ici : une photo deposee ailleurs avant d'etre
+     * recopiee, c'est une photo qui existe un instant hors du dossier prive de
+     * l'application.
+     */
+    fun newPhotoPath(epochDay: Long): String {
+        val date = LocalDate.ofEpochDay(epochDay)
+        val relativePath = "%04d/%02d/%s.jpg".format(date.year, date.monthValue, UUID.randomUUID())
+        val target = File(root, relativePath)
+        target.parentFile?.mkdirs()
+        // Le fichier doit exister avant d'etre partage : FileProvider refuse
+        // une adresse qui ne mene nulle part.
+        if (!target.exists()) target.createNewFile()
+        return relativePath
+    }
+
+    /**
+     * L'adresse a donner a l'appareil photo pour qu'il ecrive dans nos
+     * fichiers. Elle ne vaut que pour ce fichier-la, et le temps de la prise.
+     */
+    fun shareUri(relativePath: String): Uri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.photos",
+        file(relativePath),
+    )
+
+    /**
+     * Reprend le cliche qui vient d'etre pris, ou `null` si l'appareil photo
+     * n'a rien laisse — annulation, ou echec silencieux. Le fichier vide qu'on
+     * avait prepare est alors efface : sinon chaque hesitation laisserait un
+     * zero-octet derriere elle.
+     */
+    fun adoptPhoto(relativePath: String, epochDay: Long): MediaItem? {
+        val target = file(relativePath)
+        if (!target.exists() || target.length() == 0L) {
+            delete(relativePath)
+            return null
+        }
+        return MediaItem(
+            epochDay = epochDay,
+            relativePath = relativePath,
+            kindKey = 0,
         )
     }
 

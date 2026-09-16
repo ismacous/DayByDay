@@ -279,6 +279,20 @@ class DayRepository(context: Context) {
         return true
     }
 
+    /**
+     * Rattache a la journee le cliche que l'appareil photo vient d'ecrire.
+     *
+     * Rien a recopier : il a ete pris directement dans le dossier prive de
+     * l'application (voir [MediaFiles.newPhotoPath]). Rend `false` si
+     * l'appareil photo n'a finalement rien laisse.
+     */
+    suspend fun adoptPhoto(date: LocalDate, relativePath: String, card: DayCard? = null): Boolean {
+        val item = media.adoptPhoto(relativePath, date.toEpochDay()) ?: return false
+        dao.insertMedia(item.copy(cardKey = card?.key))
+        ensureDayExists(date.toEpochDay())
+        return true
+    }
+
     /** Enregistre la nouvelle place d'une photo sur la page du journal. */
     suspend fun updateMedia(item: MediaItem) {
         dao.updateMedia(item)

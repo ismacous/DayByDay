@@ -1,8 +1,5 @@
 package com.ismael.daybyday.ui
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -146,14 +143,6 @@ private val SLEEP_QUALITY = listOf("sleep_good", "sleep_bad")
 private val SEEN = listOf("girlfriend", "friends", "family")
 
 /**
- * Les deux lignes de la carte des ressentis qui ne sont pas des ressentis mais
- * des **faits**. Elles s'affichent en cases a cocher, en bas de la carte, et
- * sans emoji : « J'ai pleuré » n'est pas une humeur qu'on choisit dans une
- * liste, c'est quelque chose qui est arrive.
- */
-private val FEELING_FACTS = listOf("cried", "anxiety")
-
-/**
  * Ce qui fait du bien, dans l'ordre du catalogue. La carte separe les deux
  * familles parce qu'une liste ou « Joie » et « Honte » se suivent oblige a
  * lire chaque pastille avant de la toucher.
@@ -162,9 +151,17 @@ private val FEELINGS_LIGHT = listOf(
     "joy", "laugh", "calm", "excited", "proud", "grateful", "loved", "motivated", "relief",
 )
 
-/** Ce qui pese. Aucune n'est un reproche : ce sont des faits, comme les autres. */
+/**
+ * Ce qui pese. Aucune n'est un reproche : ce sont des faits, comme les autres.
+ *
+ * « Pleuré » et « Angoisse » y sont, au milieu des autres. Elles avaient leur
+ * propre section, en cases a cocher sans emoji, et le resultat disait le
+ * contraire de ce qu'on voulait : deux cas graves ranges a part, en bas de la
+ * carte. Elles ont la meme forme que la tristesse et la colere.
+ */
 private val FEELINGS_HEAVY = listOf(
-    "sad", "stress", "anger", "fear", "lonely", "guilt", "shame", "bored", "overwhelmed", "empty",
+    "sad", "stress", "anger", "fear", "cried", "anxiety",
+    "lonely", "guilt", "shame", "bored", "overwhelmed", "empty",
 )
 
 /**
@@ -591,24 +588,29 @@ fun DayScreen(
     // entiere et ne va sous aucune carte.
     var mediaTarget by remember { mutableStateOf<DayCard?>(null) }
 
-    val pickMedia = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickMultipleVisualMedia(30)
-    ) { uris ->
-        val card = mediaTarget
-        mediaTarget = null
-        if (uris.isNotEmpty()) {
+    // Le jour est relu **au moment du geste** : on peut changer de journee
+    // entre deux photos, et la photo doit suivre celle qu'on regarde.
+    val addPhoto = rememberAddPhoto(
+        dayOf = { LocalDate.ofEpochDay(epochDay) },
+        onPicked = { uris ->
+            val card = mediaTarget
+            mediaTarget = null
             val targetDate = LocalDate.ofEpochDay(epochDay)
             app.appScope.launch {
                 uris.forEach { uri -> repository.addMedia(targetDate, uri, card) }
             }
-        }
-    }
+        },
+        onCaptured = { path ->
+            val card = mediaTarget
+            mediaTarget = null
+            val targetDate = LocalDate.ofEpochDay(epochDay)
+            app.appScope.launch { repository.adoptPhoto(targetDate, path, card) }
+        },
+    )
 
     fun addMediaTo(card: DayCard?) {
         mediaTarget = card
-        pickMedia.launch(
-            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
-        )
+        addPhoto.ask()
     }
 
     // Les reperes rapides sont des etiquettes en base, mais l'ecran ne les
@@ -747,16 +749,10 @@ fun DayScreen(
                 .joinToString(", ") { it.name.lowercase(Locale.FRANCE) }
                 .ifBlank { null },
         ).joinToString(" · ").ifBlank { null }
-        // Les faits d'abord : « j'ai pleuré » compte plus, dans un resume,
-        // qu'une pastille de plus dans la liste.
-        DayCard.EMOTION -> (
-            FEELING_FACTS.filter { tagOn(it) }.mapNotNull { tagOf(it)?.name } +
-                allTags.filter {
-                    it.group == TagCategory.EMOTION &&
-                        it.slug !in FEELING_FACTS &&
-                        it.id in selectedTagIds
-                }.map { it.name }
-            ).joinToString(", ").ifBlank { null }
+        DayCard.EMOTION -> allTags
+            .filter { it.group == TagCategory.EMOTION && it.id in selectedTagIds }
+            .joinToString(", ") { it.name }
+            .ifBlank { null }
         DayCard.TREATMENT -> {
             val expected = treatments.filter { it.active }.sumOf { it.times.size }
             listOfNotNull(
@@ -1035,24 +1031,6 @@ fun DayScreen(
                             Spacer(Modifier.height(18.dp))
                             CardSection("Ce qui a pesé", tint) {
                                 tagCloud(FEELINGS_HEAVY, tint)
-                            }
-                            Spacer(Modifier.height(18.dp))
-                            // Sans emoji, volontairement. Un petit visage qui
-                            // pleure a cote de « J'ai pleuré » transforme un
-                            // fait en mise en scene, et donne a la ligne l'air
-                            // de s'apitoyer. Une case et trois mots suffisent.
-                            CardSection("Ce qui est arrivé", tint) {
-                                FEELING_FACTS.forEachIndexed { index, slug ->
-                                    if (index > 0) Spacer(Modifier.height(8.dp))
-                                    val tag = tagOf(slug)
-                                    val on = tagOn(slug)
-                                    CheckRow(
-                                        label = tag?.name ?: slug,
-                                        checked = on,
-                                        tint = tint,
-                                        onClick = { setTag(slug, !on) },
-                                    )
-                                }
                             }
                         }
                         DayCard.JOURNAL -> {

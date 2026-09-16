@@ -52,6 +52,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,6 +76,7 @@ import com.ismael.daybyday.data.DoseTime
 import com.ismael.daybyday.data.Brushing
 import com.ismael.daybyday.data.Prayer
 import com.ismael.daybyday.data.Treatment
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.util.Locale
 
@@ -202,6 +204,16 @@ fun DayCardShell(
     // Il est garde a part parce qu'il sert **deux fois** : sur la carte, et sur
     // le voile qui la ferme une fois validee. Sans ca, valider une carte
     // rendrait impossible de la rouvrir au meme endroit qu'on l'a fermee.
+    // Le retour de la carte a sa place est lance depuis la portee de **la
+    // carte**, et surtout pas depuis celle du geste.
+    //
+    // C'est le bug qui laissait une carte coincee de travers : le voile qui
+    // ferme une carte validee porte lui aussi ce geste, et deverrouiller le
+    // fait disparaitre a l'instant meme ou le doigt se leve. La portee du
+    // geste meurt avec lui, l'animation de retour est annulee au milieu, et
+    // `slide` reste sur sa derniere valeur — la carte ne revient jamais. La
+    // portee de la carte, elle, survit a la disparition du voile.
+    val cardScope = rememberCoroutineScope()
     val slideGesture = Modifier.draggable(
         orientation = Orientation.Horizontal,
         state = rememberDraggableState { delta ->
@@ -218,8 +230,10 @@ fun DayCardShell(
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                 onCheckedChange(!checked)
             }
-            animate(slide, 0f, animationSpec = tween(Motion.NORMAL)) { value, _ ->
-                slide = value
+            cardScope.launch {
+                animate(slide, 0f, animationSpec = tween(Motion.NORMAL)) { value, _ ->
+                    slide = value
+                }
             }
         },
     )
@@ -245,10 +259,12 @@ fun DayCardShell(
                     size = Size(CHECK_EDGE.toPx(), size.height),
                 )
             }
-            // Une carte validee retient un peu son encre. Juste un peu : elle
-            // doit se distinguer en descendant la page, et rester parfaitement
-            // lisible. C'est une page tournee, pas une page effacee.
-            .graphicsLayer { alpha = 1f - 0.14f * checkEdge },
+            // Le fond d'une carte validee s'eteint un peu. Le gris est sur la
+            // **carte entiere** plutot que sur son contenu seul : c'est ce qui
+            // se voit en descendant la page sans rien lire. L'en-tete, lui,
+            // reprend son encre juste en dessous — la coche verte doit rester
+            // nette, c'est le bouton qui rouvre.
+            .graphicsLayer { alpha = 1f - 0.10f * checkEdge },
     ) {
         Row(
             modifier = Modifier
@@ -373,7 +389,16 @@ fun DayCardShell(
 
         if (!collapsed) {
             Box {
-                Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                Column(
+                    modifier = Modifier
+                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+                        // Le contenu d'une carte validee est nettement grise :
+                        // un voile transparent ne se voyait pas, et une carte
+                        // qui ne repond plus au doigt sans en avoir l'air se
+                        // lit comme une panne. Il reste lisible — c'est une
+                        // page tournee, pas une page effacee.
+                        .graphicsLayer { alpha = 1f - 0.45f * checkEdge },
+                ) {
                     content()
                 }
 

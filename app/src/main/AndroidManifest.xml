@@ -48,6 +48,13 @@
 
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
+        <!-- Depuis Android 11, une application ne voit plus les autres sans le
+             dire : sans cette ligne, « Prendre une photo » ne trouverait aucun
+             appareil photo a qui parler. Elle ne donne aucun acces — elle rend
+             seulement l'appareil photo du telephone visible. -->
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
     </queries>
 
     <application
@@ -83,6 +90,22 @@
                 <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
             </intent-filter>
         </activity-alias>
+
+        <!-- L'adresse ou l'appareil photo du telephone depose le cliche.
+             Elle ne pointe que sur le dossier des photos de l'application
+             (voir res/xml/photos_paths.xml), n'est pas exportee, et
+             l'autorisation d'y ecrire est donnee coup par coup, le temps
+             d'une prise de vue. Sans elle, prendre une photo obligerait a
+             passer par la galerie du telephone. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.photos"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/photos_paths" />
+        </provider>
 
         <!-- Recoit les alarmes, et les rearme : au reveil du telephone, apres
              une mise a jour, et quand l'heure du systeme change. Non exporte :

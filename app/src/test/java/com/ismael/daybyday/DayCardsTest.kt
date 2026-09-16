@@ -105,13 +105,21 @@ class DayCardsTest {
         assertTrue("Trop peu de ressentis : ${ressentis.size}", ressentis.size >= 15)
         assertTrue("Le corps n'a rien a dire : ${corps.size}", corps.size >= 4)
 
-        // Les deux faits d'avant gardent leur slug : c'est lui qui relie les
-        // journees deja marquees, et le renommer les perdrait.
+        // « Pleuré » et « Angoisse » gardent leur slug : c'est lui qui relie les
+        // journees deja marquees, et le renommer les perdrait. Elles ont
+        // maintenant la meme forme que les autres — un mot, un signe — plutot
+        // que deux lignes mises a l'ecart en bas de la carte.
         listOf("cried", "anxiety").forEach { slug ->
             val tag = TagCatalog.tags.first { it.slug == slug }
             assertEquals(TagCategory.EMOTION, tag.category)
-            assertEquals("", tag.emoji)
+            assertTrue("« ${tag.name} » n'a pas de signe", tag.emoji.isNotBlank())
         }
+
+        // Et leurs anciens noms sont repris : sans ca, une base qui les porte
+        // encore sans identifiant stable les perdrait a la synchronisation.
+        val pleure = TagCatalog.tags.first { it.slug == "cried" }
+        assertTrue("J'ai pleuré" in pleure.aliases)
+        assertTrue("Crise d'angoisse" in TagCatalog.tags.first { it.slug == "anxiety" }.aliases)
     }
 
     @Test

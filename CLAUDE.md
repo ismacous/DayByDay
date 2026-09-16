@@ -57,6 +57,14 @@ téléphone (Samsung S25, Android 15).
    `jobApplications`), et « cuisine maison » ne disait rien de plus que
    « bien mangé ».
 6. **Incrémenter `versionCode` et `versionName`** à chaque version livrée.
+7. **L'application ne parle jamais d'une couleur qui peut encore bouger.**
+   La couleur du jour est la moyenne des moments notés : un matin vert seul
+   fait une journée verte à l'écran. `CoachDay.colorSettled` décide si elle est
+   arrêtée — journée passée, couleur posée à la main, quatre moments remplis,
+   ou au plus un moment manquant sans avoir sauté un moment déjà passé. Tant
+   qu'elle ne l'est pas, `CoachDay.color` vaut `null` et **aucune** règle ne se
+   déclenche. C'est un garde-fou unique pour les quelque deux cents phrases :
+   le contourner dans une règle les rouvre toutes.
    Et ne **jamais** repartir d'une base plus ancienne que ce qui tourne sur le
    téléphone : Android refuse d'installer un `versionCode` inférieur, et
    l'échec ressemble à un APK corrompu (« Application non installée ») alors
@@ -861,6 +869,16 @@ téléphone (Samsung S25, Android 15).
 - Les tests d'interface partagent la base réelle de l'émulateur : deux tests ne
   doivent pas toucher la même journée avec la même couleur (un second appui
   l'enlève).
+- **Cartes validées** : le geste latéral valide une carte, et une carte validée
+  ne répond plus au doigt. Le voile qui l'en empêche (`DayCardShell`) déclare
+  l'écoute qui avale les gestes **avant** le glissement latéral : Compose
+  distribue de l'intérieur vers l'extérieur, donc dans l'autre ordre la carte
+  ne pourrait plus être rouverte d'un geste.
+- Le job émulateur des serveurs GitHub ne démarre pas de façon fiable : il ne
+  tourne qu'à la demande (`workflow_dispatch`) et ne bloque jamais l'APK.
+  `android-actions/setup-android` doit recevoir `packages: ""`, sinon il
+  réclame le paquet `tools` que Google a retiré et le job s'arrête avant même
+  de compiler.
 
 - **Les médailles se déclenchent au passage, et « pas encore chargé » n'est pas
   « vide ».** C'est le même piège deux fois. Les champs d'une journée partent

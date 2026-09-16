@@ -17,7 +17,7 @@ package com.ismael.daybyday.data
 enum class BreathPattern(
     val label: String,
     val summary: String,
-    /** Ce à quoi il sert, en une phrase, sans rien promettre. */
+    /** Ce à quoi il sert, et ce que ça fait — en trois phrases, pas une. */
     val purpose: String,
     val inhale: Int,
     val hold: Int,
@@ -27,21 +27,47 @@ enum class BreathPattern(
     COHERENCE(
         label = "Cohérence",
         summary = "5 · 5",
-        purpose = "Le rythme le plus simple. Si tu ne sais pas lequel prendre, prends celui-là.",
+        purpose = "Six respirations par minute, sans pause. C'est le rythme le plus étudié " +
+            "et le plus facile à tenir : il fait redescendre la tension quand elle monte. " +
+            "Cinq minutes, deux ou trois fois par jour, c'est l'usage courant.",
         inhale = 5, hold = 0, exhale = 5, rest = 0,
     ),
     CALM(
         label = "Apaiser",
         summary = "4 · 7 · 8",
-        purpose = "L'expiration est longue. Plutôt le soir, ou quand ça monte.",
+        purpose = "Inspiration courte, longue retenue, expiration deux fois plus longue. " +
+            "C'est le plus exigeant des trois : quatre cycles suffisent, et c'est normal " +
+            "de le trouver dur au début. Plutôt le soir, ou quand ça monte fort.",
         inhale = 4, hold = 7, exhale = 8, rest = 0,
     ),
     SQUARE(
         label = "Carré",
         summary = "4 · 4 · 4 · 4",
-        purpose = "Quatre temps égaux. Utile quand on a besoin de se raccrocher à quelque chose.",
+        purpose = "Quatre temps égaux, faciles à compter. Quand la tête part dans tous " +
+            "les sens, avoir quatre temps identiques donne quelque chose à quoi se tenir. " +
+            "C'est celui des pompiers et des plongeurs, pour cette raison-là.",
         inhale = 4, hold = 4, exhale = 4, rest = 4,
     );
+
+    /**
+     * Le mot qui accompagne chaque temps.
+     *
+     * Il vaut plus que le compte a rebours, et c'est ce qui manquait : une
+     * bulle qui grossit invite a remplir ses poumons a fond, donc a inspirer
+     * trop vite, donc a etre plein bien avant la fin. Le geste juste est une
+     * inspiration **petite et lente** — sans ces trois mots, on ne peut pas le
+     * deviner.
+     */
+    fun hintOf(phase: BreathPhase): String = when (phase) {
+        BreathPhase.INHALE -> "Par le nez, tout doucement — sans remplir à fond"
+        BreathPhase.HOLD -> "Tu gardes, sans serrer la gorge"
+        BreathPhase.EXHALE -> if (this == COHERENCE) {
+            "Laisse partir, sans pousser"
+        } else {
+            "Par la bouche, en fin filet"
+        }
+        BreathPhase.REST -> "Ne reprends pas encore"
+    }
 
     val cycleSeconds: Int get() = inhale + hold + exhale + rest
 
@@ -61,6 +87,16 @@ enum class BreathPattern(
         BreathPhase.REST -> rest
     }
 }
+
+/**
+ * Ce qu'il faut savoir avant de commencer, et qui ne se devine pas.
+ *
+ * C'est le seul conseil de l'ecran, et il repond a la seule erreur que tout le
+ * monde fait la premiere fois.
+ */
+const val BREATH_ADVICE: String =
+    "Tu n'as pas à remplir tes poumons à fond. Si tu es plein avant la fin du " +
+        "compte, c'est que tu inspires trop vite : vise une inspiration petite et lente."
 
 /** Les quatre temps d'un cycle. */
 enum class BreathPhase(val label: String) {

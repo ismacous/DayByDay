@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
@@ -79,7 +80,16 @@ import kotlin.math.roundToLong
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MoneyScreen(onDayClick: (LocalDate) -> Unit) {
+fun MoneyScreen(
+    onDayClick: (LocalDate) -> Unit,
+    /**
+     * Le retour, quand l'ecran s'ouvre **par-dessus** plutot que dans un
+     * onglet. Il n'est plus dans la barre du bas : on y entre par la carte
+     * « Argent du jour », donc il lui faut son propre titre et sa propre porte
+     * de sortie — l'en-tete des onglets ne passe pas ici.
+     */
+    onBack: (() -> Unit)? = null,
+) {
     val app = LocalContext.current.dayByDayApp
     val repository = app.repository
     val scope = rememberCoroutineScope()
@@ -129,7 +139,25 @@ fun MoneyScreen(onDayClick: (LocalDate) -> Unit) {
                 .padding(bottom = innerPadding.calculateBottomPadding())
                 .padding(horizontal = 16.dp),
         ) {
-            item { Spacer(Modifier.height(TAB_HEADER_HEIGHT)) }
+            item {
+                if (onBack == null) {
+                    Spacer(Modifier.height(TAB_HEADER_HEIGHT))
+                } else {
+                    Spacer(Modifier.statusBarsPadding().height(10.dp))
+                    ScreenTitle(
+                        text = "Mon",
+                        accent = "argent",
+                        trailing = {
+                            RoundIconButton(
+                                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                label = "Retour",
+                                onClick = onBack,
+                            )
+                        },
+                    )
+                    Spacer(Modifier.height(14.dp))
+                }
+            }
 
             item {
                 // Le point chaud de l'ecran : ce qu'il reste, en grand, sur la

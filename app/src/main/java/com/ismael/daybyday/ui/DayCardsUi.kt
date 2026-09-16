@@ -142,6 +142,17 @@ fun DayCardShell(
      */
     checked: Boolean = false,
     onCheckedChange: (Boolean) -> Unit = {},
+    /**
+     * Ouvrir la carte **en grand**, ou `null` quand il n'y a nulle part ou
+     * aller — sur une carte deja ouverte, par exemple.
+     *
+     * Une carte de la journee est un resume : elle tient dans un ecran partage
+     * avec douze autres, donc elle montre peu. Le « + » donne la meme carte
+     * seule, avec la place de tout montrer. C'est aussi ce qui permet de garder
+     * la journee courte pour les soirs ou l'on n'a pas la force : le detail
+     * existe, il n'est simplement pas sur le chemin.
+     */
+    onExpand: (() -> Unit)? = null,
     /** L'etat de la carte, en quelques mots. Rien a dire : `null`. */
     summary: String? = null,
     /**
@@ -427,6 +438,30 @@ fun DayCardShell(
             // cadenas dit « c'est ferme ». C'est la deuxieme qui est vraie
             // depuis qu'une carte validee ne se modifie plus, et le signe doit
             // dire ce que le bouton fait.
+            // Le « + » qui ouvre la carte en grand. Il disparait quand la
+            // carte est verrouillee : elle ne se modifie plus, l'agrandir pour
+            // ne rien pouvoir y faire serait une porte qui ne mene nulle part.
+            if (onExpand != null && !checked) {
+                Spacer(Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(
+                            onAccent?.copy(alpha = 0.18f) ?: style.tint.copy(alpha = 0.10f)
+                        )
+                        .clickable(onClickLabel = "Ouvrir ${card.title} en grand") { onExpand() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = null,
+                        tint = onAccent ?: style.tint,
+                        modifier = Modifier.size(17.dp),
+                    )
+                }
+            }
+
             if (checked) {
                 Spacer(Modifier.width(8.dp))
                 Box(

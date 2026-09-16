@@ -19,7 +19,6 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
@@ -40,6 +39,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import com.ismael.daybyday.data.DayCard
 import com.ismael.daybyday.dayByDayApp
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
@@ -68,7 +68,6 @@ private fun indexToMonth(index: Int): YearMonth = YearMonth.of(index / 12, index
 private val tabs = listOf(
     NavItem("calendar", "Mois", Icons.Default.DateRange),
     NavItem("stats", "Bilan", Icons.Default.Star),
-    NavItem("money", "Argent", Icons.Default.ShoppingCart),
     NavItem("settings", "Réglages", Icons.Default.Settings),
 )
 
@@ -243,9 +242,15 @@ fun AppNavigation(
                         StatsScreen(onOpenWeek = { navController.navigate("week") })
                     }
 
+                    // L'argent n'est plus un onglet : on y entre par la carte
+                    // « Argent du jour », la ou l'on note deja ses mouvements.
+                    // Une barre du bas a quatre entrees pour une application
+                    // qui parle d'abord d'humeur donnait a l'argent le meme
+                    // poids qu'au calendrier.
                     composable("money") {
                         MoneyScreen(
                             onDayClick = { date -> navController.navigate("day/${date.toEpochDay()}") },
+                            onBack = { navController.popBackStack() },
                         )
                     }
 
@@ -271,6 +276,49 @@ fun AppNavigation(
                             onOrganizeCards = { navController.navigate("organize-cards") },
                             onOpenJournal = { day ->
                                 navController.navigate("journal/${day.toEpochDay()}")
+                            },
+                            // L'argent est le seul a ne pas s'ouvrir sur
+                            // lui-meme : agrandir « l'argent du jour » doit
+                            // donner le mois, pas la meme journee en plus
+                            // grand. C'est aussi ce qui remplace l'onglet.
+                            onExpandCard = { card, day ->
+                                if (card == DayCard.MONEY) {
+                                    navController.navigate("money")
+                                } else {
+                                    navController.navigate("card/${card.key}/${day.toEpochDay()}")
+                                }
+                            },
+                        )
+                    }
+
+                    // Une carte **en grand**.
+                    //
+                    // C'est le meme ecran de journee, reduit a une seule carte,
+                    // depliee et son fond ouvert. Rien n'a ete recrit : une
+                    // deuxieme version de chaque carte aurait fini par diverger
+                    // de la premiere, et c'est le genre d'ecart qu'on ne
+                    // remarque que six mois plus tard, quand une case cochee ici
+                    // ne se voit plus la-bas.
+                    composable(
+                        route = "card/{card}/{epochDay}",
+                        arguments = listOf(
+                            navArgument("card") { type = NavType.StringType },
+                            navArgument("epochDay") { type = NavType.LongType },
+                        ),
+                    ) { entry ->
+                        val key = entry.arguments?.getString("card")
+                        val epochDay = entry.arguments?.getLong("epochDay")
+                            ?: LocalDate.now().toEpochDay()
+                        DayScreen(
+                            initialDate = LocalDate.ofEpochDay(epochDay),
+                            focus = DayCard.fromKey(key),
+                            onBack = { navController.popBackStack() },
+                            onOrganizeCards = { navController.navigate("organize-cards") },
+                            onOpenJournal = { day ->
+                                navController.navigate("journal/${day.toEpochDay()}")
+                            },
+                            onExpandCard = { card, day ->
+                                navController.navigate("card/${card.key}/${day.toEpochDay()}")
                             },
                         )
                     }

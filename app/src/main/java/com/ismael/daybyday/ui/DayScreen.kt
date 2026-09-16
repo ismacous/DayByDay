@@ -211,6 +211,24 @@ fun DayScreen(
     onBack: () -> Unit,
     onOrganizeCards: () -> Unit,
     onOpenJournal: (LocalDate) -> Unit,
+    /**
+     * Ouvrir une carte **en grand**.
+     *
+     * L'ecran agrandi est ce meme ecran, reduit a une seule carte : rien n'a
+     * ete recrit. Une deuxieme version de chaque carte aurait fini par diverger
+     * de la premiere, et c'est le genre d'ecart qu'on ne remarque que six mois
+     * plus tard, quand une case cochee ici ne se voit plus la-bas.
+     */
+    onExpandCard: (DayCard, LocalDate) -> Unit = { _, _ -> },
+    /**
+     * La carte a montrer seule, ou `null` pour la journee entiere.
+     *
+     * Quand elle est posee, l'ecran ne garde que l'essentiel autour : la date,
+     * les fleches, et la carte — depliee, son fond ouvert. Tout le reste (le
+     * compte des cartes validees, le souvenir, le bouton d'organisation) parle
+     * de la journee entiere et n'a rien a faire sur une carte seule.
+     */
+    focus: DayCard? = null,
 ) {
     val context = LocalContext.current
     val app = context.dayByDayApp
@@ -276,7 +294,7 @@ fun DayScreen(
     // Les cartes dont le fond est ouvert : celui qui montre la semaine. L'etat
     // vit ici et non dans les preferences — ouvrir le fond d'une carte est un
     // coup d'oeil, pas un reglage.
-    var expandedCards by remember { mutableStateOf(emptySet<DayCard>()) }
+    var expandedCards by remember { mutableStateOf(setOfNotNull(focus)) }
 
     // La celebration en cours, ou null. Elle ne se declenche qu'au **passage**
     // d'un etat a l'autre, jamais a l'affichage : sinon rouvrir la journee la
@@ -302,8 +320,15 @@ fun DayScreen(
     // La disposition des cartes vit dans les preferences : elle est relue a
     // chaque changement pour que l'ecran suive immediatement.
     var layoutTick by remember { mutableIntStateOf(0) }
-    val visibleCards = remember(layoutTick) { app.prefs.visibleDayCards }
-    val collapsedCards = remember(layoutTick) { app.prefs.collapsedDayCards }
+    val allVisibleCards = remember(layoutTick) { app.prefs.visibleDayCards }
+    val visibleCards = remember(layoutTick, focus) {
+        if (focus != null) listOf(focus) else allVisibleCards
+    }
+    // Une carte ouverte en grand est toujours depliee : on vient de demander a
+    // la voir, la replier serait absurde.
+    val collapsedCards = remember(layoutTick, focus) {
+        if (focus != null) emptySet() else app.prefs.collapsedDayCards
+    }
 
     val treatments by remember { repository.observeTreatments() }
         .collectAsStateWithLifecycle(emptyList())
@@ -414,7 +439,7 @@ fun DayScreen(
         jobApplications = entry?.jobApplications
         jumua = entry?.jumua
         checkedCards = entry?.checkedCardKeys.orEmpty()
-        expandedCards = emptySet()
+        expandedCards = setOfNotNull(focus)
         loadedFor = epochDay
     }
 
@@ -429,9 +454,12 @@ fun DayScreen(
      * `everythingCheckedBefore` repart a `null` en changeant de jour : ouvrir
      * une journee deja bouclee ne doit rien rejouer.
      */
-    LaunchedEffect(epochDay, loadedFor, checkedCards, visibleCards) {
+    LaunchedEffect(epochDay, loadedFor, checkedCards, allVisibleCards, focus) {
         if (loadedFor != epochDay) return@LaunchedEffect
-        val complete = visibleCards.isNotEmpty() && visibleCards.all { it.key in checkedCards }
+        // Sur une carte ouverte en grand, la fete n'a pas lieu d'etre : elle
+        // celebre la journee entiere, et on n'en voit qu'un morceau.
+        if (focus != null) return@LaunchedEffect
+        val complete = allVisibleCards.isNotEmpty() && allVisibleCards.all { it.key in checkedCards }
         val before = everythingCheckedBefore
         everythingCheckedBefore = complete
         if (before == false && complete) {
@@ -798,8 +826,8 @@ fun DayScreen(
             Spacer(Modifier.height(10.dp))
 
             ScreenTitle(
-                text = "Ma",
-                accent = "journée",
+                text = if (focus == null) "Ma" else focus.title.substringBefore(' '),
+                accent = if (focus == null) "journée" else focus.title.substringAfter(' ', ""),
                 trailing = {
                     RoundIconButton(
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
@@ -838,8 +866,8 @@ fun DayScreen(
             // Elle ne s'affiche qu'une fois la premiere carte verifiee : tant
             // qu'on n'a rien marque, un « 0 sur 11 » en haut de chaque journee
             // ressemblerait a un devoir a rendre, et ce n'en est pas un.
-            val checkedCount = visibleCards.count { it.key in checkedCards }
-            if (checkedCount > 0) {
+            val checkedCount = allVisibleCards.count { it.key in checkedCards }
+            if (checkedCount > 0 && focus == null) {
                 Spacer(Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -856,7 +884,7 @@ fun DayScreen(
                         text = if (checkedCount == visibleCards.size) {
                             "Journée validée en entier"
                         } else {
-                            "$checkedCount carte(s) validée(s) sur ${visibleCards.size}"
+                            "$checkedCount carte(s) validée(s) sur ${allVisibleCards.size}"
                         },
                         style = MaterialTheme.typography.labelMedium,
                         color = Verified,
@@ -877,7 +905,7 @@ fun DayScreen(
                 }
             }
 
-            if (isBirthday) {
+            if (isBirthday && focus == null) {
                 Text(
                     text = "🎂 Ton anniversaire",
                     style = MaterialTheme.typography.bodyMedium,
@@ -901,7 +929,7 @@ fun DayScreen(
                 }
             }
 
-            memory?.let { souvenir ->
+            memory?.takeIf { focus == null }?.let { souvenir ->
                 Spacer(Modifier.height(14.dp))
                 MemoryCard(
                     memory = souvenir,
@@ -948,12 +976,20 @@ fun DayScreen(
                         null
                     },
                     onToggleCollapse = {
+                        if (focus != null) return@DayCardShell
                         val current = app.prefs.collapsedDayCards
                         app.prefs.collapsedDayCards =
                             if (card in current) current - card else current + card
                         layoutTick += 1
                     },
                     onOrganize = onOrganizeCards,
+                    // Le « + » n'apparait pas sur une carte deja ouverte en
+                    // grand : il n'y aurait nulle part ou aller.
+                    onExpand = if (focus == null) {
+                        { onExpandCard(card, date) }
+                    } else {
+                        null
+                    },
                 ) {
                     val tint = cardStyle(card).tint
 
@@ -1725,12 +1761,14 @@ fun DayScreen(
                 Spacer(Modifier.height(16.dp))
             }
 
-            OutlinedButton(
-                onClick = onOrganizeCards,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Organiser ma journée")
+            if (focus == null) {
+                OutlinedButton(
+                    onClick = onOrganizeCards,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Organiser ma journée")
+                }
             }
 
             Spacer(Modifier.height(48.dp))

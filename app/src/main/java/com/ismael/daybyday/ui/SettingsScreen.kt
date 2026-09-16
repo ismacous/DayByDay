@@ -32,6 +32,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -59,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.health.connect.client.PermissionController
@@ -415,8 +417,15 @@ fun SettingsScreen() {
 
             Spacer(Modifier.height(16.dp))
 
-            // --- Sauvegarde automatique -----------------------------------
-            SectionCard(title = "Sauvegarde automatique", index = 3) {
+            // --- Tes donnees ------------------------------------------------
+            //
+            // Quatre cartes auparavant : sauvegarde automatique, sauvegarde
+            // manuelle, resume annuel, effacer. Ce sont quatre facons de faire
+            // la meme chose — sortir ses donnees, ou les reprendre — et les
+            // separer obligeait a lire quatre titres pour trouver la bonne. Une
+            // carte, quatre paragraphes.
+            SectionCard(title = "Tes données", index = 3) {
+                SubTitle("Sauvegarde automatique")
                 Text(
                     "Une sauvegarde par jour dans le dossier de ton choix. Le fichier " +
                         "précédent est remplacé, donc ça ne prend pas de place en plus.",
@@ -502,12 +511,8 @@ fun SettingsScreen() {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // --- Sauvegarde manuelle --------------------------------------
-            SectionCard(title = "Sauvegarde manuelle", index = 4) {
+                SubSection()
+                SubTitle("Sauvegarde manuelle")
                 Button(
                     onClick = { exportBackup.launch("DayByDay-${LocalDate.now()}.zip") },
                     enabled = !busy,
@@ -535,12 +540,8 @@ fun SettingsScreen() {
                 ) {
                     Text("Choisir un fichier de sauvegarde")
                 }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // --- Resume annuel --------------------------------------------
-            SectionCard(title = "Résumé annuel", index = 5) {
+                SubSection()
+                SubTitle("Résumé de l'année")
                 Text(
                     "Exporte une année entière en texte (titres, notes, détails, " +
                         "statistiques) pour préparer ta vidéo de fin d'année.",
@@ -560,12 +561,29 @@ fun SettingsScreen() {
                         Text("Exporter $exportYear")
                     }
                 }
+                SubSection()
+                SubTitle("Tout effacer")
+                Text(
+                    "Supprime définitivement toutes les journées, notes, photos, " +
+                        "vidéos et mouvements d'argent. C'est irréversible : fais " +
+                        "d'abord une sauvegarde si tu hésites.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = { showEraseDialog = true },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Effacer toutes mes données", color = MaterialTheme.colorScheme.error)
+                }
             }
 
             Spacer(Modifier.height(16.dp))
 
             // --- Confidentialite ------------------------------------------
-            SectionCard(title = "Confidentialité", index = 6) {
+            SectionCard(title = "Confidentialité", index = 4) {
                 SettingSwitchRow(
                     title = "Verrouiller l'application",
                     subtitle = if (hasPin) {
@@ -636,7 +654,7 @@ fun SettingsScreen() {
             Spacer(Modifier.height(16.dp))
 
             // --- A propos -------------------------------------------------
-            SectionCard(title = "À propos", index = 7) {
+            SectionCard(title = "À propos", index = 5) {
                 InfoRow("Version", "${appVersion.name} (build ${appVersion.code})")
                 InfoRow("Terminée le", formatDateTime(BuildConfig.BUILD_TIME))
                 InfoRow("Identifiant", appVersion.packageName)
@@ -660,27 +678,6 @@ fun SettingsScreen() {
                 )
                 InfoRow("Permissions", "notifications · pas · sommeil · temps d'écran")
                 InfoRow("Accès réseau", "aucun — permission INTERNET absente")
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // --- Effacer --------------------------------------------------
-            SectionCard(title = "Effacer mes données", index = 8) {
-                Text(
-                    "Supprime définitivement toutes les journées, notes, photos, " +
-                        "vidéos et mouvements d'argent. C'est irréversible : fais " +
-                        "d'abord une sauvegarde si tu hésites.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(10.dp))
-                OutlinedButton(
-                    onClick = { showEraseDialog = true },
-                    enabled = !busy,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Effacer toutes mes données", color = MaterialTheme.colorScheme.error)
-                }
             }
 
             Spacer(Modifier.height(48.dp))
@@ -900,6 +897,34 @@ private fun InfoRow(label: String, value: String) {
         )
         Text(value, style = MaterialTheme.typography.bodyMedium)
     }
+}
+
+/**
+ * Le titre d'un paragraphe **dans** une carte de reglages.
+ *
+ * Il existe parce que quatre cartes ont ete reunies en une : « Tes donnees »
+ * porte la sauvegarde automatique, la manuelle, le resume de l'annee et
+ * l'effacement. Sans ces intertitres, ce serait un mur de boutons ; avec, c'est
+ * une carte qui a quatre paragraphes.
+ */
+@Composable
+private fun SubTitle(text: String) {
+    Text(
+        text = text.uppercase(java.util.Locale.FRANCE),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.primary,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 1.sp,
+    )
+    Spacer(Modifier.height(8.dp))
+}
+
+/** L'espace qui separe deux paragraphes d'une meme carte. */
+@Composable
+private fun SubSection() {
+    Spacer(Modifier.height(20.dp))
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    Spacer(Modifier.height(16.dp))
 }
 
 @Composable

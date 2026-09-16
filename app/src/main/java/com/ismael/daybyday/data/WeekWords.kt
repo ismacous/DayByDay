@@ -90,14 +90,19 @@ object WeekWords {
     // --- Le titre -----------------------------------------------------------
 
     private fun titleFor(mood: Mood, name: String): String {
-        val suffix = if (name.isEmpty()) "" else " $name"
+        // Le prenom se place la ou on le dirait a voix haute : devant quand la
+        // phrase s'adresse a quelqu'un (« Ismael, ta semaine »), derriere quand
+        // elle constate (« Belle semaine, Ismael »). Sans prenom, la phrase
+        // tient toute seule — l'application ne connait pas toujours le sien.
+        val before = if (name.isEmpty()) "" else "$name, "
+        val after = if (name.isEmpty()) "" else ", $name"
         return when (mood) {
-            Mood.EMPTY -> "Ta semaine$suffix"
-            Mood.DARK -> "Je suis là$suffix"
-            Mood.DOWN -> "Ta semaine passée$suffix"
-            Mood.STEADY -> "Ta semaine$suffix"
-            Mood.UP -> "Ça remonte$suffix"
-            Mood.BRIGHT -> "Belle semaine$suffix"
+            Mood.EMPTY -> "${before}ta semaine".replaceFirstChar { it.uppercase(Locale.FRANCE) }
+            Mood.DARK -> "Je suis là$after"
+            Mood.DOWN -> "${before}ta semaine passée".replaceFirstChar { it.uppercase(Locale.FRANCE) }
+            Mood.STEADY -> "${before}ta semaine".replaceFirstChar { it.uppercase(Locale.FRANCE) }
+            Mood.UP -> "Ça remonte$after"
+            Mood.BRIGHT -> "Belle semaine$after"
         }
     }
 

@@ -108,7 +108,7 @@ class WeekWordsTest {
             "Ismael",
             variant = 0,
         )
-        assertEquals("Ça remonte Ismael", words.title)
+        assertEquals("Ça remonte, Ismael", words.title)
     }
 
     @Test
@@ -155,9 +155,24 @@ class WeekWordsTest {
 
     @Test
     fun `un prenom vide ne laisse pas de trou`() {
-        val words = WeekWords.of(review((0..6).map { day(it.toLong(), DayColor.GREEN) }), "  ", 0)
-        assertFalse(words.title.contains("  "))
-        assertFalse(words.title.endsWith(" "))
+        // L'application ne connait pas toujours le prenom : les titres doivent
+        // tenir debout sans lui, sans virgule orpheline ni espace en trop.
+        val vides = listOf(
+            review(emptyList()),
+            review((0..6).map { day(it.toLong(), DayColor.BLACK) }),
+            review((0..6).map { day(it.toLong(), DayColor.ORANGE) }),
+            review((0..6).map { day(it.toLong(), DayColor.GREEN) }),
+        )
+        vides.forEach { semaine ->
+            val title = WeekWords.of(semaine, "  ", 0).title
+            assertFalse("Espace double : $title", title.contains("  "))
+            assertFalse("Finit mal : $title", title.endsWith(" ") || title.endsWith(","))
+            assertTrue("Commence mal : $title", title.first().isUpperCase())
+        }
+
+        // Et avec un prenom, il est toujours separe par une virgule.
+        val avec = WeekWords.of(vides.last(), "Ismael", 0).title
+        assertTrue("Prénom mal posé : $avec", avec.contains(", Ismael") || avec.startsWith("Ismael, "))
     }
 
     @Test

@@ -28,6 +28,12 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # Sans ca, l'action installe par defaut le paquet « tools », retire
+          # du depot Google depuis : sdkmanager repond « Failed to find package
+          # 'tools' » et le job s'arrete avant meme de compiler. Les paquets
+          # dont on a besoin sont installes explicitement juste apres.
+          packages: ""
 
       - name: Cache Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -79,6 +85,12 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # Sans ca, l'action installe par defaut le paquet « tools », retire
+          # du depot Google depuis : sdkmanager repond « Failed to find package
+          # 'tools' » et le job s'arrete avant meme de compiler. Les paquets
+          # dont on a besoin sont installes explicitement juste apres.
+          packages: ""
 
       - name: Cache Gradle
         uses: gradle/actions/setup-gradle@v4

@@ -148,7 +148,7 @@ object Jumua {
  * colonnes. Les `bit` ne doivent jamais changer : c'est eux qui sont ecrits.
  */
 enum class Brushing(val key: Int, val label: String) {
-    MORNING(0, "Matin", 13),
+    MORNING(0, "Matin"),
     NOON(1, "Midi"),
     EVENING(2, "Soir");
 
@@ -411,9 +411,9 @@ data class DayEntry(
 
 /** Moment de prise d'un traitement dans la journee. */
 enum class DoseTime(val key: Int, val label: String, val emoji: String) {
-    MORNING(0, "Matin", "🌅", 13),
+    MORNING(0, "Matin", "🌅"),
     NOON(1, "Midi", "☀️"),
-    EVENING(2, "Soir", "🌆", 22),
+    EVENING(2, "Soir", "🌆"),
     NIGHT(3, "Nuit", "🌙");
 
     /** Bit de ce moment dans le masque d'un traitement. */

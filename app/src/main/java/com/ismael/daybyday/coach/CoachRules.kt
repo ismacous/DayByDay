@@ -80,6 +80,23 @@ object CoachRules {
         }
         if (today.color == DayColor.BLACK) out += NudgeCandidate(CoachRule.BLACK_DAY)
         if (today.color == DayColor.RED) out += NudgeCandidate(CoachRule.RED_DAY)
+
+        // Tant que la couleur du jour n'est pas arretee, les deux regles
+        // ci-dessus se taisent — c'est voulu. Mais se taire tout court
+        // laisserait sans reponse un matin noir note a 9 h, alors que c'est
+        // exactement le moment ou il faut etre la. On parle donc du **moment**,
+        // qui lui est certain, plutot que de la journee, qui ne l'est pas.
+        if (!today.colorSettled) {
+            val worst = DayPart.entries
+                .mapNotNull { part -> today.partScores.getOrNull(part.ordinal)?.let { part to it } }
+                .minByOrNull { it.second }
+            if (worst != null && worst.second <= DayColor.RED.score) {
+                out += NudgeCandidate(
+                    rule = CoachRule.DARK_MOMENT,
+                    values = mapOf("moment" to worst.first.label.lowercase(Locale.FRANCE)),
+                )
+            }
+        }
         if (today.tagSlugs.contains("anxiety")) out += NudgeCandidate(CoachRule.ANXIETY)
         if (today.tagSlugs.contains("cried")) out += NudgeCandidate(CoachRule.CRIED)
 
@@ -166,6 +183,9 @@ object CoachRules {
         val out = mutableListOf<NudgeCandidate>()
         val today = snapshot.todayDay
 
+        // `color` est deja filtre par [CoachDay.colorSettled] : une journee dont
+        // la couleur peut encore tomber vaut `null` ici, et rien ne se
+        // declenche. Un matin vert note a midi ne fete plus rien.
         if (today.color == DayColor.GREEN) {
             val previousGreen = snapshot.days.values
                 .filter { it.epochDay < snapshot.todayEpochDay && it.color == DayColor.GREEN }
@@ -631,11 +651,14 @@ object CoachRules {
  * a zero chaque matin.
  */
 private fun CoachSnapshot.coloredStreakDays(present: (CoachDay) -> Boolean): List<CoachDay> {
-    val start = if (todayDay.isNoted) 0 else 1
+    // `color` et non `isNoted` : une couleur encore provisoire ne peut ni
+    // allonger ni casser une serie. On part alors d'hier, comme pour une
+    // journee pas encore notee.
+    val start = if (todayDay.color != null) 0 else 1
     val out = mutableListOf<CoachDay>()
     for (back in start until start + 400) {
         val day = days[todayEpochDay - back] ?: break
-        if (!day.isNoted || !present(day)) break
+        if (day.color == null || !present(day)) break
         out += day
     }
     return out

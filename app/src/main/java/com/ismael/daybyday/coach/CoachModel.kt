@@ -161,6 +161,21 @@ enum class CoachRule(
         subjects = listOf("pleuré", "larmes"),
     ),
 
+    /**
+     * Un moment de la journee est note en rouge ou en noir, alors que la
+     * couleur du jour n'est pas encore arretee.
+     *
+     * Elle existe pour une raison precise : les regles qui parlent de la
+     * journee se taisent tant que sa couleur peut encore bouger, et sans
+     * celle-ci un matin noir note a 9 h ne recevrait plus rien — exactement le
+     * moment ou il faut etre la. Elle parle donc du **moment**, qui est
+     * certain, et jamais de la journee, qui ne l'est pas encore.
+     */
+    DARK_MOMENT(
+        "moment_sombre", NudgeTone.CARE, 92, 1, ANYWHERE,
+        subjects = listOf("matin", "après-midi", "soir", "nuit"),
+    ),
+
     /** La journee du jour vient d'etre notee en rouge. */
     RED_DAY(
         "journee_rouge", NudgeTone.CARE, 90, 1, ANYWHERE,

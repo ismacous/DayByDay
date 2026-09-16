@@ -11,13 +11,12 @@ import com.ismael.daybyday.coach.CoachSnapshot
 import com.ismael.daybyday.coach.Nudge
 import com.ismael.daybyday.coach.NudgeSurface
 import com.ismael.daybyday.coach.TemporaryCoachMemory
-import com.ismael.daybyday.data.WeekReview
 import com.ismael.daybyday.data.WeekReviewBuilder
+import com.ismael.daybyday.data.WeekWords
 import com.ismael.daybyday.dayByDayApp
 import com.ismael.daybyday.ui.MainActivity
 import java.time.LocalDate
 import java.time.LocalTime
-import java.util.Locale
 
 /**
  * Les notifications de l'application, ecrites **une seule fois**.
@@ -93,13 +92,25 @@ object Reminders {
         val review = app.repository.weekReview(monday)
         if (!review.hasData && !forced) return
 
-        val name = app.prefs.firstName.trim()
+        // Le texte se choisit dans [WeekWords], pas ici : c'est du Kotlin pur,
+        // donc c'est testable, et c'est le seul moment ou l'application prend
+        // la parole sans qu'on lui ait rien demande. La formulation tourne avec
+        // le numero de semaine, pour que deux lundis de suite ne se ressemblent
+        // pas mot pour mot.
+        val words = WeekWords.of(
+            review = review,
+            firstName = app.prefs.firstName,
+            variant = review.weekNumber,
+        )
         val notification = NotificationCompat
             .Builder(context.applicationContext, WeeklyReviewWorker.CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(if (name.isEmpty()) "Ta semaine" else "$name, ta semaine")
-            .setContentText(summaryLine(review.summary.average, review.summary.filledDays))
-            .setStyle(NotificationCompat.BigTextStyle().bigText(bigText(review)))
+            .setContentTitle(words.title)
+            // La ligne visible sans derouler est la phrase qui accueille, et
+            // surtout pas la moyenne : « 2,3 / 3 sur 7 journee(s) notee(s) »
+            // etait la premiere chose qu'Ismael lisait le lundi matin.
+            .setContentText(words.short)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(words.long))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
             .setContentIntent(openApp(context, MainActivity.OPEN_WEEK, REQUEST_WEEKLY))
@@ -191,20 +202,6 @@ object Reminders {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-    }
-
-    private fun summaryLine(average: Double?, filledDays: Int): String {
-        if (average == null) return "Aucune couleur posée la semaine dernière."
-        val formatted = String.format(Locale.FRANCE, "%.1f", average)
-        return "$formatted / 3 sur $filledDays journée(s) notée(s)."
-    }
-
-    private fun bigText(review: WeekReview): String {
-        val lines = mutableListOf(summaryLine(review.summary.average, review.summary.filledDays))
-        if (review.movedDays > 0) lines += "Bougé ${review.movedDays} jour(s)."
-        if (review.wentOutDays > 0) lines += "Sorti ${review.wentOutDays} jour(s)."
-        if (review.writtenDays > 0) lines += "Écrit ${review.writtenDays} jour(s)."
-        return lines.joinToString(" ")
     }
 
     private const val REQUEST_EVENING = 1

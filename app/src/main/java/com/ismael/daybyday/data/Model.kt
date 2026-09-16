@@ -148,7 +148,7 @@ object Jumua {
  * colonnes. Les `bit` ne doivent jamais changer : c'est eux qui sont ecrits.
  */
 enum class Brushing(val key: Int, val label: String) {
-    MORNING(0, "Matin"),
+    MORNING(0, "Matin", 13),
     NOON(1, "Midi"),
     EVENING(2, "Soir");
 
@@ -161,11 +161,29 @@ enum class Brushing(val key: Int, val label: String) {
 }
 
 /** Les quatre moments d'une journee, pour nuancer une humeur qui bouge. */
-enum class DayPart(val key: Int, val label: String, val emoji: String) {
-    MORNING(0, "Matin", "🌅"),
-    AFTERNOON(1, "Après-midi", "☀️"),
-    EVENING(2, "Soir", "🌆"),
-    NIGHT(3, "Nuit", "🌙"),
+enum class DayPart(
+    val key: Int,
+    val label: String,
+    val emoji: String,
+    /**
+     * Heure a laquelle ce moment est derriere soi.
+     *
+     * Elle ne sert pas a l'affichage : elle sert a savoir, a l'heure qu'il
+     * est, quels moments auraient deja pu etre remplis. C'est ce qui permet de
+     * faire la difference entre « voila la couleur de la journee » et « voila
+     * la couleur du seul moment qui a ete note pour l'instant ».
+     */
+    val endHour: Int,
+) {
+    MORNING(0, "Matin", "🌅", 13),
+    AFTERNOON(1, "Après-midi", "☀️", 18),
+    EVENING(2, "Soir", "🌆", 22),
+    NIGHT(3, "Nuit", "🌙", 24);
+
+    companion object {
+        /** Les moments deja passes a [hour] : ceux qu'on pouvait deja noter. */
+        fun elapsedAt(hour: Int): List<DayPart> = entries.filter { hour >= it.endHour }
+    }
 }
 
 /** Familles d'etiquettes, pour que la liste reste rangee au lieu d'etre en vrac. */
@@ -393,9 +411,9 @@ data class DayEntry(
 
 /** Moment de prise d'un traitement dans la journee. */
 enum class DoseTime(val key: Int, val label: String, val emoji: String) {
-    MORNING(0, "Matin", "🌅"),
+    MORNING(0, "Matin", "🌅", 13),
     NOON(1, "Midi", "☀️"),
-    EVENING(2, "Soir", "🌆"),
+    EVENING(2, "Soir", "🌆", 22),
     NIGHT(3, "Nuit", "🌙");
 
     /** Bit de ce moment dans le masque d'un traitement. */

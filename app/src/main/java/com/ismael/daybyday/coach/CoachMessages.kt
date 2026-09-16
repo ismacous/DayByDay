@@ -130,6 +130,18 @@ object CoachMessages {
             "Tu as pleuré aujourd'hui. Ça arrive aux gens solides aussi.",
         ),
 
+        // Elle parle d'un moment, jamais de la journee : c'est tout l'interet.
+        // La journee n'est pas finie, et rien ici ne doit laisser entendre
+        // qu'elle est deja perdue.
+        CoachRule.DARK_MOMENT to listOf(
+            "Ton {moment} a été dur, et c'est noté. La journée n'est pas finie pour autant.",
+            "Un {moment} compliqué. Le reste de la journée n'est pas obligé de ressembler à ça.",
+            "Ça a été rude ce {moment}. Je suis là, et rien ne t'oblige à rattraper quoi que ce soit.",
+            "Ton {moment} a été lourd. Tu l'as noté, c'est déjà quelque chose de fait.",
+            "Le {moment} a été difficile. Prends la suite de la journée comme elle vient.",
+            "Dur, ce {moment}. Si tu peux t'accorder quelque chose de doux après, fais-le.",
+        ),
+
         CoachRule.RED_DAY to listOf(
             "Journée difficile aujourd'hui. Elle est notée, tu peux la poser maintenant.",
             "Ta journée est en rouge. C'était dur, et tu n'as pas besoin d'en faire plus.",

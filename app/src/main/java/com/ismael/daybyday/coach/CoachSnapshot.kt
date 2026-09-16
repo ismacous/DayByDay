@@ -27,6 +27,18 @@ data class CoachDay(
     val colorKey: Int? = null,
     val colorManual: Boolean = false,
     /**
+     * La couleur du jour est-elle **arretee** ?
+     *
+     * C'est le garde-fou contre les faux positifs de tout l'algorithme, et il
+     * tient en une phrase : tant que la journee n'est pas jouee, la couleur
+     * affichee n'est que la moyenne des moments deja notes. Un matin vert seul
+     * fait une journee verte a l'ecran — et le soir peut tout changer.
+     * Repondre a cette couleur-la, c'est commenter le debut d'un film.
+     *
+     * Voir [CoachSnapshot.build] pour les quatre facons de l'arreter.
+     */
+    val colorSettled: Boolean = true,
+    /**
      * Les quatre moments, dans l'ordre matin, apres-midi, soir, nuit.
      * `null` pour un moment non rempli — c'est ce qui permet de dire quel
      * moment de la journee est le plus dur **sans** compter les trous.
@@ -66,10 +78,24 @@ data class CoachDay(
     /** Nombre de moments remplis dans la journee. */
     val partCount: Int get() = partScores.count { it != null }
 
-    val color: DayColor? get() = DayColor.fromKey(colorKey)
+    /** La couleur telle qu'elle est affichee, arretee ou non. */
+    val rawColor: DayColor? get() = DayColor.fromKey(colorKey)
+
+    /**
+     * La couleur dont les regles ont le droit de parler : celle qui ne bougera
+     * plus. Une couleur encore provisoire vaut `null`, exactement comme une
+     * journee non notee — les regles n'ont alors rien a dire, et c'est voulu.
+     */
+    val color: DayColor? get() = if (colorSettled) rawColor else null
 
     val score: Int? get() = color?.score
 
+    /**
+     * Une couleur existe sur le calendrier. Volontairement **non** filtre par
+     * [colorSettled] : pour compter les trous du mois ou les jours notes
+     * d'affilee, ce qui compte est qu'il y ait quelque chose, pas que ce soit
+     * definitif.
+     */
     val isNoted: Boolean get() = colorKey != null
 
     val moved: Boolean? get() = sportLevel?.let { it >= SportLevel.LIGHT.key }
@@ -207,6 +233,7 @@ data class CoachSnapshot(
                     epochDay = entry.epochDay,
                     colorKey = entry.colorKey,
                     colorManual = entry.colorManual == true,
+                    colorSettled = isColorSettled(entry, today.toEpochDay(), hourOfDay),
                     partScores = DayPart.entries.map { part -> entry.partColorKey(part) },
                     sportLevel = entry.sportLevel,
                     foodLevel = entry.foodLevel,
@@ -241,6 +268,48 @@ data class CoachSnapshot(
                 hiddenCardKeys = hiddenCards.map { it.key }.toSet(),
                 moneyDays = moneyDays,
             )
+        }
+
+        /**
+         * La couleur de cette journee est-elle arretee ? Voir
+         * [CoachDay.colorSettled].
+         *
+         * Quatre facons de l'etre, et pas une de plus :
+         *
+         * 1. la journee est passee — elle ne bougera plus, quoi qu'il y ait
+         *    dedans ;
+         * 2. la couleur a ete posee a la main — c'est un choix, pas un calcul,
+         *    et il n'y a rien a attendre de plus ;
+         * 3. les quatre moments sont remplis ;
+         * 4. il ne manque **au plus qu'un** moment, et aucun moment deja passe
+         *    n'a ete oublie.
+         *
+         * Le quatrieme cas est celui qui fait tout le travail. Il laisse
+         * l'application parler le soir, quand la journee est jouee a trois
+         * quarts, et il la fait taire a midi, quand elle ne l'est pas — c'est
+         * exactement la difference entre « voila ta journee » et « voila ton
+         * matin ».
+         */
+        private fun isColorSettled(
+            entry: DayEntry,
+            todayEpochDay: Long,
+            hourOfDay: Int,
+        ): Boolean {
+            // Pas de couleur : il n'y a rien a proteger, et les regles savent
+            // deja ne rien dire d'une journee vide.
+            if (entry.colorKey == null) return true
+            if (entry.epochDay < todayEpochDay) return true
+            // Une journee a venir n'existe pas encore.
+            if (entry.epochDay > todayEpochDay) return false
+            if (entry.colorManual == true) return true
+
+            val filled = DayPart.entries.count { entry.partColorKey(it) != null }
+            if (filled == DayPart.entries.size) return true
+            if (filled < DayPart.entries.size - 1) return false
+            // Trois moments sur quatre, mais lesquels ? Trois moments notes en
+            // sautant le matin, a quatorze heures, laisse un trou dans ce qui a
+            // deja eu lieu : la couleur ne raconte pas la journee.
+            return DayPart.elapsedAt(hourOfDay).all { entry.partColorKey(it) != null }
         }
     }
 }

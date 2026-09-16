@@ -73,7 +73,15 @@ class CoachTest {
         sleepFrom: Int? = null,
         sleepTo: Int? = null,
         manual: Boolean = false,
-        parts: List<DayColor> = listOf(DayColor.ORANGE, DayColor.ORANGE),
+        /**
+         * Les quatre moments sont remplis par defaut, et c'est important : une
+         * journee dont les moments ne sont pas tous notes a une couleur encore
+         * provisoire, dont l'algorithme n'a pas le droit de parler. Les tests
+         * qui veulent une couleur qui compte partent donc d'une journee
+         * complete ; ceux qui testent justement le garde-fou disent le
+         * contraire explicitement.
+         */
+        parts: List<DayColor> = List(4) { DayColor.ORANGE },
     ) = DayEntry(
         epochDay = today.toEpochDay() - back,
         colorKey = color?.key,
@@ -412,6 +420,111 @@ class CoachTest {
 
         val hydrated = (0..20).map { day(it, DayColor.ORANGE, water = 7) }
         assertFalse(rulesOf(snapshotOf(hydrated)).contains(CoachRule.WATER_LOW))
+    }
+
+    // --- Le garde-fou contre les faux positifs ------------------------------
+
+    @Test
+    fun `un seul moment rempli ne fait pas une journee verte`() {
+        // Le bug tel qu'Ismael l'a vu : matin note en vert, la couleur du jour
+        // se calcule donc en vert, et l'appli fete « enfin une journee verte »
+        // a dix-huit heures — alors que la journee a fini en jaune.
+        val history = (7..30).map { day(it, DayColor.ORANGE) }
+        val matinVert = day(0, DayColor.GREEN, parts = listOf(DayColor.GREEN))
+        val rules = rulesOf(snapshotOf(history + matinVert, hour = 18))
+
+        assertFalse(rules.contains(CoachRule.FIRST_GREEN))
+        assertFalse(rules.contains(CoachRule.GREEN_DAY))
+    }
+
+    @Test
+    fun `une journee complete peut etre fetee`() {
+        // Le meme jour, les quatre moments remplis : la couleur ne bougera
+        // plus, on a le droit de s'en rejouir.
+        val history = (7..30).map { day(it, DayColor.ORANGE) }
+        val complete = day(0, DayColor.GREEN, parts = List(4) { DayColor.GREEN })
+        val rules = rulesOf(snapshotOf(history + complete, hour = 18))
+
+        assertTrue(rules.contains(CoachRule.FIRST_GREEN))
+        assertTrue(rules.contains(CoachRule.GREEN_DAY))
+    }
+
+    @Test
+    fun `une couleur choisie a la main est prise au mot`() {
+        // Poser la couleur soi-meme est un choix, pas un calcul : il n'y a rien
+        // a attendre de plus.
+        val history = (7..30).map { day(it, DayColor.ORANGE) }
+        val chosen = day(0, DayColor.GREEN, manual = true, parts = emptyList())
+
+        assertTrue(rulesOf(snapshotOf(history + chosen, hour = 9)).contains(CoachRule.GREEN_DAY))
+    }
+
+    @Test
+    fun `une journee passee compte telle qu'elle est`() {
+        // Hier ne bougera plus, meme si un seul moment y a ete note : sinon
+        // toutes les series du passe se mettraient a trouer.
+        val entries = (0..10).map { back ->
+            day(back, DayColor.GREEN, parts = listOf(DayColor.GREEN))
+        }
+        // Aujourd'hui est provisoire, mais les trois jours d'avant suffisent.
+        assertTrue(rulesOf(snapshotOf(entries, hour = 9)).contains(CoachRule.GREEN_STREAK))
+    }
+
+    @Test
+    fun `un matin noir recoit quand meme du soutien`() {
+        // Le garde-fou ne doit pas rendre l'appli muette au pire moment : la
+        // journee n'est pas encore jouee, mais le matin, lui, a bien eu lieu.
+        val history = (1..10).map { day(it, DayColor.ORANGE) }
+        val matinNoir = day(0, DayColor.BLACK, parts = listOf(DayColor.BLACK))
+        val candidates = CoachRules.candidates(snapshotOf(history + matinNoir, hour = 14))
+        val rules = candidates.map { it.rule }
+
+        assertFalse("On ne declare pas la journee noire avant la fin", rules.contains(CoachRule.BLACK_DAY))
+        assertTrue(rules.contains(CoachRule.DARK_MOMENT))
+        assertEquals("matin", candidates.first { it.rule == CoachRule.DARK_MOMENT }.values["moment"])
+    }
+
+    @Test
+    fun `le moment sombre se tait une fois la journee arretee`() {
+        // Sinon on dirait deux fois la meme chose : une fois sur le moment, une
+        // fois sur la journee.
+        val history = (1..10).map { day(it, DayColor.ORANGE) }
+        val noire = day(0, DayColor.BLACK, parts = List(4) { DayColor.BLACK })
+        val rules = rulesOf(snapshotOf(history + noire, hour = 23))
+
+        assertTrue(rules.contains(CoachRule.BLACK_DAY))
+        assertFalse(rules.contains(CoachRule.DARK_MOMENT))
+    }
+
+    @Test
+    fun `il ne doit plus manquer qu'un seul moment`() {
+        val history = (1..10).map { day(it, DayColor.ORANGE) }
+
+        // Deux moments sur quatre : la moitie de la journee reste a ecrire.
+        val moitie = day(0, DayColor.RED, parts = List(2) { DayColor.RED })
+        assertFalse(rulesOf(snapshotOf(history + moitie, hour = 20)).contains(CoachRule.RED_DAY))
+
+        // Trois sur quatre, le soir : il ne reste que la nuit, on peut parler.
+        val presque = day(0, DayColor.RED, parts = List(3) { DayColor.RED })
+        assertTrue(rulesOf(snapshotOf(history + presque, hour = 22)).contains(CoachRule.RED_DAY))
+    }
+
+    @Test
+    fun `un moment deja passe qu'on a saute laisse la couleur en suspens`() {
+        // Trois moments notes, mais pas le matin, et il est quatorze heures :
+        // le matin a bien eu lieu, il manque a l'appel, la couleur ne raconte
+        // donc pas la journee.
+        val history = (1..10).map { day(it, DayColor.ORANGE) }
+        val sansMatin = DayEntry(
+            epochDay = today.toEpochDay(),
+            colorKey = DayColor.RED.key,
+            colorManual = false,
+            partAfternoon = DayColor.RED.key,
+            partEvening = DayColor.RED.key,
+            partNight = DayColor.RED.key,
+        )
+
+        assertFalse(rulesOf(snapshotOf(history + sansMatin, hour = 14)).contains(CoachRule.RED_DAY))
     }
 
     // --- Le soutien passe devant ------------------------------------------

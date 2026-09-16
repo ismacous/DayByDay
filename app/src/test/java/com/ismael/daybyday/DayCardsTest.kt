@@ -138,6 +138,21 @@ class DayCardsTest {
     }
 
     @Test
+    fun `un detail suffit a ce qu'une journee ne soit pas vide`() {
+        // Les champs des cartes agrandies comptent comme les autres : sinon le
+        // depot efface la journee en quittant l'ecran, et le detail qu'on vient
+        // de prendre le temps d'ecrire disparait.
+        assertTrue(!DayEntry(epochDay = 0, nightWakes = 2).isEmpty)
+        assertTrue(!DayEntry(epochDay = 0, napMinutes = 30).isEmpty)
+        assertTrue(!DayEntry(epochDay = 0, sportMinutes = 45).isEmpty)
+        assertTrue(!DayEntry(epochDay = 0, socialNote = "Karim, au parc").isEmpty)
+        assertTrue(!DayEntry(epochDay = 0, workNote = "Relancé l'agence").isEmpty)
+
+        // Et zero reveil est une reponse, pas un vide.
+        assertTrue(!DayEntry(epochDay = 0, nightWakes = 0).isEmpty)
+    }
+
+    @Test
     fun `un media sans carte reste celui de la journee entiere`() {
         val libre = MediaItem(epochDay = 0, relativePath = "a.jpg", kindKey = 0)
         val repas = MediaItem(

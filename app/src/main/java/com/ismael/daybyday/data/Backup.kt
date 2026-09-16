@@ -32,11 +32,15 @@ data class BackupInfo(
  * Sauvegarde / restauration complete sous forme d'un fichier .zip choisi par
  * l'utilisateur (aucun envoi reseau : c'est un simple fichier local).
  */
+/** Un entier facultatif d'une sauvegarde : absent et `null` valent pareil. */
+private fun JSONObject.optIntOrNull(key: String): Int? =
+    if (!has(key) || isNull(key)) null else optInt(key)
+
 object Backup {
 
     private const val JSON_NAME = "daybyday.json"
     private const val MEDIA_PREFIX = "media/"
-    private const val FORMAT_VERSION = 11
+    private const val FORMAT_VERSION = 12
 
     const val AUTO_BACKUP_NAME = "DayByDay-sauvegarde-auto.zip"
 
@@ -99,6 +103,11 @@ object Backup {
                     .put("wentOut", day.wentOut ?: JSONObject.NULL)
                     .put("weightKg", day.weightKg ?: JSONObject.NULL)
                     .put("waistCm", day.waistCm ?: JSONObject.NULL)
+                    .put("nightWakes", day.nightWakes ?: JSONObject.NULL)
+                    .put("napMinutes", day.napMinutes ?: JSONObject.NULL)
+                    .put("sportMinutes", day.sportMinutes ?: JSONObject.NULL)
+                    .put("socialNote", day.socialNote)
+                    .put("workNote", day.workNote)
                     .put("partMorning", day.partMorning ?: JSONObject.NULL)
                     .put("partAfternoon", day.partAfternoon ?: JSONObject.NULL)
                     .put("partEvening", day.partEvening ?: JSONObject.NULL)
@@ -383,6 +392,14 @@ object Backup {
                         } else {
                             item.optDouble("waistCm")
                         },
+                        // Absents des sauvegardes d'avant : `has` et pas
+                        // seulement `isNull`, sinon une ancienne sauvegarde
+                        // relirait un zero la ou il n'y a rien.
+                        nightWakes = item.optIntOrNull("nightWakes"),
+                        napMinutes = item.optIntOrNull("napMinutes"),
+                        sportMinutes = item.optIntOrNull("sportMinutes"),
+                        socialNote = item.optString("socialNote"),
+                        workNote = item.optString("workNote"),
                         partMorning = item.optIntOrNull("partMorning"),
                         partAfternoon = item.optIntOrNull("partAfternoon"),
                         partEvening = item.optIntOrNull("partEvening"),
@@ -650,6 +667,11 @@ object Backup {
                     entry.wentOut?.let { add(if (it) "Sorti" else "Pas sorti") }
                     entry.weightKg?.let { add("Poids : ${"%.1f".format(it)} kg") }
                     entry.waistCm?.let { add("Tour de taille : ${"%.1f".format(it)} cm") }
+                    entry.nightWakes?.let { add("Réveils la nuit : $it") }
+                    entry.napMinutes?.let { add("Sieste : $it min") }
+                    entry.sportMinutes?.let { add("Séance : $it min") }
+                    entry.socialNote.takeIf { it.isNotBlank() }?.let { add("Avec : $it") }
+                    entry.workNote.takeIf { it.isNotBlank() }?.let { add("Démarches : $it") }
                     entry.steps?.let { add("$it pas") }
                 }
                 if (details.isNotEmpty()) builder.appendLine(details.joinToString(" · "))

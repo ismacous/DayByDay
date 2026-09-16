@@ -209,6 +209,10 @@ class DayRepository(context: Context) {
 
     suspend fun allDayTags(): List<DayTagCrossRef> = dao.allDayTags()
 
+    /** Les etiquettes posees entre deux dates, bornes comprises. */
+    fun observeDayTagsBetween(from: LocalDate, to: LocalDate): Flow<List<DayTagCrossRef>> =
+        dao.observeDayTagsBetween(from.toEpochDay(), to.toEpochDay())
+
     suspend fun createTag(name: String, emoji: String, category: TagCategory) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return

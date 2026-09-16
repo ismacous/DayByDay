@@ -136,6 +136,15 @@ class MigrationTest {
                 // Le tour de taille : `null` et pas zero. Une journee d'avant
                 // n'est pas une journee ou il valait zero centimetre.
                 assertEquals(null, day?.waistCm)
+                // Les details des cartes agrandies : `null` pour les nombres,
+                // chaine vide pour les textes. Une journee d'avant n'est pas
+                // une journee sans reveil nocturne, c'est une journee dont on
+                // ne sait rien.
+                assertEquals(null, day?.nightWakes)
+                assertEquals(null, day?.napMinutes)
+                assertEquals(null, day?.sportMinutes)
+                assertEquals("", day?.socialNote)
+                assertEquals("", day?.workNote)
                 // La table des vocaux existe et repond, meme si aucune journee
                 // d'avant n'en contient : c'est ce qui prouve que la migration
                 // l'a bien creee, et pas seulement que Room ne s'est pas plaint.

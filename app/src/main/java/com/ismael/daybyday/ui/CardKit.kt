@@ -1003,6 +1003,83 @@ fun BigCheck(
 }
 
 /**
+ * Un petit nombre, sur une ligne : reveils dans la nuit, minutes de sieste,
+ * duree d'une seance.
+ *
+ * Il ne vit que dans les cartes **agrandies**, et sa forme le dit : une ligne
+ * discrete, deux boutons, et rien tant qu'on n'a pas touche. `null` n'est pas
+ * zero — « zero reveil » est une reponse, « je n'ai pas rempli » n'en est pas
+ * une, et c'est cette difference qui permet aux moyennes de ne pas mentir.
+ *
+ * Le premier appui sur « + » part donc du premier cran, pas de zero : personne
+ * n'ouvre un compteur pour y poser un zero.
+ */
+@Composable
+fun StepperRow(
+    label: String,
+    value: Int?,
+    tint: Color,
+    onChange: (Int?) -> Unit,
+    modifier: Modifier = Modifier,
+    step: Int = 1,
+    max: Int = 20,
+    suffix: String = "",
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(tint.copy(alpha = 0.06f))
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+        )
+        StepperButton("−", tint, enabled = value != null) {
+            val next = (value ?: 0) - step
+            onChange(if (next <= 0 && (value ?: 0) <= step) null else next.coerceAtLeast(0))
+        }
+        Text(
+            text = value?.let { if (suffix.isBlank()) "$it" else "$it $suffix" } ?: "—",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = if (value == null) MaterialTheme.colorScheme.onSurfaceVariant else tint,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.width(if (suffix.isBlank()) 44.dp else 76.dp),
+        )
+        StepperButton("+", tint, enabled = (value ?: 0) < max) {
+            onChange(((value ?: 0) + step).coerceAtMost(max))
+        }
+    }
+}
+
+@Composable
+private fun StepperButton(
+    glyph: String,
+    tint: Color,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(tint.copy(alpha = if (enabled) 0.14f else 0.05f))
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = glyph,
+            style = MaterialTheme.typography.titleMedium,
+            color = if (enabled) tint else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
  * Un nombre qu'on fait monter : les candidatures envoyees dans la journee.
  *
  * Une case a cocher aurait dit « j'ai cherché du travail », ce qui ne veut rien

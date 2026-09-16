@@ -79,6 +79,16 @@ interface DayDao {
     @Query("SELECT * FROM day_tags")
     suspend fun allDayTags(): List<DayTagCrossRef>
 
+    /**
+     * Les etiquettes posees sur une plage de jours.
+     *
+     * Elle sert aux fonds de cartes qui comptent des **jours** plutot que des
+     * mesures : « tu as vu quelqu'un trois jours sur sept » ne se lit dans
+     * aucune colonne de `day_entries`.
+     */
+    @Query("SELECT * FROM day_tags WHERE epochDay BETWEEN :from AND :to")
+    fun observeDayTagsBetween(from: Long, to: Long): Flow<List<DayTagCrossRef>>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun linkTag(crossRef: DayTagCrossRef)
 

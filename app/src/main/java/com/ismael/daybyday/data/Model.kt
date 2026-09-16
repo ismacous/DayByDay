@@ -236,6 +236,28 @@ data class DayEntry(
      * fait un chiffre.
      */
     val waistCm: Double? = null,
+    /**
+     * Les details que la carte courte ne montre pas.
+     *
+     * Ils n'existent que dans la carte **agrandie**, et c'est tout leur
+     * interet : une journee doit pouvoir se remplir en trente secondes les
+     * soirs ou l'on n'a pas la force, et se remplir en detail les jours ou
+     * l'on veut comprendre. Tout mettre dans la carte courte reviendrait a
+     * demander le detail tous les jours ; ne rien avoir de plus reviendrait a
+     * ne jamais pouvoir le donner.
+     *
+     * Tous nullables, comme le reste : « non renseigne » est une reponse.
+     */
+    /** Reveils dans la nuit. `0` est une reponse, `null` veut dire « on ne sait pas ». */
+    val nightWakes: Int? = null,
+    /** Minutes de sieste dans la journee. */
+    val napMinutes: Int? = null,
+    /** Duree de la seance de sport, en minutes. */
+    val sportMinutes: Int? = null,
+    /** Avec qui, et ce que vous avez fait. */
+    val socialNote: String = "",
+    /** Ou en sont les demarches : a qui tu as ecrit, ce que tu attends. */
+    val workNote: String = "",
     val partMorning: Int? = null,
     val partAfternoon: Int? = null,
     val partEvening: Int? = null,
@@ -412,6 +434,8 @@ data class DayEntry(
             sleepStartMinutes == null && sleepEndMinutes == null &&
             waterGlasses == null && mealsNote.isBlank() && snackNote.isBlank() &&
             medicalWith.isBlank() && medicalNote.isBlank() &&
+            nightWakes == null && napMinutes == null && sportMinutes == null &&
+            socialNote.isBlank() && workNote.isBlank() &&
             (prayerMask ?: 0) == 0 && jobApplications == null &&
             showered != true && (brushMask ?: 0) == 0 && jumua != true &&
             // Une journee dont on n'a garde que « j'ai relu » n'est pas vide :

@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Version du schema. Affichee dans les reglages, a propos, pour savoir ce que
  * fait tourner le telephone en cas de probleme.
  */
-const val DATABASE_VERSION = 24
+const val DATABASE_VERSION = 25
 
 @Database(
     entities = [
@@ -653,6 +653,29 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
+         * Les details des cartes agrandies.
+         *
+         * Cinq colonnes vides : une journee d'avant cette version n'est pas une
+         * journee sans reveil nocturne, c'est une journee dont on ne sait rien.
+         * Les deux textes partent a la chaine vide, comme les autres textes de
+         * la table — « rien d'ecrit » et « pas encore rempli » ne se
+         * distinguent pas pour du texte libre.
+         */
+        val MIGRATION_24_25 = object : Migration(24, 25) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE day_entries ADD COLUMN nightWakes INTEGER")
+                db.execSQL("ALTER TABLE day_entries ADD COLUMN napMinutes INTEGER")
+                db.execSQL("ALTER TABLE day_entries ADD COLUMN sportMinutes INTEGER")
+                db.execSQL(
+                    "ALTER TABLE day_entries ADD COLUMN socialNote TEXT NOT NULL DEFAULT ''"
+                )
+                db.execSQL(
+                    "ALTER TABLE day_entries ADD COLUMN workNote TEXT NOT NULL DEFAULT ''"
+                )
+            }
+        }
+
+        /**
          * Toutes les migrations, dans l'ordre.
          *
          * **Une seule liste**, et c'est le but : la base l'utilise, et les tests
@@ -687,6 +710,7 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_21_22,
             MIGRATION_22_23,
             MIGRATION_23_24,
+            MIGRATION_24_25,
         )
 
         @Volatile

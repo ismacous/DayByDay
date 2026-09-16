@@ -120,6 +120,7 @@ import com.ismael.daybyday.ui.theme.Brand
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -260,6 +261,12 @@ fun DayScreen(
     var wentOut by remember { mutableStateOf<Boolean?>(null) }
     var weightText by remember { mutableStateOf("") }
     var waistText by remember { mutableStateOf("") }
+    // Les details de la carte agrandie. Ils n'apparaissent que la.
+    var nightWakes by remember { mutableStateOf<Int?>(null) }
+    var napMinutes by remember { mutableStateOf<Int?>(null) }
+    var sportMinutes by remember { mutableStateOf<Int?>(null) }
+    var socialNote by remember { mutableStateOf("") }
+    var workNote by remember { mutableStateOf("") }
     var stepsValue by remember { mutableStateOf<Int?>(null) }
     var screenValue by remember { mutableStateOf<Int?>(null) }
     var stepsGranted by remember { mutableStateOf(false) }
@@ -367,6 +374,24 @@ fun DayScreen(
     }.collectAsStateWithLifecycle(emptyMap())
     val selectedTagIds = dayTags.map { it.id }.toSet()
 
+    // Les etiquettes de la semaine, pour les fonds de cartes qui comptent des
+    // **jours** plutot que des mesures. Chargees seulement quand une carte
+    // agrandie les demande : une requete de plus sur chaque journee, pour un
+    // fond que personne n'ouvre, serait payee tous les jours pour rien.
+    val weekTagLinks by remember(epochDay, focus) {
+        if (focus == null) {
+            flowOf(emptyList())
+        } else {
+            repository.observeDayTagsBetween(date.minusDays(6), date)
+        }
+    }.collectAsStateWithLifecycle(emptyList())
+
+    /** Les sept jours, et pour chacun : une de ces etiquettes est-elle posee ? */
+    fun weekTagDays(ids: Set<Long>): List<Boolean> {
+        val days = weekTagLinks.filter { it.tagId in ids }.map { it.epochDay }.toSet()
+        return (6 downTo 0).map { back -> date.minusDays(back.toLong()).toEpochDay() in days }
+    }
+
     fun currentEntry(day: Long) = DayEntry(
         epochDay = day,
         colorKey = colorKey,
@@ -381,6 +406,11 @@ fun DayScreen(
         wentOut = wentOut,
         weightKg = weightText.replace(',', '.').toDoubleOrNull(),
         waistCm = waistText.replace(',', '.').toDoubleOrNull(),
+        nightWakes = nightWakes,
+        napMinutes = napMinutes,
+        sportMinutes = sportMinutes,
+        socialNote = socialNote.trim(),
+        workNote = workNote.trim(),
         steps = stepsValue,
         screenMinutes = screenValue,
         sleepStartMinutes = sleepStart,
@@ -423,6 +453,11 @@ fun DayScreen(
         wentOut = entry?.wentOut
         weightText = entry?.weightKg?.let { String.format(Locale.FRANCE, "%.1f", it) }.orEmpty()
         waistText = entry?.waistCm?.let { String.format(Locale.FRANCE, "%.1f", it) }.orEmpty()
+        nightWakes = entry?.nightWakes
+        napMinutes = entry?.napMinutes
+        sportMinutes = entry?.sportMinutes
+        socialNote = entry?.socialNote.orEmpty()
+        workNote = entry?.workNote.orEmpty()
         stepsValue = entry?.steps
         screenValue = entry?.screenMinutes
         sleepStart = entry?.sleepStartMinutes
@@ -572,6 +607,11 @@ fun DayScreen(
         wentOut,
         weightText,
         waistText,
+        nightWakes,
+        napMinutes,
+        sportMinutes,
+        socialNote,
+        workNote,
         stepsValue,
         screenValue,
         sleepStart,
@@ -993,6 +1033,21 @@ fun DayScreen(
                 ) {
                     val tint = cardStyle(card).tint
 
+                    /**
+                     * Est-on dans la carte **agrandie** ?
+                     *
+                     * C'est le partage qui tient tout l'ecran : la carte courte
+                     * ne porte que ce qu'on remplit tous les soirs, meme les
+                     * soirs sans force ; l'agrandie porte le detail, pour les
+                     * jours ou l'on veut comprendre. Le detail existe donc
+                     * toujours, sans jamais etre sur le chemin.
+                     *
+                     * « Voir la semaine » n'est plus que dans l'agrandie, et
+                     * pour la meme raison : sur douze cartes, douze boutons de
+                     * semaine font douze occasions de s'arreter.
+                     */
+                    val detail = focus == card
+
                     when (card) {
                         DayCard.MOOD -> {
                             Row(
@@ -1119,22 +1174,51 @@ fun DayScreen(
                                     },
                                 )
                             }
-                            CardWeek(
-                                card = card,
-                                tint = tint,
-                                expanded = card in expandedCards,
-                                onToggle = { expandedCards = expandedCards.toggle(card) },
-                            ) {
-                                MiniBars(
-                                    values = week.map { entry ->
-                                        entry?.sleepMinutes?.div(60f)
-                                    },
-                                    labels = weekLabels,
-                                    captions = week.map { entry ->
-                                        entry?.sleepMinutes?.let { "${it / 60} h" }
-                                    },
+                            if (detail) {
+                                Spacer(Modifier.height(18.dp))
+                                // Deux details qui expliquent une nuit courte
+                                // sans qu'on ait rien d'autre a ecrire : on
+                                // s'est reveille, ou on a dormi ailleurs dans
+                                // la journee. Ni l'un ni l'autre ne merite
+                                // d'etre demande tous les soirs.
+                                CardSection("La nuit dans le detail", tint) {
+                                    StepperRow(
+                                        label = "Réveils dans la nuit",
+                                        value = nightWakes,
+                                        tint = tint,
+                                        onChange = { nightWakes = it },
+                                    )
+                                    Spacer(Modifier.height(10.dp))
+                                    StepperRow(
+                                        label = "Sieste",
+                                        value = napMinutes,
+                                        step = 15,
+                                        max = 240,
+                                        suffix = "min",
+                                        tint = tint,
+                                        onChange = { napMinutes = it },
+                                    )
+                                }
+                            }
+                            // « Voir la semaine » ne vit que dans la carte agrandie.
+                            if (detail) {
+                                CardWeek(
+                                    card = card,
                                     tint = tint,
-                                )
+                                    expanded = card in expandedCards,
+                                    onToggle = { expandedCards = expandedCards.toggle(card) },
+                                ) {
+                                    MiniBars(
+                                        values = week.map { entry ->
+                                            entry?.sleepMinutes?.div(60f)
+                                        },
+                                        labels = weekLabels,
+                                        captions = week.map { entry ->
+                                            entry?.sleepMinutes?.let { "${it / 60} h" }
+                                        },
+                                        tint = tint,
+                                    )
+                                }
                             }
                         }
                         DayCard.ACTIVITY -> {
@@ -1158,22 +1242,25 @@ fun DayScreen(
                             // met en perspective, pas en bas de la carte : sept
                             // barres de pas rangees apres les questions sur le
                             // sport auraient eu l'air de les commenter.
-                            CardWeek(
-                                card = card,
-                                tint = tint,
-                                expanded = card in expandedCards,
-                                onToggle = { expandedCards = expandedCards.toggle(card) },
-                            ) {
-                                MiniBars(
-                                    values = week.map { it?.steps?.toFloat() },
-                                    labels = weekLabels,
-                                    captions = week.map { entry ->
-                                        entry?.steps?.let { steps ->
-                                            if (steps >= 1000) "${steps / 1000}k" else "$steps"
-                                        }
-                                    },
+                            // « Voir la semaine » ne vit que dans la carte agrandie.
+                            if (detail) {
+                                CardWeek(
+                                    card = card,
                                     tint = tint,
-                                )
+                                    expanded = card in expandedCards,
+                                    onToggle = { expandedCards = expandedCards.toggle(card) },
+                                ) {
+                                    MiniBars(
+                                        values = week.map { it?.steps?.toFloat() },
+                                        labels = weekLabels,
+                                        captions = week.map { entry ->
+                                            entry?.steps?.let { steps ->
+                                                if (steps >= 1000) "${steps / 1000}k" else "$steps"
+                                            }
+                                        },
+                                        tint = tint,
+                                    )
+                                }
                             }
                             Spacer(Modifier.height(18.dp))
                             // Sortir ou rester chez soi a rejoint cette carte.
@@ -1224,9 +1311,27 @@ fun DayScreen(
                                     },
                                 )
                             }
-                            Spacer(Modifier.height(18.dp))
-                            CardSection("Ce que tu as fait", tint) {
-                                tagTiles(TagCategory.ACTIVITY, tint)
+                            if (detail) {
+                                Spacer(Modifier.height(18.dp))
+                                CardSection("Ce que tu as fait", tint) {
+                                    tagTiles(TagCategory.ACTIVITY, tint)
+                                }
+                                Spacer(Modifier.height(18.dp))
+                                // Combien de temps, et pas seulement « une
+                                // vraie seance » : c'est ce qui se compare d'un
+                                // mois sur l'autre. Mais ca demande de se
+                                // souvenir, donc ca reste ici.
+                                CardSection("Combien de temps", tint) {
+                                    StepperRow(
+                                        label = "Séance",
+                                        value = sportMinutes,
+                                        step = 15,
+                                        max = 300,
+                                        suffix = "min",
+                                        tint = tint,
+                                        onChange = { sportMinutes = it },
+                                    )
+                                }
                             }
                         }
                         DayCard.FOOD -> {
@@ -1266,40 +1371,55 @@ fun DayScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            Spacer(Modifier.height(18.dp))
-                            OutlinedTextField(
-                                value = mealsNote,
-                                onValueChange = { mealsNote = it.take(500) },
-                                label = { Text("Ce que tu as mangé (optionnel)") },
-                                shape = RoundedCornerShape(16.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 90.dp),
-                            )
-                            Spacer(Modifier.height(18.dp))
-                            // Le grignotage n'est plus une etiquette parmi
-                            // quatre. « Cuisine maison », « fast-food » et
-                            // « alcool » ne disaient rien que « compliquée /
-                            // correcte / bien mangé » ne dise deja ; le
-                            // grignotage, si — et il merite qu'on puisse ecrire
-                            // ce que c'etait, ce qu'une etiquette ne permet pas.
-                            val snacked = tagOn("snacking")
-                            CardSection("Grignotage", tint) {
-                                CheckRow(
-                                    label = "🍫 J'ai grignoté",
-                                    checked = snacked,
-                                    tint = tint,
-                                    onClick = { setTag("snacking", !snacked) },
+                            // Ecrire ce qu'on a mange demande de s'en
+                            // souvenir et de le taper : c'est exactement le
+                            // genre de chose qu'on ne fait pas un soir sans
+                            // force, et qui fait abandonner la carte entiere si
+                            // elle le reclame tous les jours. La carte courte
+                            // garde donc deux gestes — le ressenti et les
+                            // verres — et le reste attend qu'on l'ouvre.
+                            //
+                            // L'eau reste dans la carte courte, et ne part pas
+                            // dans une carte a elle : boire fait partie de la
+                            // meme question, et une quinzieme carte irait
+                            // contre tout ce qu'on essaie de faire ici.
+                            if (detail) {
+                                Spacer(Modifier.height(18.dp))
+                                OutlinedTextField(
+                                    value = mealsNote,
+                                    onValueChange = { mealsNote = it.take(500) },
+                                    label = { Text("Ce que tu as mangé (optionnel)") },
+                                    shape = RoundedCornerShape(16.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 90.dp),
                                 )
-                                if (snacked) {
-                                    Spacer(Modifier.height(10.dp))
-                                    OutlinedTextField(
-                                        value = snackNote,
-                                        onValueChange = { snackNote = it.take(300) },
-                                        label = { Text("Quoi, et à quel moment ?") },
-                                        shape = RoundedCornerShape(16.dp),
-                                        modifier = Modifier.fillMaxWidth(),
+                                Spacer(Modifier.height(18.dp))
+                                // Le grignotage n'est plus une etiquette parmi
+                                // quatre. « Cuisine maison », « fast-food » et
+                                // « alcool » ne disaient rien que « compliquée /
+                                // correcte / bien mangé » ne dise deja ; le
+                                // grignotage, si — et il merite qu'on puisse
+                                // ecrire ce que c'etait, ce qu'une etiquette ne
+                                // permet pas.
+                                val snacked = tagOn("snacking")
+                                CardSection("Grignotage", tint) {
+                                    CheckRow(
+                                        label = "🍫 J'ai grignoté",
+                                        checked = snacked,
+                                        tint = tint,
+                                        onClick = { setTag("snacking", !snacked) },
                                     )
+                                    if (snacked) {
+                                        Spacer(Modifier.height(10.dp))
+                                        OutlinedTextField(
+                                            value = snackNote,
+                                            onValueChange = { snackNote = it.take(300) },
+                                            label = { Text("Quoi, et à quel moment ?") },
+                                            shape = RoundedCornerShape(16.dp),
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1373,44 +1493,48 @@ fun DayScreen(
                                     )
                                 }
                             }
-                            CardWeek(
-                                card = card,
-                                tint = tint,
-                                expanded = card in expandedCards,
-                                onToggle = { expandedCards = expandedCards.toggle(card) },
-                            ) {
-                                val weights = week.map { it?.weightKg?.toFloat() }
-                                if (weights.all { it == null }) {
-                                    Text(
-                                        "Aucun poids noté cette semaine.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                } else {
-                                    // Les barres partent du poids le plus bas
-                                    // de la semaine, pas de zero : sur des
-                                    // valeurs autour de quatre-vingts kilos,
-                                    // partir de zero ferait sept barres
-                                    // identiques.
-                                    val floor = weights.filterNotNull().min() - 1f
-                                    MiniBars(
-                                        values = weights.map { it?.minus(floor) },
-                                        labels = weekLabels,
-                                        captions = weights.map {
-                                            it?.let { kg -> String.format(Locale.FRANCE, "%.0f", kg) }
-                                        },
-                                        tint = tint,
-                                    )
+                            // « Voir la semaine » ne vit que dans la carte agrandie.
+                            if (detail) {
+                                CardWeek(
+                                    card = card,
+                                    tint = tint,
+                                    expanded = card in expandedCards,
+                                    onToggle = { expandedCards = expandedCards.toggle(card) },
+                                ) {
+                                    val weights = week.map { it?.weightKg?.toFloat() }
+                                    if (weights.all { it == null }) {
+                                        Text(
+                                            "Aucun poids noté cette semaine.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    } else {
+                                        // Les barres partent du poids le plus bas
+                                        // de la semaine, pas de zero : sur des
+                                        // valeurs autour de quatre-vingts kilos,
+                                        // partir de zero ferait sept barres
+                                        // identiques.
+                                        val floor = weights.filterNotNull().min() - 1f
+                                        MiniBars(
+                                            values = weights.map { it?.minus(floor) },
+                                            labels = weekLabels,
+                                            captions = weights.map {
+                                                it?.let { kg -> String.format(Locale.FRANCE, "%.0f", kg) }
+                                            },
+                                            tint = tint,
+                                        )
+                                    }
                                 }
                             }
-                            Spacer(Modifier.height(18.dp))
-                            // La moitie qui manquait a la carte. Avec le seul
-                            // poids, elle ne servait qu'un jour sur dix ; un
-                            // corps a quelque chose a dire tous les jours, et
-                            // c'est ce qui se compare ensuite au sommeil et a
-                            // l'alimentation dans le Bilan.
-                            CardSection("Ce que ton corps a dit", tint) {
-                                tagCloud(BODY_SIGNS, tint)
+                            if (detail) {
+                                Spacer(Modifier.height(18.dp))
+                                // Six pastilles, c'est deja une liste a lire :
+                                // la carte courte garde les deux mesures, qui
+                                // se posent en deux chiffres, et les signes du
+                                // corps attendent qu'on ouvre.
+                                CardSection("Ce que ton corps a dit", tint) {
+                                    tagCloud(BODY_SIGNS, tint)
+                                }
                             }
                         }
                         DayCard.TREATMENT -> {
@@ -1426,11 +1550,16 @@ fun DayScreen(
                                 onEdit = { editingTreatment = it },
                                 onAdd = { creatingTreatment = true },
                             )
+                            if (detail) {
                             Spacer(Modifier.height(18.dp))
                             // Cocher « rendez-vous médical » disait qu'il y en
                             // avait eu un — ce qui ne sert a rien six mois plus
                             // tard, quand on cherche lequel. Le nom du medecin
                             // et le motif, eux, se retrouvent par la recherche.
+                            //
+                            // Un rendez-vous n'arrive pas tous les jours : la
+                            // carte courte n'a que les prises a cocher, qui
+                            // elles reviennent matin et soir.
                             val appointment = tagOn("appointment")
                             CardSection("Rendez-vous", tint) {
                                 CheckRow(
@@ -1460,6 +1589,7 @@ fun DayScreen(
                                     )
                                 }
                             }
+                            }
                         }
                         DayCard.PRAYER -> {
                             PrayerCardBody(
@@ -1480,26 +1610,29 @@ fun DayScreen(
                                     }
                                 },
                             )
-                            CardWeek(
-                                card = card,
-                                tint = tint,
-                                expanded = card in expandedCards,
-                                onToggle = { expandedCards = expandedCards.toggle(card) },
-                            ) {
-                                MiniBars(
-                                    values = week.map { entry ->
-                                        entry?.prayerMask?.let { mask ->
-                                            Prayer.entries.count { mask and it.bit != 0 }.toFloat()
-                                        }
-                                    },
-                                    labels = weekLabels,
-                                    captions = week.map { entry ->
-                                        entry?.prayerMask?.let { mask ->
-                                            "${Prayer.entries.count { mask and it.bit != 0 }}/5"
-                                        }
-                                    },
+                            // « Voir la semaine » ne vit que dans la carte agrandie.
+                            if (detail) {
+                                CardWeek(
+                                    card = card,
                                     tint = tint,
-                                )
+                                    expanded = card in expandedCards,
+                                    onToggle = { expandedCards = expandedCards.toggle(card) },
+                                ) {
+                                    MiniBars(
+                                        values = week.map { entry ->
+                                            entry?.prayerMask?.let { mask ->
+                                                Prayer.entries.count { mask and it.bit != 0 }.toFloat()
+                                            }
+                                        },
+                                        labels = weekLabels,
+                                        captions = week.map { entry ->
+                                            entry?.prayerMask?.let { mask ->
+                                                "${Prayer.entries.count { mask and it.bit != 0 }}/5"
+                                            }
+                                        },
+                                        tint = tint,
+                                    )
+                                }
                             }
                         }
                         DayCard.HYGIENE -> {
@@ -1527,29 +1660,32 @@ fun DayScreen(
                                     }
                                 },
                             )
-                            CardWeek(
-                                card = card,
-                                tint = tint,
-                                expanded = card in expandedCards,
-                                onToggle = { expandedCards = expandedCards.toggle(card) },
-                            ) {
-                                MiniBars(
-                                    values = week.map { entry ->
-                                        entry?.brushMask?.let { mask ->
-                                            Brushing.entries
-                                                .count { mask and it.bit != 0 }
-                                                .toFloat()
-                                        }
-                                    },
-                                    labels = weekLabels,
-                                    captions = week.map { entry ->
-                                        entry?.brushMask?.let { mask ->
-                                            val n = Brushing.entries.count { mask and it.bit != 0 }
-                                            "$n/3"
-                                        }
-                                    },
+                            // « Voir la semaine » ne vit que dans la carte agrandie.
+                            if (detail) {
+                                CardWeek(
+                                    card = card,
                                     tint = tint,
-                                )
+                                    expanded = card in expandedCards,
+                                    onToggle = { expandedCards = expandedCards.toggle(card) },
+                                ) {
+                                    MiniBars(
+                                        values = week.map { entry ->
+                                            entry?.brushMask?.let { mask ->
+                                                Brushing.entries
+                                                    .count { mask and it.bit != 0 }
+                                                    .toFloat()
+                                            }
+                                        },
+                                        labels = weekLabels,
+                                        captions = week.map { entry ->
+                                            entry?.brushMask?.let { mask ->
+                                                val n = Brushing.entries.count { mask and it.bit != 0 }
+                                                "$n/3"
+                                            }
+                                        },
+                                        tint = tint,
+                                    )
+                                }
                             }
                         }
                         DayCard.SOCIAL -> {
@@ -1568,6 +1704,53 @@ fun DayScreen(
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                            }
+                            if (detail) {
+                                Spacer(Modifier.height(18.dp))
+                                // Trois pastilles disent **qui**, jamais quoi.
+                                // Six mois plus tard, « Ami·es » ne rappelle
+                                // rien ; « Karim, au parc » rappelle une
+                                // journee entiere. C'est la seule chose qui
+                                // manquait a cette carte, et elle demande
+                                // d'ecrire — donc elle attend qu'on ouvre.
+                                CardSection("Avec qui, et quoi", tint) {
+                                    OutlinedTextField(
+                                        value = socialNote,
+                                        onValueChange = { socialNote = it.take(300) },
+                                        label = { Text("Qui, et ce que vous avez fait") },
+                                        shape = RoundedCornerShape(16.dp),
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                }
+                                Spacer(Modifier.height(18.dp))
+                                // Combien de jours sur sept tu as vu quelqu'un.
+                                // C'est le chiffre qui compte le plus sur cette
+                                // carte, et il ne se voit pas d'une journee.
+                                CardWeek(
+                                    card = card,
+                                    tint = tint,
+                                    expanded = card in expandedCards,
+                                    onToggle = { expandedCards = expandedCards.toggle(card) },
+                                ) {
+                                    val seenIds = allTags
+                                        .filter { it.slug in SEEN }
+                                        .map { it.id }
+                                        .toSet()
+                                    val seenDays = weekTagDays(seenIds)
+                                    MiniBars(
+                                        values = seenDays.map { if (it) 1f else 0f },
+                                        labels = weekLabels,
+                                        captions = seenDays.map { if (it) "✓" else null },
+                                        tint = tint,
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        text = "Tu as vu quelqu'un ${seenDays.count { it }} " +
+                                            "jour(s) sur sept.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                         }
                         DayCard.WORK -> {
@@ -1604,22 +1787,45 @@ fun DayScreen(
                                     jobApplications = sent
                                 },
                             )
-                            Spacer(Modifier.height(18.dp))
-                            CardSection("Ce que tu as avancé", tint) {
-                                tagChecks(TagCategory.WORK, tint, true)
+                            if (detail) {
+                                Spacer(Modifier.height(18.dp))
+                                CardSection("Ce que tu as avancé", tint) {
+                                    tagChecks(TagCategory.WORK, tint, true)
+                                }
+                                Spacer(Modifier.height(18.dp))
+                                // « Trois candidatures » ne dit pas a qui, et
+                                // c'est pourtant la seule chose qu'on cherche
+                                // trois semaines plus tard, quand une reponse
+                                // arrive. La carte accepte aussi une photo :
+                                // une lettre, une annonce, un CV imprime s'y
+                                // rattachent sans qu'on ait rien a inventer.
+                                CardSection("Où tu en es", tint) {
+                                    OutlinedTextField(
+                                        value = workNote,
+                                        onValueChange = { workNote = it.take(600) },
+                                        label = { Text("À qui, et ce que tu attends") },
+                                        shape = RoundedCornerShape(16.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 90.dp),
+                                    )
+                                }
                             }
-                            CardWeek(
-                                card = card,
-                                tint = tint,
-                                expanded = card in expandedCards,
-                                onToggle = { expandedCards = expandedCards.toggle(card) },
-                            ) {
-                                MiniBars(
-                                    values = week.map { it?.jobApplications?.toFloat() },
-                                    labels = weekLabels,
-                                    captions = week.map { it?.jobApplications?.toString() },
+                            // « Voir la semaine » ne vit que dans la carte agrandie.
+                            if (detail) {
+                                CardWeek(
+                                    card = card,
                                     tint = tint,
-                                )
+                                    expanded = card in expandedCards,
+                                    onToggle = { expandedCards = expandedCards.toggle(card) },
+                                ) {
+                                    MiniBars(
+                                        values = week.map { it?.jobApplications?.toFloat() },
+                                        labels = weekLabels,
+                                        captions = week.map { it?.jobApplications?.toString() },
+                                        tint = tint,
+                                    )
+                                }
                             }
                         }
                         DayCard.OUTSIDE -> {
@@ -1638,24 +1844,29 @@ fun DayScreen(
                                     openSystemScreen(context, ScreenTimeSource.settingsIntent(context))
                                 },
                             )
-                            Spacer(Modifier.height(18.dp))
-                            CardSection("Sur quoi", tint) {
-                                tagTiles(TagCategory.SCREENS, tint)
+                            if (detail) {
+                                Spacer(Modifier.height(18.dp))
+                                CardSection("Sur quoi", tint) {
+                                    tagTiles(TagCategory.SCREENS, tint)
+                                }
                             }
-                            CardWeek(
-                                card = card,
-                                tint = tint,
-                                expanded = card in expandedCards,
-                                onToggle = { expandedCards = expandedCards.toggle(card) },
-                            ) {
-                                MiniBars(
-                                    values = week.map { it?.screenMinutes?.div(60f) },
-                                    labels = weekLabels,
-                                    captions = week.map { entry ->
-                                        entry?.screenMinutes?.let { "${it / 60} h" }
-                                    },
+                            // « Voir la semaine » ne vit que dans la carte agrandie.
+                            if (detail) {
+                                CardWeek(
+                                    card = card,
                                     tint = tint,
-                                )
+                                    expanded = card in expandedCards,
+                                    onToggle = { expandedCards = expandedCards.toggle(card) },
+                                ) {
+                                    MiniBars(
+                                        values = week.map { it?.screenMinutes?.div(60f) },
+                                        labels = weekLabels,
+                                        captions = week.map { entry ->
+                                            entry?.screenMinutes?.let { "${it / 60} h" }
+                                        },
+                                        tint = tint,
+                                    )
+                                }
                             }
                         }
                         DayCard.MONEY -> {

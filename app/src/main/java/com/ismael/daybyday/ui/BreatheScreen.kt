@@ -21,13 +21,12 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -94,7 +93,7 @@ import kotlin.math.sin
  * par seconde, pas soixante — passent par de l'état.
  */
 @Composable
-fun BreatheScreen(onBack: () -> Unit) {
+fun BreatheScreen() {
     var pattern by remember { mutableStateOf(BreathPattern.COHERENCE) }
     var running by remember { mutableStateOf(false) }
 
@@ -154,21 +153,21 @@ fun BreatheScreen(onBack: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
+                // Un defilement de secours, et rien de plus : sur un telephone
+                // ordinaire tout tient sans bouger. Il existe pour les petits
+                // ecrans et les grandes polices systeme, ou une page figee
+                // couperait le dernier conseil — ce qui est exactement arrive.
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("Fermer") }
-            }
-
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(TAB_HEADER_HEIGHT))
 
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.88f)
+                    // La bulle a maigri : a quatre-vingt-huit pour cent de la
+                    // largeur, elle poussait la description hors de l'ecran.
+                    .fillMaxWidth(0.68f)
                     .aspectRatio(1f)
                     // Pas d'ondulation ni de halo au doigt : une bulle qui se
                     // teinte en gris quand on la touche casse net ce qu'elle
@@ -218,18 +217,32 @@ fun BreatheScreen(onBack: () -> Unit) {
                 }
             }
 
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(26.dp))
 
-            // Une hauteur **fixe**, et c'est tout l'objet de cette boite : la
-            // description tient sur deux lignes ou sur quatre selon le rythme,
-            // et sans hauteur imposee, choisir un exercice faisait monter et
-            // descendre la bulle elle-meme.
+            // La boite prend la hauteur de la **plus longue** des trois
+            // descriptions, et la garde.
+            //
+            // Premiere version : une hauteur en points, choisie a la main. Elle
+            // etait trop courte et coupait le texte — un nombre ecrit une fois
+            // ne peut pas suivre trois textes qu'on reecrit, ni la taille de
+            // police du telephone. Les trois descriptions sont donc posees la,
+            // invisibles : elles ne se voient pas, mais elles mesurent. La
+            // boite ne bouge plus quand on change de rythme, et rien n'est
+            // jamais coupe.
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(ADVICE_HEIGHT),
+                modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center,
             ) {
+                BreathPattern.entries.forEach { ghost ->
+                    Text(
+                        text = ghost.purpose,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .graphicsLayer { alpha = 0f }
+                            .padding(horizontal = 8.dp),
+                    )
+                }
                 AnimatedContent(
                     targetState = if (running) pattern.hintOf(phase) else pattern.purpose,
                     transitionSpec = {
@@ -243,11 +256,7 @@ fun BreatheScreen(onBack: () -> Unit) {
                 ) { text ->
                     Text(
                         text = text,
-                        style = if (running) {
-                            MaterialTheme.typography.titleMedium
-                        } else {
-                            MaterialTheme.typography.bodyMedium
-                        },
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 8.dp),
@@ -275,31 +284,24 @@ fun BreatheScreen(onBack: () -> Unit) {
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(44.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (!running) {
-                    Text(
-                        text = BREATH_ADVICE,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                        textAlign = TextAlign.Center,
-                    )
-                }
-            }
+            // Le conseil ne change jamais : il n'a pas besoin d'une hauteur
+            // imposee, il prend la sienne. Il s'efface pendant l'exercice —
+            // c'est avant de commencer qu'il sert.
+            Text(
+                text = BREATH_ADVICE,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.graphicsLayer { alpha = if (running) 0f else 1f },
+            )
 
             Spacer(Modifier.height(16.dp))
+            BottomBarSpace()
         }
     }
 }
-
-/** Deux lignes de titre, trois de texte : la plus longue des descriptions. */
-private val ADVICE_HEIGHT = 92.dp
 
 @Composable
 private fun PatternChip(

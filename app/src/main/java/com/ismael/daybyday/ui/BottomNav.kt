@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -393,11 +394,16 @@ private fun TodayButton(onClick: () -> Unit) {
             ),
         contentAlignment = Alignment.Center,
     ) {
+        // Un crayon, et plus un « + ».
+        //
+        // Le plus disait « ajouter quelque chose », alors que ce bouton
+        // n'ajoute rien : il ouvre la journee d'aujourd'hui, qui existe deja.
+        // Un crayon dit ce qu'on va y faire — l'ecrire.
         Icon(
-            imageVector = Icons.Default.Add,
+            imageVector = Icons.Default.Edit,
             contentDescription = "Ma journée d'aujourd'hui",
             tint = Color.White,
-            modifier = Modifier.size(26.dp),
+            modifier = Modifier.size(24.dp),
         )
     }
 }

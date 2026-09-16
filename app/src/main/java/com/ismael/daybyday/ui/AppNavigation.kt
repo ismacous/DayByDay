@@ -65,9 +65,24 @@ private fun indexToMonth(index: Int): YearMonth = YearMonth.of(index / 12, index
  * l'on regarde deja. Quatre onglets et le bouton du milieu : la barre respire,
  * et chaque onglet peut afficher son nom.
  */
+/**
+ * Les destinations de la barre du bas.
+ *
+ * **Quatre, et c'est une contrainte de forme autant que de fond** : le bouton
+ * du jour est au milieu, donc il lui faut autant d'onglets de chaque cote.
+ * A trois, la barre penchait — deux a gauche, un a droite, et le milieu qui
+ * n'etait plus au milieu.
+ *
+ * « Respirer » vient combler la place laissee par l'argent, et ce n'est pas
+ * qu'un bouchon : les trois autres servent a **regarder** ce qui est note,
+ * celui-ci est le seul a proposer de faire quelque chose maintenant. Dans une
+ * application qui suit un moral qui varie beaucoup, c'est la place la plus
+ * defendable de la barre.
+ */
 private val tabs = listOf(
     NavItem("calendar", "Mois", Icons.Default.DateRange),
     NavItem("stats", "Bilan", Icons.Default.Star),
+    NavItem("breathe", "Respirer", Icons.Default.FavoriteBorder),
     NavItem("settings", "Réglages", Icons.Default.Settings),
 )
 
@@ -222,7 +237,7 @@ fun AppNavigation(
                     // Respirer. Un ecran a part, sans onglet : il ne se visite
                     // pas, on y va pour une raison precise et on en ressort.
                     composable("breathe") {
-                        BreatheScreen(onBack = { navController.popBackStack() })
+                        BreatheScreen()
                     }
 
                     composable("year") {
@@ -380,7 +395,6 @@ fun AppNavigation(
                     route = currentRoute,
                     firstName = LocalContext.current.dayByDayApp.prefs.firstName.trim(),
                     onOpenSearch = { navController.navigate("search") },
-                    onBreathe = { navController.navigate("breathe") },
                     modifier = Modifier
                         .height(TAB_HEADER_HEIGHT)
                         .graphicsLayer {
@@ -451,11 +465,11 @@ private fun TabHeader(
     route: String?,
     firstName: String,
     onOpenSearch: () -> Unit,
-    onBreathe: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val today = LocalDate.now()
     val (text, accent) = when (route) {
+        "breathe" -> "Ta" to "respiration"
         "stats" -> "Mon" to "bilan"
         "money" -> "Mon" to "argent"
         "settings" -> "Mes" to "réglages"
@@ -469,23 +483,13 @@ private fun TabHeader(
         subtitle = if (route == "calendar") Dates.dayLong(today) else null,
         trailing = if (route == "calendar") {
             {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Respirer est **a cote de la recherche**, sur l'ecran
-                    // d'accueil, et nulle part ailleurs. Range dans les
-                    // reglages, on ne le trouverait que le jour ou l'on va
-                    // bien ; ici il est sous le pouce le jour ou l'on en a
-                    // besoin, sans rien reclamer le reste du temps.
-                    RoundIconButton(
-                        icon = Icons.Default.FavoriteBorder,
-                        label = "Respirer",
-                        onClick = onBreathe,
-                    )
-                    RoundIconButton(
-                        icon = Icons.Default.Search,
-                        label = "Rechercher",
-                        onClick = onOpenSearch,
-                    )
-                }
+                // Respirer a quitte l'en-tete : il est dans la barre du bas,
+                // ou il est toujours la, sur tous les ecrans.
+                RoundIconButton(
+                    icon = Icons.Default.Search,
+                    label = "Rechercher",
+                    onClick = onOpenSearch,
+                )
             }
         } else {
             null

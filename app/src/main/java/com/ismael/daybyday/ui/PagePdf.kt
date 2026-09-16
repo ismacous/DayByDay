@@ -73,6 +73,15 @@ import java.time.LocalDate
  */
 object PagePdf {
 
+    /**
+     * Le cadre d'une citation, aux mesures de l'ecran : un fond aux coins
+     * arrondis, et un trait de quatre points pose a quatre points du bord.
+     * Voir `QuoteBlockView`.
+     */
+    private const val QUOTE_RADIUS = 8f
+    private const val QUOTE_BAR_X = 4f
+    private const val QUOTE_BAR_W = 4f
+
     /** A4 en points PostScript (72 par pouce), la seule unite que comprend un PDF. */
     private const val A4_WIDTH = 595
     private const val A4_HEIGHT = 842
@@ -151,7 +160,16 @@ object PagePdf {
 
         val titleHeight = titleLayout?.size?.height?.toFloat()?.plus(10f) ?: 0f
         val textTop = topPadding + titleHeight
-        val textHeight = bodyLayout.size.height.toFloat()
+        // La hauteur du texte s'arrete a sa derniere ligne **qui porte quelque
+        // chose**, pas au bas de la mise en page.
+        //
+        // Un bloc de texte vide est une ligne blanche voulue : la page en garde
+        // autant qu'on en a laisse, et une page qui finit par trois retours a
+        // la ligne mesurait trois lignes de plus. Trois lignes suffisaient a
+        // pousser la feuille suivante, qui ne contenait alors rien du tout.
+        val textHeight = lastContentLine(bodyLayout, body, spans)
+            ?.let { bodyLayout.getLineBottom(it) }
+            ?: 0f
         // La page descend jusqu'au plus bas des deux : le texte, ou la photo la
         // plus basse. Une photo posee sous le dernier mot ne doit pas etre
         // coupee parce que le texte s'arretait avant elle.
@@ -268,17 +286,46 @@ object PagePdf {
         drawRect(color = paper, topLeft = Offset.Zero, size = Size(width, height))
 
         if (ruled) {
-            val spacing = JournalPaper.LINE_SPACING.value
             val margin = JournalPaper.SIDE_MARGIN.value
-            var y = topPadding + spacing
-            while (y < height) {
+
+            // Le lignage est **deduit de la mise en page du texte**, ligne par
+            // ligne, et non pose a un rythme calcule de son cote.
+            //
+            // C'est le meme piege qu'a l'ecran, et il se voyait autant : la
+            // hauteur de ligne demandee tombe sur un nombre de points a
+            // virgule, le moteur de texte arrondit chaque ligne, et l'ecart
+            // s'accumule — apres vingt lignes, les traits passent au milieu des
+            // mots. S'y ajoutait ici une erreur que l'ecran n'a pas : le titre
+            // est dessine **dans** la feuille et decale tout le texte vers le
+            // bas, alors que le lignage, lui, partait toujours du haut. Les
+            // deux ne pouvaient pas tomber juste.
+            //
+            // En posant un trait sous chaque ligne reelle, il n'y a plus rien a
+            // faire coincider : c'est juste par construction.
+            val lines = bodyLayout.lineCount
+            val rule = { y: Float ->
                 drawLine(
                     color = lineColor,
                     start = Offset(margin, y),
                     end = Offset(width - margin, y),
                     strokeWidth = 1f,
                 )
-                y += spacing
+            }
+            for (line in 0 until lines) rule(textTop + bodyLayout.getLineBottom(line))
+
+            // Sous le texte, on continue au pas reel des dernieres lignes, pour
+            // que le bas de la page garde le meme rythme que le haut.
+            val advance = if (lines >= 2) {
+                (bodyLayout.getLineBottom(lines - 1) - bodyLayout.getLineBottom(0)) / (lines - 1)
+            } else {
+                JournalPaper.LINE_SPACING.value
+            }
+            if (advance > 0.5f) {
+                var y = textTop + bodyLayout.getLineBottom(lines - 1) + advance
+                while (y < height) {
+                    rule(y)
+                    y += advance
+                }
             }
             drawLine(
                 color = lineColor,
@@ -379,6 +426,22 @@ object PagePdf {
          */
         contentWidth: Float,
     ) {
+        // Les fonds de citation d'abord : ils sont derriere tout le reste. Poses
+        // apres les pastilles des mots-cles, ils effaceraient un mot-cle ecrit
+        // dans une citation.
+        val quotes = spans.filter { it.style == TextStyleKind.QUOTE && !it.isEmpty }
+        quotes.forEach { quote ->
+            val first = layout.getLineForOffset(quote.start.coerceIn(0, text.length - 1))
+            val last = layout.getLineForOffset((quote.end - 1).coerceIn(0, text.length - 1))
+            val background = quoteFill(spans, quote, ink) ?: return@forEach
+            drawRoundRect(
+                color = background,
+                topLeft = Offset(0f, layout.getLineTop(first)),
+                size = Size(contentWidth, layout.getLineBottom(last) - layout.getLineTop(first)),
+                cornerRadius = CornerRadius(QUOTE_RADIUS),
+            )
+        }
+
         Hashtag.rangesIn(text).forEach { range ->
             val start = range.first
             val end = range.last + 1
@@ -399,18 +462,17 @@ object PagePdf {
             )
         }
 
-        spans.filter { it.style == TextStyleKind.QUOTE && !it.isEmpty }.forEach { quote ->
+        // Puis les traits de citation, par-dessus les fonds.
+        quotes.forEach { quote ->
             val first = layout.getLineForOffset(quote.start.coerceIn(0, text.length - 1))
             val last = layout.getLineForOffset((quote.end - 1).coerceIn(0, text.length - 1))
-            val tint = spans.firstOrNull {
-                it.style.family == StyleFamily.COLOR &&
-                    it.start <= quote.start && it.end >= quote.end
-            }?.let { Color(it.style.argb) } ?: ink
+            val top = layout.getLineTop(first)
+            val bottom = layout.getLineBottom(last)
             drawRoundRect(
-                color = tint,
-                topLeft = Offset(layout.getLineLeft(first), layout.getLineTop(first) + 5f),
-                size = Size(3f, layout.getLineBottom(last) - layout.getLineTop(first) - 10f),
-                cornerRadius = CornerRadius(1.5f),
+                color = quoteTint(spans, quote, ink),
+                topLeft = Offset(QUOTE_BAR_X, top + 3f),
+                size = Size(QUOTE_BAR_W, (bottom - top - 6f).coerceAtLeast(1f)),
+                cornerRadius = CornerRadius(QUOTE_BAR_W / 2f),
             )
         }
 
@@ -426,6 +488,61 @@ object PagePdf {
                 cornerRadius = CornerRadius(thickness / 2f),
             )
         }
+    }
+
+    /**
+     * La couleur du trait d'une citation.
+     *
+     * Elle se lit dans la famille **QUOTE_BAR**, la seule qui la porte.
+     * L'ancienne version cherchait une couleur de *texte* : une citation n'en a
+     * pas, donc le trait retombait toujours sur l'encre — noir, quelle que soit
+     * la couleur choisie a l'ecran.
+     */
+    private fun quoteTint(spans: List<TextSpan>, quote: TextSpan, ink: Color): Color =
+        spans.firstOrNull {
+            it.style.family == StyleFamily.QUOTE_BAR &&
+                it.start <= quote.start && it.end >= quote.end
+        }?.let { Color(it.style.argb) } ?: ink
+
+    /** Le fond d'une citation, ou `null` quand elle n'en a pas. */
+    private fun quoteFill(spans: List<TextSpan>, quote: TextSpan, ink: Color): Color? {
+        val fill = spans.firstOrNull {
+            it.style.family == StyleFamily.QUOTE_FILL &&
+                it.start <= quote.start && it.end >= quote.end
+        }?.style ?: return null
+        val tint = quoteTint(spans, quote, ink)
+        return when (fill) {
+            TextStyleKind.QUOTE_FILL_SOFT -> tint.copy(alpha = 0.08f)
+            TextStyleKind.QUOTE_FILL_FULL -> tint.copy(alpha = 0.18f)
+            else -> null
+        }
+    }
+
+    /**
+     * La derniere ligne de la page qui porte reellement quelque chose, ou
+     * `null` si la page est vide.
+     *
+     * « Porter quelque chose » veut dire du texte, ou un trait de separation —
+     * un trait est une ligne sans caractere visible, et l'oublier couperait la
+     * page juste au-dessus de lui.
+     */
+    private fun lastContentLine(
+        layout: TextLayoutResult,
+        text: String,
+        spans: List<TextSpan>,
+    ): Int? {
+        var last = -1
+        for (line in 0 until layout.lineCount) {
+            val from = layout.getLineStart(line)
+            val to = layout.getLineEnd(line, visibleEnd = true).coerceAtMost(text.length)
+            if (to > from && text.substring(from, to).isNotBlank()) last = line
+        }
+        spans.filter { it.style.isRule }.forEach { rule ->
+            if (text.isEmpty()) return@forEach
+            val line = layout.getLineForOffset(rule.start.coerceIn(0, text.length - 1))
+            if (line > last) last = line
+        }
+        return last.takeIf { it >= 0 }
     }
 
     /** Une photo, a sa place, dans sa forme et son inclinaison. */

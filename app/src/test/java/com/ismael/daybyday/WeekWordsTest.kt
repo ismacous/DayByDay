@@ -126,7 +126,8 @@ class WeekWordsTest {
         val words = WeekWords.of(review(days), "Ismael", variant = 0)
 
         assertFalse("Un « (s) » a survecu : ${words.long}", words.long.contains("(s)"))
-        assertTrue(words.long.contains("tu as bougé deux jours"))
+        // Majuscule : la phrase des faits suit celle de la moyenne.
+        assertTrue(words.long.contains("Tu as bougé deux jours"))
         assertTrue(words.long.contains("tu es sorti trois fois"))
         assertTrue(words.long.contains("tu as écrit un jour"))
     }

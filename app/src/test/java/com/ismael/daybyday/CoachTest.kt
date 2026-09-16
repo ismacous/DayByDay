@@ -429,7 +429,9 @@ class CoachTest {
         // Le bug tel qu'Ismael l'a vu : matin note en vert, la couleur du jour
         // se calcule donc en vert, et l'appli fete « enfin une journee verte »
         // a dix-huit heures — alors que la journee a fini en jaune.
-        val history = (7..30).map { day(it, DayColor.ORANGE) }
+        // Une seule journee verte, il y a dix jours : de quoi declencher
+        // « premiere verte depuis... » si la couleur du jour comptait.
+        val history = (7..30).map { day(it, if (it == 10) DayColor.GREEN else DayColor.ORANGE) }
         val matinVert = day(0, DayColor.GREEN, parts = listOf(DayColor.GREEN))
         val rules = rulesOf(snapshotOf(history + matinVert, hour = 18))
 
@@ -441,7 +443,7 @@ class CoachTest {
     fun `une journee complete peut etre fetee`() {
         // Le meme jour, les quatre moments remplis : la couleur ne bougera
         // plus, on a le droit de s'en rejouir.
-        val history = (7..30).map { day(it, DayColor.ORANGE) }
+        val history = (7..30).map { day(it, if (it == 10) DayColor.GREEN else DayColor.ORANGE) }
         val complete = day(0, DayColor.GREEN, parts = List(4) { DayColor.GREEN })
         val rules = rulesOf(snapshotOf(history + complete, hour = 18))
 
@@ -453,7 +455,7 @@ class CoachTest {
     fun `une couleur choisie a la main est prise au mot`() {
         // Poser la couleur soi-meme est un choix, pas un calcul : il n'y a rien
         // a attendre de plus.
-        val history = (7..30).map { day(it, DayColor.ORANGE) }
+        val history = (7..30).map { day(it, if (it == 10) DayColor.GREEN else DayColor.ORANGE) }
         val chosen = day(0, DayColor.GREEN, manual = true, parts = emptyList())
 
         assertTrue(rulesOf(snapshotOf(history + chosen, hour = 9)).contains(CoachRule.GREEN_DAY))

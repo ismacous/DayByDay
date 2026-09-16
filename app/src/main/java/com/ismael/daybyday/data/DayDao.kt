@@ -44,7 +44,10 @@ interface DayDao {
     )
     fun search(text: String): Flow<List<DayEntry>>
 
-    @Query("SELECT epochDay AS epochDay, weightKg AS weightKg FROM day_entries WHERE weightKg IS NOT NULL ORDER BY epochDay")
+    @Query(
+        "SELECT epochDay AS epochDay, weightKg AS weightKg, waistCm AS waistCm " +
+            "FROM day_entries WHERE weightKg IS NOT NULL ORDER BY epochDay"
+    )
     fun observeWeights(): Flow<List<WeightPoint>>
 
     // --- Etiquettes -------------------------------------------------------

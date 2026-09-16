@@ -108,6 +108,12 @@ fun formatWeight(weightKg: Double?): String =
 fun formatSignedKg(delta: Double): String =
     String.format(Locale.FRANCE, "%+.1f kg", delta)
 
+fun formatWaist(waistCm: Double?): String =
+    waistCm?.let { String.format(Locale.FRANCE, "%.1f cm", it) } ?: "—"
+
+fun formatSignedCm(delta: Double): String =
+    String.format(Locale.FRANCE, "%+.1f cm", delta)
+
 /** Montant en centimes vers un texte en euros. */
 fun formatMoney(cents: Long): String =
     String.format(Locale.FRANCE, "%,.2f €", cents / 100.0).replace('\u00A0', ' ')

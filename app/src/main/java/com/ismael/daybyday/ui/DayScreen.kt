@@ -146,6 +146,36 @@ private val SLEEP_QUALITY = listOf("sleep_good", "sleep_bad")
 private val SEEN = listOf("girlfriend", "friends", "family")
 
 /**
+ * Les deux lignes de la carte des ressentis qui ne sont pas des ressentis mais
+ * des **faits**. Elles s'affichent en cases a cocher, en bas de la carte, et
+ * sans emoji : « J'ai pleuré » n'est pas une humeur qu'on choisit dans une
+ * liste, c'est quelque chose qui est arrive.
+ */
+private val FEELING_FACTS = listOf("cried", "anxiety")
+
+/**
+ * Ce qui fait du bien, dans l'ordre du catalogue. La carte separe les deux
+ * familles parce qu'une liste ou « Joie » et « Honte » se suivent oblige a
+ * lire chaque pastille avant de la toucher.
+ */
+private val FEELINGS_LIGHT = listOf(
+    "joy", "laugh", "calm", "excited", "proud", "grateful", "loved", "motivated", "relief",
+)
+
+/** Ce qui pese. Aucune n'est un reproche : ce sont des faits, comme les autres. */
+private val FEELINGS_HEAVY = listOf(
+    "sad", "stress", "anger", "fear", "lonely", "guilt", "shame", "bored", "overwhelmed", "empty",
+)
+
+/**
+ * Ce que le corps a dit de la journee. Ce sont des signes, pas des
+ * diagnostics : l'application note « mal de tête », elle n'en conclut rien.
+ */
+private val BODY_SIGNS = listOf(
+    "body_good", "body_tired", "headache", "belly", "pain", "sick",
+)
+
+/**
  * Les reperes des deux barres de mesure. Ce ne sont **pas** des objectifs :
  * l'application ne demande rien et ne felicite de rien. Ils servent seulement a
  * situer un chiffre — un nombre de pas seul ne dit pas s'il est grand.
@@ -214,6 +244,7 @@ fun DayScreen(
     var foodLevel by remember { mutableStateOf<Int?>(null) }
     var wentOut by remember { mutableStateOf<Boolean?>(null) }
     var weightText by remember { mutableStateOf("") }
+    var waistText by remember { mutableStateOf("") }
     var stepsValue by remember { mutableStateOf<Int?>(null) }
     var screenValue by remember { mutableStateOf<Int?>(null) }
     var stepsGranted by remember { mutableStateOf(false) }
@@ -327,6 +358,7 @@ fun DayScreen(
         foodLevel = foodLevel,
         wentOut = wentOut,
         weightKg = weightText.replace(',', '.').toDoubleOrNull(),
+        waistCm = waistText.replace(',', '.').toDoubleOrNull(),
         steps = stepsValue,
         screenMinutes = screenValue,
         sleepStartMinutes = sleepStart,
@@ -368,6 +400,7 @@ fun DayScreen(
         foodLevel = entry?.foodLevel
         wentOut = entry?.wentOut
         weightText = entry?.weightKg?.let { String.format(Locale.FRANCE, "%.1f", it) }.orEmpty()
+        waistText = entry?.waistCm?.let { String.format(Locale.FRANCE, "%.1f", it) }.orEmpty()
         stepsValue = entry?.steps
         screenValue = entry?.screenMinutes
         sleepStart = entry?.sleepStartMinutes
@@ -513,6 +546,7 @@ fun DayScreen(
         foodLevel,
         wentOut,
         weightText,
+        waistText,
         stepsValue,
         screenValue,
         sleepStart,
@@ -625,6 +659,27 @@ fun DayScreen(
     }
 
     /**
+     * Une liste de reperes, en pastilles qui se replient sur plusieurs lignes.
+     * On en coche autant qu'on veut : une journee n'a pas **une** emotion, elle
+     * en a cinq qui se contredisent — et un corps a rarement un seul signe.
+     *
+     * Elle prend des slugs et non une famille : la carte des ressentis en
+     * affiche deux listes separees, tirees de la meme famille.
+     */
+    val tagCloud: @Composable (List<String>, Color) -> Unit = { slugs, tint ->
+        val tags = slugs.mapNotNull { tagOf(it) }
+        ChipCloud(
+            options = tags.map { Segment(it.emoji, it.name) },
+            selected = tags.indices.filter { tags[it].id in selectedTagIds }.toSet(),
+            tint = tint,
+            onToggle = { index ->
+                val tag = tags[index]
+                toggleTag(tag, tag.id !in selectedTagIds)
+            },
+        )
+    }
+
+    /**
      * Les reperes d'une famille, en lignes a cocher : une liste de choses
      * faites.
      *
@@ -687,8 +742,21 @@ fun DayScreen(
         ).joinToString(" · ").ifBlank { null }
         DayCard.HEALTH -> listOfNotNull(
             weightText.takeIf { it.isNotBlank() }?.let { "$it kg" },
-            if (tagOn("cried")) "j'ai pleuré" else null,
+            waistText.takeIf { it.isNotBlank() }?.let { "$it cm" },
+            allTags.filter { it.group == TagCategory.HEALTH && it.id in selectedTagIds }
+                .joinToString(", ") { it.name.lowercase(Locale.FRANCE) }
+                .ifBlank { null },
         ).joinToString(" · ").ifBlank { null }
+        // Les faits d'abord : « j'ai pleuré » compte plus, dans un resume,
+        // qu'une pastille de plus dans la liste.
+        DayCard.EMOTION -> (
+            FEELING_FACTS.filter { tagOn(it) }.mapNotNull { tagOf(it)?.name } +
+                allTags.filter {
+                    it.group == TagCategory.EMOTION &&
+                        it.slug !in FEELING_FACTS &&
+                        it.id in selectedTagIds
+                }.map { it.name }
+            ).joinToString(", ").ifBlank { null }
         DayCard.TREATMENT -> {
             val expected = treatments.filter { it.active }.sumOf { it.times.size }
             listOfNotNull(
@@ -790,9 +858,9 @@ fun DayScreen(
                     Spacer(Modifier.width(5.dp))
                     Text(
                         text = if (checkedCount == visibleCards.size) {
-                            "Journée relue en entier"
+                            "Journée validée en entier"
                         } else {
-                            "$checkedCount carte(s) vérifiée(s) sur ${visibleCards.size}"
+                            "$checkedCount carte(s) validée(s) sur ${visibleCards.size}"
                         },
                         style = MaterialTheme.typography.labelMedium,
                         color = Verified,
@@ -941,6 +1009,37 @@ fun DayScreen(
                                     selectedKey = parts[part],
                                     onPick = { key -> setPart(part, key) },
                                 )
+                            }
+                        }
+                        DayCard.EMOTION -> {
+                            // Deux listes et non une seule. Melangees, « Joie »
+                            // et « Honte » se suivent, et il faut lire chaque
+                            // pastille avant de la toucher — ce qui n'est pas
+                            // rien un jour ou l'on n'a deja plus de force.
+                            CardSection("Ce qui t'a fait du bien", tint) {
+                                tagCloud(FEELINGS_LIGHT, tint)
+                            }
+                            Spacer(Modifier.height(18.dp))
+                            CardSection("Ce qui a pesé", tint) {
+                                tagCloud(FEELINGS_HEAVY, tint)
+                            }
+                            Spacer(Modifier.height(18.dp))
+                            // Sans emoji, volontairement. Un petit visage qui
+                            // pleure a cote de « J'ai pleuré » transforme un
+                            // fait en mise en scene, et donne a la ligne l'air
+                            // de s'apitoyer. Une case et trois mots suffisent.
+                            CardSection("Ce qui est arrivé", tint) {
+                                FEELING_FACTS.forEachIndexed { index, slug ->
+                                    if (index > 0) Spacer(Modifier.height(8.dp))
+                                    val tag = tagOf(slug)
+                                    val on = tagOn(slug)
+                                    CheckRow(
+                                        label = tag?.name ?: slug,
+                                        checked = on,
+                                        tint = tint,
+                                        onClick = { setTag(slug, !on) },
+                                    )
+                                }
                             }
                         }
                         DayCard.JOURNAL -> {
@@ -1178,23 +1277,74 @@ fun DayScreen(
                             }
                         }
                         DayCard.HEALTH -> {
-                            // Le poids a quitte l'activite physique : c'est une
-                            // mesure du corps, pas une facon d'avoir bouge.
-                            CardSection("Ton poids", tint) {
-                                OutlinedTextField(
-                                    value = weightText,
-                                    onValueChange = { input ->
-                                        weightText = input
-                                            .filter { it.isDigit() || it == ',' || it == '.' }
-                                            .take(6)
-                                    },
-                                    label = { Text("Poids du jour (optionnel)") },
-                                    suffix = { Text("kg") },
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(16.dp),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            // Deux mesures, cote a cote, et pas une seule.
+                            //
+                            // Le poids tout seul ne dit pas grand-chose : il
+                            // monte et descend avec l'eau, les repas, l'heure
+                            // de la pesee, et deux kilos d'ecart en trois jours
+                            // ne veulent rien dire. Le tour de taille bouge
+                            // lentement et dans un seul sens a la fois. Les
+                            // deux ensemble font une mesure ; l'un sans l'autre
+                            // fait un chiffre qu'on regarde avec inquietude.
+                            //
+                            // Rien n'est obligatoire, et il n'y a **aucun
+                            // objectif** : l'application ne dit jamais ce que
+                            // ces chiffres devraient valoir.
+                            CardSection("Tes mensurations", tint) {
+                                Row(
                                     modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    OutlinedTextField(
+                                        value = weightText,
+                                        onValueChange = { input ->
+                                            weightText = input
+                                                .filter { it.isDigit() || it == ',' || it == '.' }
+                                                .take(6)
+                                        },
+                                        label = { Text("Poids") },
+                                        suffix = { Text("kg") },
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(16.dp),
+                                        keyboardOptions = KeyboardOptions(
+                                            keyboardType = KeyboardType.Decimal,
+                                        ),
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    OutlinedTextField(
+                                        value = waistText,
+                                        onValueChange = { input ->
+                                            waistText = input
+                                                .filter { it.isDigit() || it == ',' || it == '.' }
+                                                .take(5)
+                                        },
+                                        label = { Text("Tour de taille") },
+                                        suffix = { Text("cm") },
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(16.dp),
+                                        keyboardOptions = KeyboardOptions(
+                                            keyboardType = KeyboardType.Decimal,
+                                        ),
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                                // L'IMC se calcule avec la taille du profil. Il
+                                // est donne **sans categorie** : « 26,4 » est
+                                // un nombre, « surpoids » est un jugement, et
+                                // ce n'est pas le role de cette application d'en
+                                // porter un.
+                                val imc = app.prefs.bodyMassIndex(
+                                    weightText.replace(',', '.').toDoubleOrNull()
                                 )
+                                if (imc != null) {
+                                    Spacer(Modifier.height(10.dp))
+                                    Text(
+                                        text = "IMC ${String.format(Locale.FRANCE, "%.1f", imc)}, " +
+                                            "pour ${app.prefs.heightCm} cm.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                             CardWeek(
                                 card = card,
@@ -1227,12 +1377,13 @@ fun DayScreen(
                                 }
                             }
                             Spacer(Modifier.height(18.dp))
-                            // Sans emoji, volontairement. Un petit visage qui
-                            // pleure a cote de « J'ai pleuré » transforme un
-                            // fait en mise en scene, et donne a la ligne l'air
-                            // de s'apitoyer. Une case et trois mots suffisent.
-                            CardSection("Ce qui est arrivé", tint) {
-                                tagChecks(TagCategory.HEALTH, tint, false)
+                            // La moitie qui manquait a la carte. Avec le seul
+                            // poids, elle ne servait qu'un jour sur dix ; un
+                            // corps a quelque chose a dire tous les jours, et
+                            // c'est ce qui se compare ensuite au sommeil et a
+                            // l'alimentation dans le Bilan.
+                            CardSection("Ce que ton corps a dit", tint) {
+                                tagCloud(BODY_SIGNS, tint)
                             }
                         }
                         DayCard.TREATMENT -> {

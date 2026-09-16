@@ -133,6 +133,9 @@ class MigrationTest {
                 assertEquals(null, day?.jobApplications)
                 assertEquals("", day?.medicalNote)
                 assertEquals("", day?.medicalWith)
+                // Le tour de taille : `null` et pas zero. Une journee d'avant
+                // n'est pas une journee ou il valait zero centimetre.
+                assertEquals(null, day?.waistCm)
                 // La table des vocaux existe et repond, meme si aucune journee
                 // d'avant n'en contient : c'est ce qui prouve que la migration
                 // l'a bien creee, et pas seulement que Room ne s'est pas plaint.

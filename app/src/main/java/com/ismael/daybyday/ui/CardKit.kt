@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -117,11 +119,14 @@ val Palette: List<Color> = listOf(Indigo, Violet, Mint, Amber, Rose, Sky)
 
 fun cardStyle(card: DayCard): DayCardStyle = when (card) {
     DayCard.MOOD -> DayCardStyle("🎨", Indigo, IndigoGlow)
+    // Le rose juste apres l'indigo de l'humeur : deux voisines n'ont jamais la
+    // meme teinte, et le rose est celle qui va le mieux a ce qu'on ressent.
+    DayCard.EMOTION -> DayCardStyle("💗", Rose, RoseGlow)
     DayCard.JOURNAL -> DayCardStyle("✍️", Indigo, IndigoGlow)
     DayCard.SLEEP -> DayCardStyle("🌙", Violet, VioletGlow)
     DayCard.ACTIVITY -> DayCardStyle("👟", Mint, MintGlow)
     DayCard.FOOD -> DayCardStyle("🍽️", Amber, AmberGlow)
-    DayCard.HEALTH -> DayCardStyle("💗", Rose, RoseGlow)
+    DayCard.HEALTH -> DayCardStyle("🫀", Mint, MintGlow)
     DayCard.TREATMENT -> DayCardStyle("💊", Sky, SkyGlow)
     DayCard.SOCIAL -> DayCardStyle("👥", Mint, MintGlow)
     DayCard.WORK -> DayCardStyle("💼", Indigo, IndigoGlow)
@@ -245,6 +250,68 @@ fun MultiTiles(
         onTap = onToggle,
         modifier = modifier,
     )
+}
+
+/**
+ * Beaucoup de reperes, ou l'on en coche autant qu'on veut.
+ *
+ * Ce n'est pas [MultiTiles], et la difference n'est pas cosmetique : les tuiles
+ * sont **une rangee**, un objet de trois ou quatre places qui se lit d'un
+ * coup. Vingt ressentis dans une rangee donneraient vingt colonnes d'un
+ * centimetre. Ici chaque repere fait sa largeur, et la liste se replie toute
+ * seule sur autant de lignes qu'il faut.
+ *
+ * Un repere non coche reste lisible : ni gris, ni efface. On ne choisit pas ce
+ * qu'on a ressenti dans une liste ou seul ce qui est deja coche se voit.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ChipCloud(
+    options: List<Segment>,
+    selected: Set<Int>,
+    tint: Color,
+    onToggle: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FlowRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        options.forEachIndexed { index, option ->
+            val on = index in selected
+            val background by animateColorAsState(
+                targetValue = if (on) tint else tint.copy(alpha = 0.10f),
+                animationSpec = tween(Motion.NORMAL),
+                label = "fond",
+            )
+            val ink by animateColorAsState(
+                targetValue = if (on) readableOn(tint) else MaterialTheme.colorScheme.onSurface,
+                animationSpec = tween(Motion.NORMAL),
+                label = "encre",
+            )
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(background)
+                    .clickable(onClickLabel = option.label) { onToggle(index) }
+                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (option.emoji.isNotBlank()) {
+                    Text(option.emoji, fontSize = 15.sp)
+                    Spacer(Modifier.width(7.dp))
+                }
+                Text(
+                    text = option.label,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                    color = ink,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
 }
 
 /** Le cadre commun : un seul objet, N places, celles qui sont allumees. */

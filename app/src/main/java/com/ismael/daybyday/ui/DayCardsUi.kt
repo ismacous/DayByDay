@@ -63,6 +63,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -112,19 +113,24 @@ fun DayCardShell(
      */
     onOrganize: () -> Unit = {},
     /**
-     * La carte a-t-elle ete **verifiee** pour cette journee ?
+     * La carte est-elle **validee** pour cette journee ?
      *
      * Relire la veille — « est-ce que j'ai bien coche mes prieres, mes sorties,
      * mes depenses ? » — n'est pas la meme chose que remplir la journee, et ca
      * ne laissait aucune trace : on recommencait la meme relecture le
-     * lendemain. Un geste lateral sur la carte pose la marque, le meme geste
-     * l'enleve.
+     * lendemain. Un geste lateral sur la carte la valide, le meme geste la
+     * rouvre.
      *
-     * Le choix de ne **pas** griser : une carte grisee se lit comme une carte
-     * desactivee, et c'est le contraire de ce qu'on veut dire — une carte
-     * verifiee reste tout a fait modifiable. Elle prend donc une coche, un bord
-     * vert et une encre un peu retenue, ce qui se voit d'un coup d'oeil en
-     * descendant la page sans rien rendre illisible.
+     * **Valider ferme la carte.** La premiere version se contentait de poser
+     * une coche : la carte restait modifiable, donc rien n'empechait de changer
+     * ce qu'on venait de relire, et la marque ne voulait plus dire grand-chose.
+     * Une carte validee ne repond donc plus au doigt — ni ses pastilles, ni ses
+     * champs, ni ses boutons. Elle reste entierement **lisible** : c'est une
+     * page tournee, pas une page effacee.
+     *
+     * Deux chemins pour la rouvrir, et c'est voulu : le meme geste lateral, et
+     * la coche de l'en-tete. Un geste qu'on ne devine pas ne doit jamais etre
+     * le seul moyen de revenir en arriere.
      */
     checked: Boolean = false,
     onCheckedChange: (Boolean) -> Unit = {},
@@ -188,34 +194,40 @@ fun DayCardShell(
     var slide by remember { mutableFloatStateOf(0f) }
     val swipePx = with(density) { CHECK_SWIPE.toPx() }
 
+    // Le geste lateral, dans les **deux** sens. Un sens pour valider et l'autre
+    // pour rouvrir obligerait a se souvenir lequel est lequel ; ici on pousse
+    // la carte, elle bascule, et on la repousse pour revenir. C'est le geste
+    // que fait la main sans y penser.
+    //
+    // Il est garde a part parce qu'il sert **deux fois** : sur la carte, et sur
+    // le voile qui la ferme une fois validee. Sans ca, valider une carte
+    // rendrait impossible de la rouvrir au meme endroit qu'on l'a fermee.
+    val slideGesture = Modifier.draggable(
+        orientation = Orientation.Horizontal,
+        state = rememberDraggableState { delta ->
+            // La carte ne part jamais tres loin : au-dela du seuil, on a deja
+            // ce qu'on est venu chercher, et la laisser filer hors de l'ecran
+            // ferait croire qu'elle s'en va.
+            val limit = swipePx * 1.4f
+            slide = (slide + delta).coerceIn(-limit, limit)
+        },
+        onDragStopped = {
+            if (kotlin.math.abs(slide) >= swipePx) {
+                // Une secousse au moment ou ca bascule : on le sent avant de
+                // le voir.
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onCheckedChange(!checked)
+            }
+            animate(slide, 0f, animationSpec = tween(Motion.NORMAL)) { value, _ ->
+                slide = value
+            }
+        },
+    )
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            // Le geste lateral, dans les **deux** sens. Un sens pour cocher et
-            // l'autre pour decocher obligerait a se souvenir lequel est lequel ;
-            // ici on pousse la carte, elle bascule, et on la repousse pour
-            // revenir. C'est le geste que fait la main sans y penser.
-            .draggable(
-                orientation = Orientation.Horizontal,
-                state = rememberDraggableState { delta ->
-                    // La carte ne part jamais tres loin : au-dela du seuil, on
-                    // a deja ce qu'on est venu chercher, et la laisser filer
-                    // hors de l'ecran ferait croire qu'elle s'en va.
-                    val limit = swipePx * 1.4f
-                    slide = (slide + delta).coerceIn(-limit, limit)
-                },
-                onDragStopped = {
-                    if (kotlin.math.abs(slide) >= swipePx) {
-                        // Une secousse au moment ou ca bascule : on le sent
-                        // avant de le voir.
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onCheckedChange(!checked)
-                    }
-                    animate(slide, 0f, animationSpec = tween(Motion.NORMAL)) { value, _ ->
-                        slide = value
-                    }
-                },
-            )
+            .then(slideGesture)
             // Lu **dans** la couche graphique : la carte glisse sans que rien
             // ne soit remesure a chaque image.
             .graphicsLayer { translationX = slide }
@@ -233,9 +245,9 @@ fun DayCardShell(
                     size = Size(CHECK_EDGE.toPx(), size.height),
                 )
             }
-            // Une carte verifiee retient un peu son encre — juste assez pour
-            // se distinguer en descendant la page, pas au point de devenir
-            // grise : elle reste tout a fait modifiable.
+            // Une carte validee retient un peu son encre. Juste un peu : elle
+            // doit se distinguer en descendant la page, et rester parfaitement
+            // lisible. C'est une page tournee, pas une page effacee.
             .graphicsLayer { alpha = 1f - 0.14f * checkEdge },
     ) {
         Row(
@@ -316,14 +328,14 @@ fun DayCardShell(
                         .size(26.dp)
                         .clip(CircleShape)
                         .background(Verified.copy(alpha = 0.16f))
-                        .clickable(onClickLabel = "Ne plus marquer comme vérifiée") {
+                        .clickable(onClickLabel = "Rouvrir la carte") {
                             onCheckedChange(false)
                         },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = Icons.Default.Check,
-                        contentDescription = "Carte vérifiée",
+                        contentDescription = "Carte validée",
                         tint = Verified,
                         modifier = Modifier.size(16.dp),
                     )
@@ -360,8 +372,40 @@ fun DayCardShell(
         }
 
         if (!collapsed) {
-            Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
-                content()
+            Box {
+                Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                    content()
+                }
+
+                // Le voile d'une carte validee.
+                //
+                // Il ne cache rien — il est transparent, tout se lit au
+                // travers. Il **avale les gestes**, et c'est tout ce qu'on lui
+                // demande : plus une pastille qui bascule, plus un champ qui
+                // ouvre le clavier, plus un bouton qui repond. Valider veut dire
+                // « j'ai relu, c'est en ordre » ; pouvoir modifier juste apres
+                // enlevait tout son sens a la marque.
+                //
+                // L'ordre des deux ecoutes compte, et il n'est pas
+                // interchangeable. Le geste lateral est declare **apres**, donc
+                // plus a l'interieur : Compose distribue les evenements de
+                // l'interieur vers l'exterieur, et le glissement les voit donc
+                // avant qu'ils ne soient avales. Dans l'autre sens, une carte
+                // validee ne pourrait plus etre rouverte d'un geste.
+                if (checked) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .pointerInput(Unit) {
+                                awaitPointerEventScope {
+                                    while (true) {
+                                        awaitPointerEvent().changes.forEach { it.consume() }
+                                    }
+                                }
+                            }
+                            .then(slideGesture)
+                    )
+                }
             }
         } else {
             Spacer(Modifier.height(4.dp))

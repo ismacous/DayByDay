@@ -433,7 +433,7 @@ private fun HabitsCard(yearDays: List<DayEntry>) {
 
 @Composable
 private fun WeightCard(points: List<WeightPoint>, bmi: Double?) {
-    SectionCard(title = "Poids") {
+    SectionCard(title = "Poids & tour de taille") {
         if (points.isEmpty()) {
             Text(
                 "Note ton poids quand tu veux dans une journée : la courbe apparaîtra ici.",
@@ -452,6 +452,22 @@ private fun WeightCard(points: List<WeightPoint>, bmi: Double?) {
                 formatSignedKg(last.weightKg - first.weightKg),
             )
         }
+
+        // Le tour de taille bouge lentement, donc son ecart se lit sur toute la
+        // periode et pas d'un jour a l'autre. Il n'apparait que s'il a ete
+        // mesure au moins une fois : une ligne « — » n'apprend rien.
+        val waists = points.filter { it.waistCm != null }
+        if (waists.isNotEmpty()) {
+            StatLine("Dernier tour de taille", formatWaist(waists.last().waistCm))
+            if (waists.size > 1) {
+                val change = waists.last().waistCm!! - waists.first().waistCm!!
+                StatLine(
+                    "Depuis le ${Dates.dayShort(LocalDate.ofEpochDay(waists.first().epochDay))}",
+                    formatSignedCm(change),
+                )
+            }
+        }
+
         bmi?.let { StatLine("IMC", String.format(Locale.FRANCE, "%.1f", it)) }
 
         if (points.size >= 2) {

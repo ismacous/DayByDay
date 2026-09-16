@@ -67,13 +67,55 @@ object TagCatalog {
         Builtin("series", "📺", "Séries, films", TagCategory.SCREENS),
         Builtin("games", "🎮", "Jeux vidéo", TagCategory.SCREENS),
 
-        // Sante. Ces deux-la s'affichent en lignes a cocher et **sans
-        // emoji** : un petit visage qui pleure a cote de « J'ai pleuré »
-        // transforme un fait en mise en scene. L'emoji reste vide ici, ce qui
-        // fait que `display` vaut le nom seul partout ailleurs aussi — dans la
-        // recherche, par exemple.
-        Builtin("cried", "", "J'ai pleuré", TagCategory.HEALTH),
-        Builtin("anxiety", "", "Crise d'angoisse", TagCategory.HEALTH, listOf("Grosse angoisse")),
+        // Ressentis. Ils ont quitte la carte Sante, ou ils n'avaient rien a
+        // faire : pleurer n'est pas un symptome, et les ranger a cote du poids
+        // revenait a dire le contraire. Ils ont maintenant leur carte, et de
+        // quoi dire autre chose que le pire.
+        //
+        // L'ordre compte : la carte separe ce qui fait du bien de ce qui pese,
+        // et elle le fait sur cette liste. Les douces d'abord, les lourdes
+        // ensuite, et les deux faits a cocher tout a la fin.
+        Builtin("joy", "😊", "Joie", TagCategory.EMOTION),
+        Builtin("laugh", "😂", "Fou rire", TagCategory.EMOTION),
+        Builtin("calm", "😌", "Calme", TagCategory.EMOTION),
+        Builtin("excited", "🤩", "Excitation", TagCategory.EMOTION),
+        Builtin("proud", "🏅", "Fierté", TagCategory.EMOTION),
+        Builtin("grateful", "🙏", "Gratitude", TagCategory.EMOTION),
+        Builtin("loved", "❤️", "Aimé", TagCategory.EMOTION),
+        Builtin("motivated", "🔥", "Motivation", TagCategory.EMOTION),
+        Builtin("relief", "🍃", "Soulagement", TagCategory.EMOTION),
+
+        Builtin("sad", "😔", "Tristesse", TagCategory.EMOTION),
+        Builtin("stress", "😬", "Stress", TagCategory.EMOTION),
+        Builtin("anger", "😠", "Colère", TagCategory.EMOTION),
+        Builtin("fear", "😨", "Peur", TagCategory.EMOTION),
+        Builtin("lonely", "🫥", "Solitude", TagCategory.EMOTION),
+        Builtin("guilt", "😞", "Culpabilité", TagCategory.EMOTION),
+        Builtin("shame", "🙈", "Honte", TagCategory.EMOTION),
+        Builtin("bored", "😐", "Ennui", TagCategory.EMOTION),
+        Builtin("overwhelmed", "🌊", "Débordé", TagCategory.EMOTION),
+        Builtin("empty", "🌫️", "Vide", TagCategory.EMOTION),
+
+        // Ces deux-la ne sont pas des ressentis mais des **faits**, et elles
+        // gardent leur forme : des lignes a cocher, et **sans emoji**. Un petit
+        // visage qui pleure a cote de « J'ai pleuré » transforme un fait en
+        // mise en scene. L'emoji reste vide ici, ce qui fait que `display` vaut
+        // le nom seul partout ailleurs aussi — dans la recherche, par exemple.
+        //
+        // Les slugs ne changent pas : ce sont eux qui relient les journees deja
+        // marquees. Seule leur famille change, et c'est sans risque.
+        Builtin("cried", "", "J'ai pleuré", TagCategory.EMOTION),
+        Builtin("anxiety", "", "Crise d'angoisse", TagCategory.EMOTION, listOf("Grosse angoisse")),
+
+        // Sante, au sens du corps : ce qu'il a dit de la journee. C'est la
+        // moitie qui manquait a la carte — elle ne portait qu'un poids, donc
+        // elle ne servait qu'un jour sur dix.
+        Builtin("headache", "🤕", "Mal de tête", TagCategory.HEALTH),
+        Builtin("belly", "😖", "Mal au ventre", TagCategory.HEALTH),
+        Builtin("pain", "🦴", "Douleurs", TagCategory.HEALTH),
+        Builtin("sick", "🤒", "Malade", TagCategory.HEALTH),
+        Builtin("body_tired", "🪫", "Corps épuisé", TagCategory.HEALTH),
+        Builtin("body_good", "⚡", "En forme", TagCategory.HEALTH),
 
         // Traitements, qui ont maintenant leur propre carte.
         Builtin("appointment", "🩺", "Rendez-vous médical", TagCategory.MEDICAL),

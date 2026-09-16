@@ -194,6 +194,12 @@ enum class TagCategory(val key: String, val label: String) {
     FOOD("alimentation", "Alimentation"),
     WORK("travail", "Travail & démarches"),
     SCREENS("ecrans", "Écrans"),
+    /**
+     * Ce qu'on a ressenti. Separe de la sante a dessein : pleurer et avoir mal
+     * au ventre n'ont rien a faire dans la meme liste, et les melanger revenait
+     * a ranger une emotion parmi les symptomes.
+     */
+    EMOTION("emotions", "Ressentis"),
     HEALTH("sante", "Santé"),
     MEDICAL("traitements", "Traitements"),
     MONEY("argent", "Argent"),
@@ -220,6 +226,16 @@ data class DayEntry(
     val foodLevel: Int? = null,
     val wentOut: Boolean? = null,
     val weightKg: Double? = null,
+    /**
+     * Tour de taille en centimetres.
+     *
+     * Le poids tout seul ne dit pas grand-chose : il monte et descend avec
+     * l'eau, les repas, l'heure de la pesee. Le tour de taille bouge lentement
+     * et dans un seul sens a la fois — c'est lui qui dit si quelque chose
+     * change vraiment. Les deux ensemble font une mesure ; l'un sans l'autre
+     * fait un chiffre.
+     */
+    val waistCm: Double? = null,
     val partMorning: Int? = null,
     val partAfternoon: Int? = null,
     val partEvening: Int? = null,
@@ -391,7 +407,8 @@ data class DayEntry(
 
     val isEmpty: Boolean
         get() = colorKey == null && title.isBlank() && note.isBlank() &&
-            sportLevel == null && foodLevel == null && wentOut == null && weightKg == null &&
+            sportLevel == null && foodLevel == null && wentOut == null &&
+            weightKg == null && waistCm == null &&
             sleepStartMinutes == null && sleepEndMinutes == null &&
             waterGlasses == null && mealsNote.isBlank() && snackNote.isBlank() &&
             medicalWith.isBlank() && medicalNote.isBlank() &&
@@ -643,8 +660,20 @@ enum class MediaShape(val key: Int, val label: String, val square: Boolean = fal
 /** Nombre de medias par jour, pour afficher une pastille dans le calendrier. */
 data class DayMediaCount(val epochDay: Long, val count: Int)
 
-/** Poids releve un jour donne, pour la courbe de suivi. */
-data class WeightPoint(val epochDay: Long, val weightKg: Double)
+/**
+ * Poids releve un jour donne, pour la courbe de suivi, et le tour de taille
+ * du meme jour quand il a ete mesure.
+ *
+ * Les deux voyagent ensemble parce que c'est ensemble qu'ils se lisent : la
+ * carte « Ton corps » pose les deux champs cote a cote, donc ils sont saisis
+ * dans le meme geste. Un tour de taille note **sans** poids n'apparait pas
+ * dans le Bilan — la courbe est une courbe de poids.
+ */
+data class WeightPoint(
+    val epochDay: Long,
+    val weightKg: Double,
+    val waistCm: Double? = null,
+)
 
 /** Contenu reel de la base, affiche dans « A propos » des reglages. */
 data class DatabaseContents(

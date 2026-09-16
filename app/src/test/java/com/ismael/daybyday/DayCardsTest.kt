@@ -2,6 +2,7 @@ package com.ismael.daybyday
 
 import com.ismael.daybyday.data.DayCard
 import com.ismael.daybyday.data.TagCatalog
+import com.ismael.daybyday.data.TagCategory
 import com.ismael.daybyday.data.DayEntry
 import com.ismael.daybyday.data.DoseTime
 import com.ismael.daybyday.data.MediaItem
@@ -89,6 +90,43 @@ class DayCardsTest {
 
         val utilisees = TagCatalog.tags.map { it.category }.toSet()
         assertTrue(utilisees.all { it in familles.toSet() })
+    }
+
+    @Test
+    fun `les ressentis ont quitte la carte du corps`() {
+        // Pleurer n'est pas un symptome : les ranger a cote du poids revenait a
+        // dire le contraire. Chacune des deux cartes doit maintenant avoir de
+        // quoi se remplir toute seule.
+        val ressentis = TagCatalog.tags.filter { it.category == TagCategory.EMOTION }
+        val corps = TagCatalog.tags.filter { it.category == TagCategory.HEALTH }
+
+        assertEquals(TagCategory.EMOTION, DayCard.EMOTION.tagCategory)
+        assertEquals(TagCategory.HEALTH, DayCard.HEALTH.tagCategory)
+        assertTrue("Trop peu de ressentis : ${ressentis.size}", ressentis.size >= 15)
+        assertTrue("Le corps n'a rien a dire : ${corps.size}", corps.size >= 4)
+
+        // Les deux faits d'avant gardent leur slug : c'est lui qui relie les
+        // journees deja marquees, et le renommer les perdrait.
+        listOf("cried", "anxiety").forEach { slug ->
+            val tag = TagCatalog.tags.first { it.slug == slug }
+            assertEquals(TagCategory.EMOTION, tag.category)
+            assertEquals("", tag.emoji)
+        }
+    }
+
+    @Test
+    fun `chaque etiquette a un identifiant unique`() {
+        // Deux entrees du meme slug se recouvriraient a la synchronisation :
+        // la seconde ecraserait la premiere, et une des deux disparaitrait de
+        // l'ecran sans que rien ne le signale.
+        val slugs = TagCatalog.tags.map { it.slug }
+        assertEquals(slugs.size, slugs.toSet().size)
+        assertTrue(slugs.all { it.isNotBlank() })
+    }
+
+    @Test
+    fun `une journee ou seul le tour de taille est note n est pas vide`() {
+        assertTrue(!DayEntry(epochDay = 0, waistCm = 84.0).isEmpty)
     }
 
     @Test

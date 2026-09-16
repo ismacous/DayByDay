@@ -40,6 +40,15 @@ enum class DayCard(
         essential = true,
         description = "La couleur de la journée et de ses quatre moments.",
     ),
+    // Juste apres l'humeur, et c'est sa place : la couleur dit comment la
+    // journee s'est passee, les ressentis disent **avec quoi**. Les deux se
+    // remplissent dans le meme geste.
+    EMOTION(
+        key = "emotions",
+        title = "Ce que tu as ressenti",
+        description = "Les émotions de la journée, les douces comme les lourdes.",
+        tagCategory = TagCategory.EMOTION,
+    ),
     JOURNAL(
         key = "journal",
         title = "Ton journal",
@@ -66,10 +75,13 @@ enum class DayCard(
         canHoldMedia = true,
         tagCategory = TagCategory.FOOD,
     ),
+    // Les ressentis en sont partis : pleurer et avoir mal au ventre n'ont rien
+    // a faire dans la meme liste. Ce qui reste est le corps, et rien que lui —
+    // ce qu'il mesure d'un mois sur l'autre, et ce qu'il a dit aujourd'hui.
     HEALTH(
         key = "sante",
-        title = "Santé",
-        description = "Ton poids, et ce que ton corps a dit de la journée.",
+        title = "Ton corps",
+        description = "Poids et tour de taille, et ce que ton corps a dit de la journée.",
         canHoldMedia = true,
         tagCategory = TagCategory.HEALTH,
     ),

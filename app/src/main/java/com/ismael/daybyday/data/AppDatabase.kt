@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Version du schema. Affichee dans les reglages, a propos, pour savoir ce que
  * fait tourner le telephone en cas de probleme.
  */
-const val DATABASE_VERSION = 23
+const val DATABASE_VERSION = 24
 
 @Database(
     entities = [
@@ -640,6 +640,19 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
+         * Le tour de taille, a cote du poids.
+         *
+         * `null` partout au depart, et pas zero : une journee d'avant cette
+         * version n'est pas une journee ou le tour de taille valait zero, c'est
+         * une journee ou on ne l'a pas mesure.
+         */
+        val MIGRATION_23_24 = object : Migration(23, 24) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE day_entries ADD COLUMN waistCm REAL")
+            }
+        }
+
+        /**
          * Toutes les migrations, dans l'ordre.
          *
          * **Une seule liste**, et c'est le but : la base l'utilise, et les tests
@@ -673,6 +686,7 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_20_21,
             MIGRATION_21_22,
             MIGRATION_22_23,
+            MIGRATION_23_24,
         )
 
         @Volatile
